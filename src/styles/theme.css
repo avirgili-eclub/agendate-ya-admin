@@ -1,0 +1,19 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&display=swap");
+
+:root {
+  --color-primary: #1a365d;
+  --color-primary-light: #2c4f82;
+  --color-primary-dark: #102a4c;
+
+  --color-secondary: #ff6b35;
+  --color-secondary-light: #ff8c5a;
+  --color-secondary-dark: #e55a2a;
+
+  --color-success: #48bb78;
+  --color-success-light: #68d391;
+  --color-success-dark: #38a169;
+
+  --color-neutral: #f7fafc;
+  --color-neutral-light: #ffffff;
+  --color-neutral-dark: #e2e8f0;
+}

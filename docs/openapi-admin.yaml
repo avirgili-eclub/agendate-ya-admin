@@ -1,0 +1,3318 @@
+openapi: 3.0.3
+
+info:
+  title: AgendateYA — Admin API
+  description: |
+    API para el sitio de administración del negocio (TENANT_ADMIN).
+    Permite gestionar localidades, recursos, servicios, disponibilidad,
+    bookings, clientes y usuarios del equipo.
+
+    ## Autenticación
+    Todos los endpoints (excepto `/auth/*` y `/public/*`) requieren un JWT Bearer token.
+    Obtenerlo con `POST /api/v1/auth/login`. El access token tiene una vigencia de 15 minutos;
+    usar el refresh token para renovarlo sin re-autenticarse.
+
+    ## Multi-tenancy
+    El tenant se determina automáticamente desde el JWT — no hay que pasarlo en la URL.
+    Los endpoints bajo `/public/{tenantSlug}` usan el slug en la URL y no requieren autenticación.
+
+    ## Envelopes
+    - Respuestas exitosas: `{ "data": { ... } }`
+    - Listados paginados: `{ "data": [...], "meta": { "page", "size", "total" } }`
+    - Errores: `{ "error": { "code", "message", "details" } }`
+
+    ## Roles
+    - `SUPER_ADMIN` — acceso total a todos los tenants. Endpoints marcados como solo SUPER_ADMIN.
+    - `TENANT_ADMIN` — acceso completo a su propio tenant.
+    - `LOCATION_MANAGER` — acceso a su sede asignada.
+    - `PROFESSIONAL` — acceso de lectura a su propia agenda.
+  version: 1.0.0
+  contact:
+    name: AgendateYA API Support
+    email: api@agendateya.com
+
+servers:
+  - url: https://{slug}.agendateya.com
+    description: Subdominio específico del negocio (producción)
+    variables:
+      slug:
+        default: demo
+        description: Slug único del negocio (ej. "invictus-barberia", "pilates-zen")
+  - url: http://localhost:8080
+    description: Desarrollo local
+
+tags:
+  - name: auth
+    description: Autenticación JWT — login y renovación de tokens
+  - name: tenant
+    description: Configuración del negocio (nombre, zona horaria, plan de suscripción)
+  - name: locations
+    description: Localidades o sucursales del negocio
+  - name: resources
+    description: Recursos asignables a turnos (profesionales, mesas, salas, equipamiento)
+  - name: services
+    description: Servicios ofrecidos por el negocio (corte, consulta médica, clase de pilates)
+  - name: availability
+    description: Reglas de disponibilidad semanal y excepciones puntuales por recurso
+  - name: bookings
+    description: Gestión de turnos y reservas
+  - name: clients
+    description: Base de clientes e historial de turnos
+  - name: users
+    description: Usuarios del equipo del negocio (profesionales y managers)
+  - name: public
+    description: Endpoints públicos sin autenticación — para el widget de reservas online del cliente
+
+# =============================================================================
+# PATHS
+# =============================================================================
+paths:
+
+  # ---------------------------------------------------------------------------
+  # AUTH
+  # ---------------------------------------------------------------------------
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión
+      description: |
+        Autentica al usuario con email y contraseña. Devuelve un access token JWT
+        de corta duración (15 minutos) y un refresh token de larga duración (7 días).
+        El access token debe incluirse en el header `Authorization: Bearer {token}` en
+        todas las peticiones autenticadas.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: pedro@invictusbarberia.com
+              password: MiContraseña123
+      responses:
+        '200':
+          description: Tokens emitidos correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+              example:
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiJ9...
+                  refreshToken: eyJhbGciOiJIUzI1NiJ9...
+                  expiresIn: 900
+                  user:
+                    id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                    email: pedro@invictusbarberia.com
+                    fullName: Pedro González
+                    role: TENANT_ADMIN
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Credenciales inválidas o cuenta desactivada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: UNAUTHORIZED
+                  message: Invalid credentials
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renovar access token
+      description: |
+        Valida el refresh token recibido y emite un nuevo access token de corta duración.
+        El refresh token en sí no se renueva — si expira (7 días), el usuario debe volver
+        a hacer login.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+            example:
+              refreshToken: eyJhbGciOiJIUzI1NiJ9...
+      responses:
+        '200':
+          description: Nuevo access token emitido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+              example:
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiJ9...nuevo...
+                  expiresIn: 900
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Refresh token inválido, expirado o usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  # ---------------------------------------------------------------------------
+  # TENANT
+  # ---------------------------------------------------------------------------
+
+  /api/v1/tenant:
+    get:
+      tags: [tenant]
+      summary: Obtener el tenant actual
+      description: |
+        Devuelve la configuración del tenant resuelto desde el JWT del usuario autenticado.
+        Un `SUPER_ADMIN` sin tenant en contexto recibirá un 400 — usar `/api/v1/tenant/all`
+        para listar todos los tenants.
+      operationId: getCurrentTenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Tenant devuelto
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TenantResponse'
+              example:
+                data:
+                  id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                  name: Barbería Invictus
+                  slug: invictus-barberia
+                  businessType: SERVICE
+                  subscriptionTier: PREMIUM
+                  subscriptionExpiresAt: '2026-12-31T23:59:59Z'
+                  timezone: America/Argentina/Buenos_Aires
+                  metadata: {}
+                  active: true
+                  createdAt: '2026-01-15T10:00:00Z'
+                  updatedAt: '2026-02-20T14:30:00Z'
+        '400':
+          description: Sin contexto de tenant — el SUPER_ADMIN debe usar /tenant/all
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [tenant]
+      summary: Actualizar el tenant actual
+      description: |
+        Actualiza el nombre, zona horaria u otros metadatos del tenant del usuario autenticado.
+        Solo puede ser invocado por un `TENANT_ADMIN`. Los campos no incluidos en el body
+        no se modifican (patch semántico implícito).
+      operationId: updateCurrentTenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantRequest'
+            example:
+              name: Barbería Invictus Premium
+              timezone: America/Argentina/Buenos_Aires
+              metadata:
+                instagram: '@invictusbarberia'
+                whatsappNumber: '+5491156789012'
+      responses:
+        '200':
+          description: Tenant actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Solo TENANT_ADMIN puede actualizar su tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [tenant]
+      summary: Crear un nuevo tenant (solo SUPER_ADMIN)
+      description: |
+        Provisiona un nuevo tenant con un slug único. El slug es inmutable una vez creado
+        y forma parte de la URL del widget de reservas (`/{slug}/bookings`).
+        Solo puede ser invocado por un `SUPER_ADMIN`.
+      operationId: createTenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+            example:
+              name: Pilates Zen Studio
+              slug: pilates-zen
+              businessType: SERVICE
+              timezone: America/Argentina/Buenos_Aires
+              metadata:
+                instagram: '@pilateszenstudio'
+      responses:
+        '201':
+          description: Tenant creado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/TenantResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Solo SUPER_ADMIN puede crear tenants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: El slug ya está en uso por otro tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Slug 'pilates-zen' already exists
+
+  /api/v1/tenant/all:
+    get:
+      tags: [tenant]
+      summary: Listar todos los tenants (solo SUPER_ADMIN)
+      description: |
+        Devuelve una lista paginada de todos los tenants de la plataforma.
+        Solo puede ser invocado por un `SUPER_ADMIN`.
+      operationId: listAllTenants
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Número de página base 0
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+          example: 0
+        - name: size
+          in: query
+          description: Cantidad de resultados por página
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          example: 20
+      responses:
+        '200':
+          description: Lista paginada de tenants
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TenantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: Solo SUPER_ADMIN puede listar todos los tenants
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  # ---------------------------------------------------------------------------
+  # LOCATIONS
+  # ---------------------------------------------------------------------------
+
+  /api/v1/locations:
+    get:
+      tags: [locations]
+      summary: Listar localidades del tenant
+      description: |
+        Devuelve todas las sedes o sucursales del tenant resuelto desde el JWT.
+        No está paginado — un tenant no debería tener más de unas pocas decenas de sedes.
+      operationId: listLocations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de sedes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/LocationResponse'
+              example:
+                data:
+                  - id: 11111111-1111-1111-1111-111111111111
+                    tenantId: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    name: Sede Palermo
+                    address: Thames 1234, CABA
+                    phone: '+5491156789012'
+                    imageUrl: https://cdn.agendateya.com/invictus/palermo.jpg
+                    metadata: {}
+                    active: true
+                    createdAt: '2026-01-20T09:00:00Z'
+                    updatedAt: '2026-01-20T09:00:00Z'
+        '400':
+          description: Sin contexto de tenant en el JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [locations]
+      summary: Crear una localidad
+      description: |
+        Agrega una nueva sucursal o sede del negocio. Un recurso (profesional, sala) solo puede
+        pertenecer a una localidad. Las sedes se asocian automáticamente al tenant del JWT.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createLocation
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLocationRequest'
+            example:
+              name: Sede Belgrano
+              address: Cabildo 1800, CABA
+              phone: '+5491145678901'
+              imageUrl: https://cdn.agendateya.com/invictus/belgrano.jpg
+              metadata:
+                googleMapsUrl: 'https://maps.google.com/?q=Cabildo+1800+CABA'
+      responses:
+        '201':
+          description: Sede creada exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LocationResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Tenant no encontrado en el contexto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/locations/{id}:
+    get:
+      tags: [locations]
+      summary: Obtener una localidad por ID
+      description: Devuelve los datos de una sede específica. La sede debe pertenecer al tenant del JWT.
+      operationId: getLocationById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Sede encontrada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LocationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [locations]
+      summary: Actualizar una localidad
+      description: |
+        Actualiza los datos de una sede existente. Todos los campos son opcionales —
+        solo se actualizan los que se incluyen en el body.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateLocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+            example:
+              name: Sede Palermo Premium
+              phone: '+5491145679999'
+      responses:
+        '200':
+          description: Sede actualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/LocationResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [locations]
+      summary: Eliminar una localidad
+      description: |
+        Elimina una sede. La operación fallará si hay recursos o bookings activos asociados
+        a esa sede. Se recomienda desactivar los recursos antes de eliminar la sede.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deleteLocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Sede eliminada exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # RESOURCES
+  # ---------------------------------------------------------------------------
+
+  /api/v1/locations/{locationId}/resources:
+    get:
+      tags: [resources]
+      summary: Listar recursos de una localidad
+      description: |
+        Devuelve todos los recursos (profesionales, salas, mesas, equipamiento) asignados
+        a la sede indicada. Incluye recursos tanto activos como inactivos.
+      operationId: listResourcesByLocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: UUID de la sede
+          schema:
+            type: string
+            format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+      responses:
+        '200':
+          description: Lista de recursos de la sede
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceResponse'
+              example:
+                data:
+                  - id: 22222222-2222-2222-2222-222222222222
+                    locationId: 11111111-1111-1111-1111-111111111111
+                    resourceType: PROFESSIONAL
+                    name: Pedro González
+                    description: Barbero especialista en corte clásico
+                    capacity: 1
+                    imageUrl: https://cdn.agendateya.com/invictus/pedro.jpg
+                    metadata: {}
+                    active: true
+                    createdAt: '2026-01-20T10:00:00Z'
+                    updatedAt: '2026-01-20T10:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [resources]
+      summary: Crear un recurso en una localidad
+      description: |
+        Crea un nuevo recurso (profesional, sala o equipamiento) dentro de la sede indicada.
+        El plan de suscripción limita la cantidad de profesionales activos (`PROFESSIONAL`).
+        Si se supera el límite, se devuelve `402 Payment Required`.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          description: UUID de la sede donde se creará el recurso
+          schema:
+            type: string
+            format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateResourceRequest'
+            example:
+              resourceType: PROFESSIONAL
+              name: Martín Ríos
+              description: Estilista especialista en coloración y mechas
+              capacity: 1
+              imageUrl: https://cdn.agendateya.com/invictus/martin.jpg
+              metadata:
+                specialty: coloracion
+      responses:
+        '201':
+          description: Recurso creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ResourceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          description: Límite de profesionales alcanzado para el plan de suscripción actual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: SUBSCRIPTION_LIMIT
+                  message: Maximum professionals limit reached for your plan (PRO allows 3)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/resources/{id}:
+    get:
+      tags: [resources]
+      summary: Obtener un recurso por ID
+      description: Devuelve los datos completos de un recurso específico.
+      operationId: getResourceById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Recurso encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ResourceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [resources]
+      summary: Actualizar un recurso
+      description: |
+        Actualiza los datos de un recurso existente. El campo `active: false` desactiva
+        el recurso impidiendo nuevos turnos, pero no cancela los existentes.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateResourceRequest'
+            example:
+              name: Pedro González
+              description: Barbero — especialidad en degradé y barba
+              active: true
+      responses:
+        '200':
+          description: Recurso actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ResourceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [resources]
+      summary: Eliminar un recurso
+      description: |
+        Elimina permanentemente un recurso. Si el recurso tiene turnos futuros activos,
+        se recomienda primero desactivarlo con `PUT /resources/{id}` (active: false)
+        y cancelar los turnos manualmente.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deleteResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Recurso eliminado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/resources/{id}/services:
+    get:
+      tags: [resources]
+      summary: Listar servicios asignados a un recurso
+      description: |
+        Devuelve todos los servicios que el recurso puede atender. La asignación es M:N —
+        un recurso puede atender múltiples servicios y un servicio puede ser atendido
+        por múltiples recursos.
+      operationId: listServicesForResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Servicios asignados al recurso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ServiceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [resources]
+      summary: Asignar un servicio a un recurso
+      description: |
+        Vincula un servicio a un recurso (relación M:N). Ambos deben pertenecer al mismo tenant.
+        Si la asignación ya existe, se devuelve `400`.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: assignServiceToResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignServiceRequest'
+            example:
+              serviceId: 33333333-3333-3333-3333-333333333333
+      responses:
+        '200':
+          description: Servicio asignado correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataEnvelope'
+              example:
+                data: Service assigned successfully
+        '400':
+          description: Asignación duplicada o recurso y servicio de tenants distintos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/resources/{id}/services/{serviceId}:
+    delete:
+      tags: [resources]
+      summary: Desasignar un servicio de un recurso
+      description: |
+        Elimina la vinculación entre el recurso y el servicio. No elimina ni el recurso
+        ni el servicio — solo la asignación M:N.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: unassignServiceFromResource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+        - name: serviceId
+          in: path
+          required: true
+          description: UUID del servicio a desasignar
+          schema:
+            type: string
+            format: uuid
+          example: 33333333-3333-3333-3333-333333333333
+      responses:
+        '204':
+          description: Servicio desasignado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: La asignación entre el recurso y el servicio no existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/resources/{id}/location:
+    put:
+      tags: [resources]
+      summary: Transferir un recurso a otra localidad
+      description: |
+        Mueve el recurso a una nueva sede del mismo tenant. Útil cuando un profesional
+        cambia de sucursal.
+
+        **`clearSchedule: true`** — cancela todos los bookings futuros del recurso antes
+        de la transferencia. Usar con precaución: los clientes NO son notificados automáticamente
+        (la notificación es responsabilidad de la capa de negocio).
+
+        **`clearSchedule: false`** — transfiere sin tocar los bookings existentes. Puede
+        generar bookings con sede origen diferente a la sede actual del recurso.
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: transferResourceLocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferResourceRequest'
+            example:
+              locationId: 44444444-4444-4444-4444-444444444444
+              clearSchedule: true
+      responses:
+        '200':
+          description: Recurso transferido exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ResourceResponse'
+        '400':
+          description: La localidad destino pertenece a un tenant diferente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # SERVICES
+  # ---------------------------------------------------------------------------
+
+  /api/v1/services:
+    get:
+      tags: [services]
+      summary: Listar servicios del tenant
+      description: |
+        Devuelve todos los servicios del tenant (activos e inactivos). Para el widget
+        público de reservas usar `GET /public/{tenantSlug}/services` que filtra solo activos.
+      operationId: listServices
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de servicios
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ServiceResponse'
+              example:
+                data:
+                  - id: 33333333-3333-3333-3333-333333333333
+                    tenantId: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    name: Corte clásico
+                    description: Corte de cabello con tijera y máquina
+                    durationMinutes: 30
+                    price: '1500.00'
+                    currency: ARS
+                    requiresResource: true
+                    metadata: {}
+                    active: true
+                    createdAt: '2026-01-20T10:00:00Z'
+                    updatedAt: '2026-01-20T10:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [services]
+      summary: Crear un servicio
+      description: |
+        Crea un nuevo servicio ofrecido por el tenant. Si `requiresResource` es `true`,
+        el slot de disponibilidad calculado dependerá del recurso asignado — no se podrán
+        reservar turnos sin especificar un recurso.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createService
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServiceRequest'
+            example:
+              name: Corte + barba
+              description: Corte de cabello más perfilado y diseño de barba
+              durationMinutes: 60
+              price: '2500.00'
+              currency: ARS
+              requiresResource: true
+              metadata:
+                category: barberia
+      responses:
+        '201':
+          description: Servicio creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ServiceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/services/{id}:
+    get:
+      tags: [services]
+      summary: Obtener un servicio por ID
+      operationId: getServiceById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Servicio encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ServiceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [services]
+      summary: Actualizar un servicio
+      description: |
+        Actualiza los datos de un servicio. Cambiar `durationMinutes` no afecta los bookings
+        ya creados — solo aplica a nuevos turnos. Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateService
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServiceRequest'
+            example:
+              price: '2800.00'
+              active: true
+      responses:
+        '200':
+          description: Servicio actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ServiceResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [services]
+      summary: Eliminar un servicio
+      description: |
+        Elimina un servicio. No elimina los bookings existentes que usen ese servicio.
+        Se recomienda desactivar el servicio (`active: false`) en lugar de eliminarlo
+        si tiene historial de turnos.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deleteService
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Servicio eliminado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # AVAILABILITY — RULES
+  # ---------------------------------------------------------------------------
+
+  /api/v1/resources/{resourceId}/availability-rules:
+    post:
+      tags: [availability]
+      summary: Crear una regla de disponibilidad semanal
+      description: |
+        Define una ventana de disponibilidad semanal recurrente para el recurso.
+        Por ejemplo: Pedro González atiende los lunes de 09:00 a 18:00.
+
+        `dayOfWeek` usa la convención ISO: **0 = lunes**, 6 = domingo.
+
+        `validFrom` y `validUntil` son opcionales — si se omiten, la regla aplica indefinidamente.
+        Los horarios (`startTime`, `endTime`) están en la zona horaria del tenant.
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createAvailabilityRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAvailabilityRuleRequest'
+            example:
+              resourceId: 22222222-2222-2222-2222-222222222222
+              dayOfWeek: 0
+              startTime: '09:00'
+              endTime: '18:00'
+              validFrom: '2026-04-01'
+              validUntil: null
+      responses:
+        '201':
+          description: Regla de disponibilidad creada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AvailabilityRuleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags: [availability]
+      summary: Listar reglas de disponibilidad de un recurso
+      description: |
+        Devuelve todas las reglas semanales recurrentes configuradas para el recurso.
+        Para calcular los slots disponibles para un cliente usar `GET /public/{slug}/slots`.
+      operationId: listAvailabilityRules
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPath'
+      responses:
+        '200':
+          description: Reglas de disponibilidad del recurso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AvailabilityRuleResponse'
+              example:
+                data:
+                  - id: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+                    resourceId: 22222222-2222-2222-2222-222222222222
+                    dayOfWeek: 0
+                    startTime: '09:00'
+                    endTime: '18:00'
+                    validFrom: '2026-04-01'
+                    validUntil: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/availability-rules/{id}:
+    put:
+      tags: [availability]
+      summary: Actualizar una regla de disponibilidad
+      description: |
+        Actualiza los campos de una regla semanal existente. Solo los campos incluidos
+        en el body son modificados.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateAvailabilityRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAvailabilityRuleRequest'
+            example:
+              startTime: '10:00'
+              endTime: '17:00'
+      responses:
+        '200':
+          description: Regla actualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AvailabilityRuleResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [availability]
+      summary: Eliminar una regla de disponibilidad
+      description: |
+        Elimina una regla semanal. El recurso dejará de tener disponibilidad para ese
+        día de la semana (salvo que existan otras reglas o overrides que lo cubran).
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deleteAvailabilityRule
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Regla eliminada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # AVAILABILITY — OVERRIDES
+  # ---------------------------------------------------------------------------
+
+  /api/v1/resources/{resourceId}/availability-overrides:
+    post:
+      tags: [availability]
+      summary: Crear una excepción de disponibilidad
+      description: |
+        Define una excepción puntual al horario semanal recurrente de un recurso.
+        Dos casos de uso principales:
+
+        - **Día no disponible** (`available: false`): el recurso no atiende ese día
+          (feriado, licencia, etc.). `startTime` y `endTime` se ignoran.
+        - **Horario especial** (`available: true`, con `startTime`/`endTime`): el recurso
+          atiende en un horario diferente al definido en la regla semanal (ej: día feriado
+          con horario reducido).
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createAvailabilityOverride
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAvailabilityOverrideRequest'
+            examples:
+              dia_no_disponible:
+                summary: Recurso no disponible ese día
+                value:
+                  resourceId: 22222222-2222-2222-2222-222222222222
+                  date: '2026-05-25'
+                  available: false
+              horario_especial:
+                summary: Horario especial (diferente al habitual)
+                value:
+                  resourceId: 22222222-2222-2222-2222-222222222222
+                  date: '2026-04-02'
+                  available: true
+                  startTime: '10:00'
+                  endTime: '14:00'
+      responses:
+        '201':
+          description: Excepción creada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AvailabilityOverrideResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    get:
+      tags: [availability]
+      summary: Listar excepciones de disponibilidad de un recurso
+      description: Devuelve todas las excepciones puntuales de horario del recurso, sin filtrar por fecha.
+      operationId: listAvailabilityOverrides
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceIdPath'
+      responses:
+        '200':
+          description: Excepciones del recurso
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AvailabilityOverrideResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/availability-overrides/{id}:
+    put:
+      tags: [availability]
+      summary: Actualizar una excepción de disponibilidad
+      description: Actualiza el estado o los horarios de una excepción puntual existente.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateAvailabilityOverride
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAvailabilityOverrideRequest'
+            example:
+              available: true
+              startTime: '11:00'
+              endTime: '15:00'
+      responses:
+        '200':
+          description: Excepción actualizada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/AvailabilityOverrideResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [availability]
+      summary: Eliminar una excepción de disponibilidad
+      description: Elimina la excepción; el recurso vuelve a su disponibilidad semanal normal para ese día.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deleteAvailabilityOverride
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Excepción eliminada
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # BOOKINGS
+  # ---------------------------------------------------------------------------
+
+  /api/v1/bookings:
+    get:
+      tags: [bookings]
+      summary: Listar turnos del tenant
+      description: |
+        Devuelve una lista paginada de todos los turnos del tenant, ordenados por fecha
+        descendente. Para filtrar por fecha, recurso o estado se deberán usar los query
+        params cuando estén disponibles (próxima versión).
+      operationId: listBookings
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Lista paginada de turnos
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BookingResponse'
+              example:
+                data:
+                  - id: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+                    tenantId: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    resourceId: 22222222-2222-2222-2222-222222222222
+                    serviceId: 33333333-3333-3333-3333-333333333333
+                    clientId: cccccccc-cccc-cccc-cccc-cccccccccccc
+                    locationId: 11111111-1111-1111-1111-111111111111
+                    startTime: '2026-04-15T14:00:00Z'
+                    endTime: '2026-04-15T14:30:00Z'
+                    status: CONFIRMED
+                    sourceChannel: WEB
+                    googleEventId: null
+                    notes: Primer corte del cliente
+                    createdAt: '2026-04-10T10:00:00Z'
+                    updatedAt: '2026-04-10T10:00:00Z'
+                    resourceName: Pedro González
+                    serviceName: Corte clásico
+                    clientName: Lucas Fernández
+                    clientPhone: '+5491145678901'
+                meta:
+                  page: 0
+                  size: 20
+                  total: 87
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [bookings]
+      summary: Crear un turno desde el panel admin
+      description: |
+        Crea un turno en nombre de un cliente desde el panel de administración.
+        El source del turno se registra automáticamente como `ADMIN`.
+
+        La detección de conflictos de horario usa un constraint `GIST` de PostgreSQL —
+        si el recurso ya tiene un turno activo en el intervalo solicitado, se devuelve `409`.
+
+        La combinación de `date` + `startTime` define el inicio. La duración se toma del servicio.
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createBookingAdmin
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+            example:
+              resourceId: 22222222-2222-2222-2222-222222222222
+              serviceId: 33333333-3333-3333-3333-333333333333
+              clientName: Lucas Fernández
+              clientPhone: '+5491145678901'
+              clientEmail: lucas@email.com
+              date: '2026-04-15'
+              startTime: '14:00'
+              notes: Cliente prefiere sin máquina en los costados
+      responses:
+        '201':
+          description: Turno creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflicto de horario — el recurso ya tiene un turno activo en ese intervalo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: BOOKING_CONFLICT
+                  message: Resource already has a booking at the requested time slot
+
+  /api/v1/bookings/{id}:
+    get:
+      tags: [bookings]
+      summary: Obtener un turno por ID
+      operationId: getBookingById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Turno encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [bookings]
+      summary: Cancelar un turno
+      description: |
+        Cancela el turno (transición de estado a `CANCELLED`). No es posible cancelar
+        un turno que ya está en estado `COMPLETED` o `CANCELLED` — se devuelve `422`.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: cancelBooking
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Turno cancelado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: El turno no puede cancelarse en su estado actual (COMPLETED o ya CANCELLED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: INVALID_STATE_TRANSITION
+                  message: Cannot cancel a booking in COMPLETED state
+
+  /api/v1/bookings/{id}/status:
+    put:
+      tags: [bookings]
+      summary: Cambiar el estado de un turno
+      description: |
+        Transiciona el turno a un nuevo estado. Las transiciones inválidas (ej: de
+        `COMPLETED` a `PENDING`) son rechazadas con `422`.
+
+        Transiciones válidas por estado actual:
+        - `PENDING` → `CONFIRMED`, `CANCELLED`
+        - `CONFIRMED` → `COMPLETED`, `CANCELLED`, `NO_SHOW`
+        - `CANCELLED` → (ninguna)
+        - `COMPLETED` → (ninguna)
+        - `NO_SHOW` → (ninguna)
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateBookingStatus
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookingStatusRequest'
+            example:
+              status: CONFIRMED
+      responses:
+        '200':
+          description: Estado del turno actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Transición de estado inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  # ---------------------------------------------------------------------------
+  # CLIENTS
+  # ---------------------------------------------------------------------------
+
+  /api/v1/clients:
+    get:
+      tags: [clients]
+      summary: Listar clientes del tenant
+      description: |
+        Devuelve una lista paginada de clientes. Los clientes se crean automáticamente
+        cuando se realiza un booking (público o admin) con un teléfono nuevo.
+        El teléfono es el identificador único del cliente dentro del tenant.
+      operationId: listClients
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Lista paginada de clientes
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PagedEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ClientResponse'
+              example:
+                data:
+                  - id: cccccccc-cccc-cccc-cccc-cccccccccccc
+                    tenantId: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    fullName: Lucas Fernández
+                    phone: '+5491145678901'
+                    email: lucas@email.com
+                    createdAt: '2026-03-01T08:30:00Z'
+                meta:
+                  page: 0
+                  size: 20
+                  total: 342
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/clients/{id}:
+    get:
+      tags: [clients]
+      summary: Obtener un cliente por ID
+      operationId: getClientById
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Cliente encontrado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ClientResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [clients]
+      summary: Actualizar datos de un cliente
+      description: |
+        Actualiza el nombre, teléfono o email de un cliente. El teléfono es único dentro
+        del tenant — si se intenta cambiar a uno ya existente, se devuelve `409`.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: updateClient
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+            example:
+              fullName: Lucas Fernández Rodríguez
+              email: lucas.nuevo@email.com
+      responses:
+        '200':
+          description: Cliente actualizado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/ClientResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/clients/{id}/bookings:
+    get:
+      tags: [clients]
+      summary: Listar historial de turnos de un cliente
+      description: |
+        Devuelve todos los turnos (de todos los estados, incluyendo cancelados y completados)
+        asociados al cliente. Útil para ver el historial completo y calcular métricas
+        de retención o frecuencia de visita.
+      operationId: listBookingsForClient
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '200':
+          description: Historial de turnos del cliente
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/BookingResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # USERS
+  # ---------------------------------------------------------------------------
+
+  /api/v1/users:
+    get:
+      tags: [users]
+      summary: Listar usuarios del equipo
+      description: |
+        Devuelve los usuarios del tenant del JWT autenticado. El `TENANT_ADMIN` solo ve
+        los usuarios de su propio tenant. El `SUPER_ADMIN` puede ver usuarios de cualquier
+        tenant (determinado por el contexto JWT).
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios del equipo
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/UserResponse'
+              example:
+                data:
+                  - id: dddddddd-dddd-dddd-dddd-dddddddddddd
+                    name: Pedro González
+                    email: pedro@invictusbarberia.com
+                    role: PROFESSIONAL
+                    resourceId: 22222222-2222-2222-2222-222222222222
+                    active: true
+                    createdAt: '2026-01-20T10:00:00Z'
+        '400':
+          description: Sin contexto de tenant en el JWT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [users]
+      summary: Crear un usuario en el equipo
+      description: |
+        Crea un usuario con rol `PROFESSIONAL` o `LOCATION_MANAGER` para el tenant actual.
+        **No se permite crear usuarios con rol `TENANT_ADMIN` o `SUPER_ADMIN` desde este endpoint.**
+
+        El campo `resourceId` vincula al usuario con un recurso del tipo `PROFESSIONAL` —
+        permite que el sistema sepa qué agenda mostrarle cuando hace login.
+
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              name: Martín Ríos
+              email: martin@invictusbarberia.com
+              password: Segura1234!
+              role: PROFESSIONAL
+              resourceId: 55555555-5555-5555-5555-555555555555
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: Error de validación o intento de crear un rol no permitido (TENANT_ADMIN, SUPER_ADMIN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: El email ya está registrado en este tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/users/{id}:
+    delete:
+      tags: [users]
+      summary: Desactivar un usuario del equipo
+      description: |
+        Realiza una desactivación lógica (soft-delete) del usuario — no se elimina de la
+        base de datos sino que se marca como inactivo. El usuario no podrá hacer login
+        pero su historial de actividad se conserva.
+
+        El `TENANT_ADMIN` solo puede desactivar usuarios de su propio tenant.
+        Requiere rol `TENANT_ADMIN` o `SUPER_ADMIN`.
+      operationId: deactivateUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/IdPath'
+      responses:
+        '204':
+          description: Usuario desactivado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ---------------------------------------------------------------------------
+  # PUBLIC
+  # ---------------------------------------------------------------------------
+
+  /api/v1/public/{tenantSlug}/services:
+    get:
+      tags: [public]
+      summary: Listar servicios activos del negocio (público)
+      description: |
+        Devuelve solo los servicios con `active: true`. Sin autenticación — destinado
+        al widget de turnos online del cliente. No expone servicios inactivos ni datos
+        de configuración interna del tenant.
+      operationId: publicListServices
+      parameters:
+        - $ref: '#/components/parameters/TenantSlugPath'
+      responses:
+        '200':
+          description: Servicios activos del negocio
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ServiceResponse'
+              example:
+                data:
+                  - id: 33333333-3333-3333-3333-333333333333
+                    tenantId: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    name: Corte clásico
+                    description: Corte de cabello con tijera y máquina
+                    durationMinutes: 30
+                    price: '1500.00'
+                    currency: ARS
+                    requiresResource: true
+                    metadata: {}
+                    active: true
+                    createdAt: '2026-01-20T10:00:00Z'
+                    updatedAt: '2026-01-20T10:00:00Z'
+        '404':
+          description: Tenant no encontrado para el slug indicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/public/{tenantSlug}/resources:
+    get:
+      tags: [public]
+      summary: Listar recursos activos del negocio (público)
+      description: |
+        Devuelve los recursos activos de todas las sedes del tenant. Sin autenticación.
+        Solo incluye recursos con `active: true`. Útil para que el cliente elija el
+        profesional o sala antes de seleccionar el slot.
+      operationId: publicListResources
+      parameters:
+        - $ref: '#/components/parameters/TenantSlugPath'
+      responses:
+        '200':
+          description: Recursos activos del negocio
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ResourceResponse'
+        '404':
+          description: Tenant no encontrado para el slug indicado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/public/{tenantSlug}/slots:
+    get:
+      tags: [public]
+      summary: Consultar turnos disponibles (público)
+      description: |
+        Devuelve los horarios libres para una combinación `recurso + servicio + fecha`.
+        Sin autenticación.
+
+        El algoritmo calcula los slots disponibles considerando (en orden de prioridad):
+        1. Excepciones (overrides) del recurso para esa fecha
+        2. Reglas semanales del recurso para el día de la semana
+        3. Turnos ya confirmados o pendientes en ese día
+
+        Los `startTime`/`endTime` de la respuesta son UTC ISO-8601. El cliente
+        debe convertirlos a la zona horaria del tenant para mostrarlos.
+      operationId: publicListSlots
+      parameters:
+        - $ref: '#/components/parameters/TenantSlugPath'
+        - name: serviceId
+          in: query
+          required: true
+          description: UUID del servicio seleccionado (determina la duración del slot)
+          schema:
+            type: string
+            format: uuid
+          example: 33333333-3333-3333-3333-333333333333
+        - name: resourceId
+          in: query
+          required: true
+          description: UUID del recurso (profesional o sala) seleccionado
+          schema:
+            type: string
+            format: uuid
+          example: 22222222-2222-2222-2222-222222222222
+        - name: date
+          in: query
+          required: true
+          description: Fecha a consultar en formato ISO-8601 (YYYY-MM-DD)
+          schema:
+            type: string
+            format: date
+          example: '2026-04-15'
+      responses:
+        '200':
+          description: Slots disponibles para la combinación solicitada
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AvailableSlotResponse'
+              example:
+                data:
+                  - startTime: '2026-04-15T12:00:00'
+                    endTime: '2026-04-15T12:30:00'
+                  - startTime: '2026-04-15T12:30:00'
+                    endTime: '2026-04-15T13:00:00'
+                  - startTime: '2026-04-15T14:00:00'
+                    endTime: '2026-04-15T14:30:00'
+        '404':
+          description: Tenant, servicio o recurso no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/public/{tenantSlug}/bookings:
+    post:
+      tags: [public]
+      summary: Reservar un turno desde el widget público
+      description: |
+        Crea un turno desde el widget de reservas online del cliente. Sin autenticación.
+        El source del turno se registra automáticamente como `WEB`.
+
+        El cliente se identifica por su número de teléfono. Si ya existe un cliente con
+        ese teléfono en el tenant, se reutiliza su perfil. Si no existe, se crea automáticamente.
+
+        La detección de conflictos usa un constraint `GIST` de PostgreSQL — si el slot
+        ya fue tomado desde que se consultaron los slots disponibles, se devuelve `409`.
+      operationId: publicCreateBooking
+      parameters:
+        - $ref: '#/components/parameters/TenantSlugPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+            example:
+              resourceId: 22222222-2222-2222-2222-222222222222
+              serviceId: 33333333-3333-3333-3333-333333333333
+              clientName: Ana García
+              clientPhone: '+5491156789012'
+              clientEmail: ana@email.com
+              date: '2026-04-15'
+              startTime: '14:00'
+              notes: ''
+      responses:
+        '201':
+          description: Turno reservado exitosamente
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/DataEnvelope'
+                  - properties:
+                      data:
+                        $ref: '#/components/schemas/BookingResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          description: Tenant, servicio o recurso no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: Conflicto de horario — el slot ya fue tomado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+              example:
+                error:
+                  code: BOOKING_CONFLICT
+                  message: Resource already has a booking at the requested time slot
+
+# =============================================================================
+# COMPONENTS
+# =============================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT obtenido desde `POST /api/v1/auth/login`. Incluirlo en el header:
+        `Authorization: Bearer {accessToken}`
+
+  # ---------------------------------------------------------------------------
+  # PARAMETERS
+  # ---------------------------------------------------------------------------
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      description: UUID del recurso
+      schema:
+        type: string
+        format: uuid
+      example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+    ResourceIdPath:
+      name: resourceId
+      in: path
+      required: true
+      description: UUID del recurso
+      schema:
+        type: string
+        format: uuid
+      example: 22222222-2222-2222-2222-222222222222
+
+    TenantSlugPath:
+      name: tenantSlug
+      in: path
+      required: true
+      description: Slug único del negocio (ej. "invictus-barberia", "pilates-zen")
+      schema:
+        type: string
+        pattern: '^[a-z0-9-]+$'
+      example: invictus-barberia
+
+    PageParam:
+      name: page
+      in: query
+      description: Número de página base 0
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+      example: 0
+
+    SizeParam:
+      name: size
+      in: query
+      description: Cantidad de resultados por página
+      schema:
+        type: integer
+        default: 20
+        minimum: 1
+        maximum: 100
+      example: 20
+
+  # ---------------------------------------------------------------------------
+  # RESPONSES
+  # ---------------------------------------------------------------------------
+  responses:
+    ValidationError:
+      description: Error de validación — uno o más campos tienen valores inválidos o faltan campos requeridos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Validation failed
+              details:
+                - field: email
+                  message: must not be blank
+
+    Unauthorized:
+      description: No autorizado — token JWT faltante, inválido o expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Authentication required
+
+    Forbidden:
+      description: Prohibido — el usuario no tiene el rol requerido para esta operación
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Insufficient role
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Resource not found
+
+  # ---------------------------------------------------------------------------
+  # SCHEMAS
+  # ---------------------------------------------------------------------------
+  schemas:
+
+    # --- Envelopes ---
+
+    DataEnvelope:
+      type: object
+      description: Envelope estándar para respuestas exitosas de un solo objeto
+      properties:
+        data:
+          description: Payload de la respuesta
+
+    PagedEnvelope:
+      type: object
+      description: Envelope estándar para listados paginados
+      properties:
+        data:
+          type: array
+          description: Array de resultados de la página actual
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    PaginationMeta:
+      type: object
+      description: Metadatos de paginación
+      properties:
+        page:
+          type: integer
+          description: Número de página actual (base 0)
+          example: 0
+        size:
+          type: integer
+          description: Cantidad de resultados por página solicitada
+          example: 20
+        total:
+          type: integer
+          format: int64
+          description: Total de registros disponibles (para calcular el número total de páginas)
+          example: 342
+
+    ErrorEnvelope:
+      type: object
+      description: Envelope estándar para respuestas de error
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Código de error legible por máquina
+              example: NOT_FOUND
+            message:
+              type: string
+              description: Descripción del error
+              example: Resource not found
+            details:
+              type: array
+              description: Lista de errores de validación (presente solo en 400)
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                    example: email
+                  message:
+                    type: string
+                    example: must not be blank
+
+    # --- Auth ---
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email del usuario registrado en el tenant
+          example: pedro@invictusbarberia.com
+        password:
+          type: string
+          format: password
+          description: Contraseña del usuario
+          example: MiContraseña123
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+          description: Refresh token obtenido en el login (válido por 7 días)
+          example: eyJhbGciOiJIUzI1NiJ9...
+
+    LoginResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              description: JWT de acceso (válido 15 minutos)
+            refreshToken:
+              type: string
+              description: JWT de renovación (válido 7 días)
+            expiresIn:
+              type: integer
+              description: Segundos hasta que expira el access token
+              example: 900
+            user:
+              type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                email:
+                  type: string
+                  format: email
+                fullName:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/UserRole'
+
+    RefreshResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              description: Nuevo JWT de acceso (válido 15 minutos)
+            expiresIn:
+              type: integer
+              example: 900
+
+    # --- Tenant ---
+
+    CreateTenantRequest:
+      type: object
+      required: [name, slug, businessType]
+      properties:
+        name:
+          type: string
+          description: Nombre del negocio
+          example: Pilates Zen Studio
+        slug:
+          type: string
+          description: Identificador URL-friendly único e inmutable. Solo letras minúsculas, dígitos y guiones.
+          pattern: '^[a-z0-9-]+$'
+          example: pilates-zen
+        businessType:
+          $ref: '#/components/schemas/BusinessType'
+        timezone:
+          type: string
+          description: Zona horaria IANA (por defecto America/Argentina/Buenos_Aires)
+          example: America/Argentina/Buenos_Aires
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Mapa de propiedades adicionales libres (redes sociales, configuraciones, etc.)
+          example:
+            instagram: '@pilateszenstudio'
+
+    UpdateTenantRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se actualizan los incluidos.
+      properties:
+        name:
+          type: string
+          example: Barbería Invictus Premium
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
+        metadata:
+          type: object
+          additionalProperties: true
+          example:
+            instagram: '@invictusbarberia'
+
+    TenantResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        name:
+          type: string
+          example: Barbería Invictus
+        slug:
+          type: string
+          example: invictus-barberia
+        businessType:
+          $ref: '#/components/schemas/BusinessType'
+        subscriptionTier:
+          $ref: '#/components/schemas/SubscriptionTier'
+        subscriptionExpiresAt:
+          type: string
+          format: date-time
+          description: Fecha y hora de expiración de la suscripción (UTC ISO-8601)
+          example: '2026-12-31T23:59:59Z'
+        timezone:
+          type: string
+          example: America/Argentina/Buenos_Aires
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp de creación en UTC ISO-8601
+          example: '2026-01-15T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          description: Timestamp de última modificación en UTC ISO-8601
+          example: '2026-02-20T14:30:00Z'
+
+    # --- Location ---
+
+    CreateLocationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Nombre de la sede o sucursal
+          example: Sede Palermo
+        address:
+          type: string
+          description: Dirección física de la sede (opcional para sedes virtuales)
+          example: Thames 1234, CABA
+        phone:
+          type: string
+          description: Teléfono de contacto de la sede
+          example: '+5491156789012'
+        imageUrl:
+          type: string
+          format: uri
+          maxLength: 512
+          description: URL de la foto o imagen representativa de la sede
+          example: https://cdn.agendateya.com/invictus/palermo.jpg
+        metadata:
+          type: object
+          additionalProperties: true
+          example:
+            googleMapsUrl: 'https://maps.google.com/?q=Thames+1234+CABA'
+
+    UpdateLocationRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se actualizan los incluidos.
+      properties:
+        name:
+          type: string
+          example: Sede Palermo Premium
+        address:
+          type: string
+          example: Thames 1250, CABA
+        phone:
+          type: string
+          example: '+5491145679999'
+        imageUrl:
+          type: string
+          format: uri
+        metadata:
+          type: object
+          additionalProperties: true
+
+    LocationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        tenantId:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        name:
+          type: string
+          example: Sede Palermo
+        address:
+          type: string
+          example: Thames 1234, CABA
+          nullable: true
+        phone:
+          type: string
+          example: '+5491156789012'
+          nullable: true
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T09:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T09:00:00Z'
+
+    # --- Resource ---
+
+    CreateResourceRequest:
+      type: object
+      required: [resourceType, name]
+      properties:
+        resourceType:
+          $ref: '#/components/schemas/ResourceType'
+        name:
+          type: string
+          description: Nombre del recurso (nombre del profesional, nombre de la sala, etc.)
+          example: Pedro González
+        description:
+          type: string
+          description: Descripción del recurso (especialidad del profesional, características de la sala)
+          example: Barbero especialista en corte clásico y degradé
+          nullable: true
+        capacity:
+          type: integer
+          description: Capacidad del recurso (habitualmente 1 para profesionales)
+          example: 1
+          minimum: 1
+          nullable: true
+        imageUrl:
+          type: string
+          format: uri
+          maxLength: 512
+          description: URL de la foto del profesional o la sala
+          example: https://cdn.agendateya.com/invictus/pedro.jpg
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+          example:
+            specialty: corte-clasico
+
+    UpdateResourceRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se actualizan los incluidos.
+      properties:
+        name:
+          type: string
+          example: Pedro González
+        description:
+          type: string
+          nullable: true
+        capacity:
+          type: integer
+          minimum: 1
+          nullable: true
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          description: Desactivar un recurso impide nuevos turnos pero no cancela los existentes
+          example: true
+
+    ResourceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 22222222-2222-2222-2222-222222222222
+        locationId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        resourceType:
+          $ref: '#/components/schemas/ResourceType'
+        name:
+          type: string
+          example: Pedro González
+        description:
+          type: string
+          nullable: true
+          example: Barbero especialista en corte clásico
+        capacity:
+          type: integer
+          example: 1
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T10:00:00Z'
+
+    TransferResourceRequest:
+      type: object
+      required: [locationId]
+      properties:
+        locationId:
+          type: string
+          format: uuid
+          description: UUID de la localidad destino (debe pertenecer al mismo tenant)
+          example: 44444444-4444-4444-4444-444444444444
+        clearSchedule:
+          type: boolean
+          description: |
+            Si `true`, cancela todos los bookings futuros del recurso antes de transferirlo.
+            Si `false`, los bookings existentes quedan intactos (pueden quedar con sede inconsistente).
+          default: false
+          example: true
+
+    AssignServiceRequest:
+      type: object
+      required: [serviceId]
+      properties:
+        serviceId:
+          type: string
+          format: uuid
+          description: UUID del servicio a asignar al recurso (debe pertenecer al mismo tenant)
+          example: 33333333-3333-3333-3333-333333333333
+
+    # --- Service ---
+
+    CreateServiceRequest:
+      type: object
+      required: [name, durationMinutes, price]
+      properties:
+        name:
+          type: string
+          description: Nombre del servicio
+          example: Corte clásico
+        description:
+          type: string
+          description: Descripción del servicio para mostrar en el widget de reservas
+          example: Corte de cabello con tijera y máquina, incluye lavado
+          nullable: true
+        durationMinutes:
+          type: integer
+          description: Duración del servicio en minutos (mínimo 1)
+          minimum: 1
+          example: 30
+        price:
+          type: number
+          format: double
+          description: Precio del servicio (mínimo 0)
+          minimum: 0
+          example: 1500.00
+        currency:
+          type: string
+          description: Código ISO 4217 de moneda (por defecto ARS)
+          example: ARS
+          nullable: true
+        requiresResource:
+          type: boolean
+          description: Si `true`, el turno requiere especificar un recurso al reservar
+          default: true
+          example: true
+        metadata:
+          type: object
+          additionalProperties: true
+          example:
+            category: barberia
+
+    UpdateServiceRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se actualizan los incluidos.
+      properties:
+        name:
+          type: string
+          example: Corte premium
+        description:
+          type: string
+          nullable: true
+        durationMinutes:
+          type: integer
+          minimum: 1
+          nullable: true
+        price:
+          type: number
+          format: double
+          minimum: 0
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        requiresResource:
+          type: boolean
+          nullable: true
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          description: Desactivar impide nuevas reservas de este servicio
+          example: true
+
+    ServiceResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 33333333-3333-3333-3333-333333333333
+        tenantId:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        name:
+          type: string
+          example: Corte clásico
+        description:
+          type: string
+          nullable: true
+          example: Corte de cabello con tijera y máquina
+        durationMinutes:
+          type: integer
+          example: 30
+        price:
+          type: string
+          description: Precio en formato decimal con dos decimales
+          example: '1500.00'
+        currency:
+          type: string
+          example: ARS
+        requiresResource:
+          type: boolean
+          example: true
+        metadata:
+          type: object
+          additionalProperties: true
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T10:00:00Z'
+
+    # --- Availability Rule ---
+
+    CreateAvailabilityRuleRequest:
+      type: object
+      required: [resourceId, dayOfWeek, startTime, endTime]
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+          description: UUID del recurso al que aplica esta regla
+          example: 22222222-2222-2222-2222-222222222222
+        dayOfWeek:
+          type: integer
+          description: Día de la semana (0 = lunes, 1 = martes, ..., 6 = domingo)
+          minimum: 0
+          maximum: 6
+          example: 0
+        startTime:
+          type: string
+          format: time
+          description: Hora de inicio en formato HH:mm (zona horaria del tenant)
+          example: '09:00'
+        endTime:
+          type: string
+          format: time
+          description: Hora de fin en formato HH:mm (zona horaria del tenant)
+          example: '18:00'
+        validFrom:
+          type: string
+          format: date
+          description: Fecha desde la cual aplica la regla (ISO-8601 YYYY-MM-DD). Null = sin límite de inicio.
+          example: '2026-04-01'
+          nullable: true
+        validUntil:
+          type: string
+          format: date
+          description: Fecha hasta la cual aplica la regla (ISO-8601 YYYY-MM-DD). Null = sin límite de fin.
+          nullable: true
+
+    UpdateAvailabilityRuleRequest:
+      type: object
+      description: Todos los campos son opcionales.
+      properties:
+        dayOfWeek:
+          type: integer
+          minimum: 0
+          maximum: 6
+          nullable: true
+        startTime:
+          type: string
+          format: time
+          example: '10:00'
+          nullable: true
+        endTime:
+          type: string
+          format: time
+          example: '17:00'
+          nullable: true
+        validFrom:
+          type: string
+          format: date
+          nullable: true
+        validUntil:
+          type: string
+          format: date
+          nullable: true
+
+    AvailabilityRuleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+        resourceId:
+          type: string
+          format: uuid
+          example: 22222222-2222-2222-2222-222222222222
+        dayOfWeek:
+          type: integer
+          description: 0 = lunes, 6 = domingo
+          example: 0
+        startTime:
+          type: string
+          format: time
+          example: '09:00'
+        endTime:
+          type: string
+          format: time
+          example: '18:00'
+        validFrom:
+          type: string
+          format: date
+          nullable: true
+          example: '2026-04-01'
+        validUntil:
+          type: string
+          format: date
+          nullable: true
+
+    # --- Availability Override ---
+
+    CreateAvailabilityOverrideRequest:
+      type: object
+      required: [resourceId, date, available]
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+          description: UUID del recurso al que aplica la excepción
+          example: 22222222-2222-2222-2222-222222222222
+        date:
+          type: string
+          format: date
+          description: Fecha de la excepción (ISO-8601 YYYY-MM-DD)
+          example: '2026-05-25'
+        available:
+          type: boolean
+          description: |
+            `false` = el recurso no está disponible ese día (feriado, licencia).
+            `true` = el recurso atiende con horario especial (indicado en startTime/endTime).
+          example: false
+        startTime:
+          type: string
+          format: time
+          description: Hora de inicio del horario especial (solo cuando available=true)
+          example: '10:00'
+          nullable: true
+        endTime:
+          type: string
+          format: time
+          description: Hora de fin del horario especial (solo cuando available=true)
+          example: '14:00'
+          nullable: true
+
+    UpdateAvailabilityOverrideRequest:
+      type: object
+      description: Todos los campos son opcionales.
+      properties:
+        available:
+          type: boolean
+          nullable: true
+        startTime:
+          type: string
+          format: time
+          nullable: true
+        endTime:
+          type: string
+          format: time
+          nullable: true
+
+    AvailabilityOverrideResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        resourceId:
+          type: string
+          format: uuid
+          example: 22222222-2222-2222-2222-222222222222
+        date:
+          type: string
+          format: date
+          example: '2026-05-25'
+        available:
+          type: boolean
+          example: false
+        startTime:
+          type: string
+          format: time
+          nullable: true
+          example: null
+        endTime:
+          type: string
+          format: time
+          nullable: true
+          example: null
+
+    # --- Available Slot ---
+
+    AvailableSlotResponse:
+      type: object
+      description: Slot de tiempo disponible para una reserva
+      properties:
+        startTime:
+          type: string
+          format: date-time
+          description: Inicio del slot (LocalDateTime — interpretado en la zona horaria del tenant)
+          example: '2026-04-15T14:00:00'
+        endTime:
+          type: string
+          format: date-time
+          description: Fin del slot (LocalDateTime — interpretado en la zona horaria del tenant)
+          example: '2026-04-15T14:30:00'
+
+    # --- Booking ---
+
+    CreateBookingRequest:
+      type: object
+      required: [resourceId, serviceId, clientName, clientPhone, date, startTime]
+      properties:
+        resourceId:
+          type: string
+          format: uuid
+          description: UUID del recurso (profesional o sala) que atenderá el turno
+          example: 22222222-2222-2222-2222-222222222222
+        serviceId:
+          type: string
+          format: uuid
+          description: UUID del servicio a reservar
+          example: 33333333-3333-3333-3333-333333333333
+        clientName:
+          type: string
+          maxLength: 200
+          description: Nombre completo del cliente
+          example: Lucas Fernández
+        clientPhone:
+          type: string
+          maxLength: 30
+          description: Teléfono del cliente (identificador único dentro del tenant)
+          example: '+5491145678901'
+        clientEmail:
+          type: string
+          format: email
+          maxLength: 200
+          description: Email del cliente (opcional)
+          example: lucas@email.com
+          nullable: true
+        date:
+          type: string
+          format: date
+          description: Fecha del turno (ISO-8601 YYYY-MM-DD)
+          example: '2026-04-15'
+        startTime:
+          type: string
+          format: time
+          description: Hora de inicio del turno (HH:mm en zona horaria del tenant)
+          example: '14:00'
+        notes:
+          type: string
+          maxLength: 1000
+          description: Notas o comentarios adicionales del turno
+          example: Cliente prefiere sin máquina en los costados
+          nullable: true
+
+    BookingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+        tenantId:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        resourceId:
+          type: string
+          format: uuid
+          example: 22222222-2222-2222-2222-222222222222
+        serviceId:
+          type: string
+          format: uuid
+          example: 33333333-3333-3333-3333-333333333333
+        clientId:
+          type: string
+          format: uuid
+          example: cccccccc-cccc-cccc-cccc-cccccccccccc
+        locationId:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        startTime:
+          type: string
+          format: date-time
+          description: Inicio del turno en UTC ISO-8601
+          example: '2026-04-15T17:00:00Z'
+        endTime:
+          type: string
+          format: date-time
+          description: Fin del turno en UTC ISO-8601
+          example: '2026-04-15T17:30:00Z'
+        status:
+          $ref: '#/components/schemas/BookingStatus'
+        sourceChannel:
+          $ref: '#/components/schemas/SourceChannel'
+        googleEventId:
+          type: string
+          description: ID del evento en Google Calendar (null si no está sincronizado)
+          nullable: true
+          example: null
+        notes:
+          type: string
+          nullable: true
+          example: Cliente prefiere sin máquina en los costados
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-04-10T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-04-10T10:00:00Z'
+        resourceName:
+          type: string
+          description: Nombre desnormalizado del recurso (puede ser null en respuestas básicas)
+          nullable: true
+          example: Pedro González
+        serviceName:
+          type: string
+          description: Nombre desnormalizado del servicio (puede ser null en respuestas básicas)
+          nullable: true
+          example: Corte clásico
+        clientName:
+          type: string
+          description: Nombre desnormalizado del cliente (puede ser null en respuestas básicas)
+          nullable: true
+          example: Lucas Fernández
+        clientPhone:
+          type: string
+          description: Teléfono desnormalizado del cliente (puede ser null en respuestas básicas)
+          nullable: true
+          example: '+5491145678901'
+
+    UpdateBookingStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: Nuevo estado del turno
+          enum: [PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW]
+          example: CONFIRMED
+
+    # --- Client ---
+
+    UpdateClientRequest:
+      type: object
+      description: Todos los campos son opcionales. Solo se actualizan los incluidos.
+      properties:
+        fullName:
+          type: string
+          maxLength: 200
+          example: Lucas Fernández Rodríguez
+          nullable: true
+        phone:
+          type: string
+          maxLength: 30
+          description: Teléfono único dentro del tenant
+          example: '+5491145678901'
+          nullable: true
+        email:
+          type: string
+          format: email
+          maxLength: 200
+          nullable: true
+          example: lucas.nuevo@email.com
+
+    ClientResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: cccccccc-cccc-cccc-cccc-cccccccccccc
+        tenantId:
+          type: string
+          format: uuid
+          example: f47ac10b-58cc-4372-a567-0e02b2c3d479
+        fullName:
+          type: string
+          example: Lucas Fernández
+        phone:
+          type: string
+          example: '+5491145678901'
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: lucas@email.com
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-03-01T08:30:00Z'
+
+    # --- User ---
+
+    CreateUserRequest:
+      type: object
+      required: [name, email, password, role]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Nombre completo del usuario
+          example: Martín Ríos
+        email:
+          type: string
+          format: email
+          description: Email de acceso (único dentro del tenant)
+          example: martin@invictusbarberia.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 100
+          description: Contraseña inicial (mínimo 8 caracteres)
+          example: Segura1234!
+        role:
+          $ref: '#/components/schemas/UserRole'
+          description: Solo se permiten PROFESSIONAL y LOCATION_MANAGER
+        resourceId:
+          type: string
+          format: uuid
+          description: UUID del recurso tipo PROFESSIONAL vinculado a este usuario (opcional para LOCATION_MANAGER)
+          example: 55555555-5555-5555-5555-555555555555
+          nullable: true
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: dddddddd-dddd-dddd-dddd-dddddddddddd
+        name:
+          type: string
+          example: Martín Ríos
+        email:
+          type: string
+          format: email
+          example: martin@invictusbarberia.com
+        role:
+          $ref: '#/components/schemas/UserRole'
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+          example: 55555555-5555-5555-5555-555555555555
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-01-20T10:00:00Z'
+
+    # --- Enums ---
+
+    BookingStatus:
+      type: string
+      description: |
+        Estado del turno:
+        - `PENDING` — creado, pendiente de confirmación
+        - `CONFIRMED` — confirmado por el negocio
+        - `CANCELLED` — cancelado (por el cliente o el negocio)
+        - `COMPLETED` — servicio realizado
+        - `NO_SHOW` — el cliente no se presentó
+      enum: [PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW]
+      example: CONFIRMED
+
+    ResourceType:
+      type: string
+      description: |
+        Tipo de recurso:
+        - `PROFESSIONAL` — profesional (barbero, médico, instructor, etc.)
+        - `TABLE` — mesa (restaurante, salón)
+        - `ROOM` — sala o consultorio
+        - `EQUIPMENT` — equipamiento (máquina, bicicleta de spinning, etc.)
+      enum: [PROFESSIONAL, TABLE, ROOM, EQUIPMENT]
+      example: PROFESSIONAL
+
+    BusinessType:
+      type: string
+      description: |
+        Tipo de negocio:
+        - `SERVICE` — negocio de servicios con profesionales (barbería, clínica, estudio de pilates)
+        - `HOSPITALITY` — negocio de hospitalidad con mesas o habitaciones (restaurante, hotel)
+      enum: [SERVICE, HOSPITALITY]
+      example: SERVICE
+
+    SubscriptionTier:
+      type: string
+      description: |
+        Plan de suscripción del tenant:
+        - `PRO` — hasta 3 profesionales, 100 req/min
+        - `PREMIUM` — hasta 6 profesionales, 300 req/min, WhatsApp, pagos, Google Reviews
+        - `ENTERPRISE` — hasta 12 profesionales, 1000 req/min, todo PREMIUM + Google Calendar/Meet
+      enum: [PRO, PREMIUM, ENTERPRISE]
+      example: PREMIUM
+
+    UserRole:
+      type: string
+      description: |
+        Rol del usuario:
+        - `SUPER_ADMIN` — administrador de la plataforma (acceso total, solo interno)
+        - `TENANT_ADMIN` — dueño o administrador del negocio
+        - `LOCATION_MANAGER` — manager de una sede específica
+        - `PROFESSIONAL` — profesional (barbero, médico, instructor) con acceso a su agenda
+      enum: [SUPER_ADMIN, TENANT_ADMIN, LOCATION_MANAGER, PROFESSIONAL]
+      example: PROFESSIONAL
+
+    SourceChannel:
+      type: string
+      description: |
+        Canal de origen del turno:
+        - `WEB` — widget público de reservas online
+        - `WHATSAPP` — bot de WhatsApp
+        - `API` — integración externa via API Key
+        - `MCP` — protocolo MCP (integraciones de AI agents)
+        - `ADMIN` — panel de administración
+      enum: [WEB, WHATSAPP, API, MCP, ADMIN]
+      example: WEB
