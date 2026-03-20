@@ -167,21 +167,21 @@ Goal: Implement calendar page from PageAgendaSemanal.png as operational core.
 
 ### Scope
 
-- [ ] Weekly calendar board UI
-- [ ] Location/resource filters panel
-- [ ] Booking cards with status colors
-- [ ] New booking CTA
-- [ ] Booking status actions with valid transition rules
+- [x] Weekly calendar board UI
+- [x] Location/resource filters panel
+- [x] Booking cards with status colors
+- [x] New booking CTA
+- [x] Booking status actions with valid transition rules
 
 ### Deliverables
 
-- [ ] Agenda route with booking interaction baseline
+- [x] Agenda route with booking interaction baseline
 
 ### QA checks
 
-- [ ] State transitions follow backend rules
-- [ ] 409 conflict state shown with guidance
-- [ ] Timezone conversion correctly displayed
+- [x] State transitions follow backend rules
+- [x] 409 conflict state shown with guidance
+- [x] Timezone conversion correctly displayed
 
 ## Slice 7 - Bookings CRUD Details (Day 22-24)
 

@@ -15,6 +15,7 @@ import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { HealthPage } from "@/features/health/health-page";
 import { ModulePlaceholderPage } from "@/features/placeholders/module-placeholder-page";
 import { ResourcesPage } from "@/features/resources/resources-page";
+import { AgendaPage } from "@/features/agenda/agenda-page";
 
 function RootLayout() {
   return (
@@ -87,7 +88,7 @@ const dashboardRoute = createRoute({
 const agendaRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/agenda",
-  component: () => <ModulePlaceholderPage moduleName="Agenda" routePath="/agenda" />,
+  component: AgendaPage,
 });
 
 const clientsRoute = createRoute({
