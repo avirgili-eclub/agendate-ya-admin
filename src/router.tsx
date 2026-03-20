@@ -16,6 +16,7 @@ import { HealthPage } from "@/features/health/health-page";
 import { ModulePlaceholderPage } from "@/features/placeholders/module-placeholder-page";
 import { ResourcesPage } from "@/features/resources/resources-page";
 import { AgendaPage } from "@/features/agenda/agenda-page";
+import { BookingsPage } from "@/features/bookings/bookings-page";
 
 function RootLayout() {
   return (
@@ -91,6 +92,12 @@ const agendaRoute = createRoute({
   component: AgendaPage,
 });
 
+const bookingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/turnos",
+  component: BookingsPage,
+});
+
 const clientsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/clientes",
@@ -151,6 +158,7 @@ const routeTree = rootRoute.addChildren([
     indexRoute,
     dashboardRoute,
     agendaRoute,
+    bookingsRoute,
     clientsRoute,
     locationsRoute,
     resourcesRoute,

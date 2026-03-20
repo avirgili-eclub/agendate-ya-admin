@@ -8,6 +8,7 @@ import {
   UserSquare2,
   Wrench,
   Briefcase,
+  ClipboardList,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -21,6 +22,7 @@ export type AppNavItem = {
 export const APP_NAV_ITEMS: AppNavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, description: "Panel de control" },
   { label: "Agenda", to: "/agenda", icon: CalendarDays, description: "Turnos y calendario" },
+  { label: "Turnos", to: "/turnos", icon: ClipboardList, description: "Gestion de reservas" },
   { label: "Clientes", to: "/clientes", icon: Users, description: "Directorio de clientes" },
   { label: "Locales", to: "/locales", icon: MapPin, description: "Sucursales y sedes" },
   { label: "Recursos", to: "/recursos", icon: UserSquare2, description: "Profesionales y equipos" },
@@ -33,6 +35,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
 export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Dashboard", subtitle: "Vista general operativa del negocio." },
   "/agenda": { title: "Agenda", subtitle: "Gestion semanal de turnos y disponibilidad." },
+  "/turnos": { title: "Turnos", subtitle: "Administracion completa de reservas y bookings." },
   "/clientes": { title: "Clientes", subtitle: "Historial y datos de clientes del tenant." },
   "/locales": { title: "Locales", subtitle: "Administracion de sedes y sucursales." },
   "/recursos": { title: "Recursos", subtitle: "Profesionales, salas y equipamiento operativo." },

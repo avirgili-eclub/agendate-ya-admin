@@ -1,0 +1,725 @@
+import { useState, type FormEvent } from "react";
+import { Plus, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import type { AppError } from "@/core/errors/app-error";
+import { useBookingsQuery, useBookingDetailQuery } from "@/features/bookings/use-bookings-query";
+import {
+  createBooking,
+  fetchBookingServicesCatalog,
+  deleteBooking,
+  updateBookingStatus,
+  getStatusLabel,
+  getStatusTone,
+  getSourceChannelLabel,
+  getValidStatusTransitions,
+  toBookingsFriendlyMessage,
+  type BookingListItem,
+  type BookingStatus,
+  type CreateBookingInput,
+} from "@/features/bookings/bookings-service";
+import {
+  fetchLocations,
+  fetchLocationResources,
+} from "@/features/agenda/agenda-service";
+import { Button } from "@/shared/ui/button";
+import { PageCard } from "@/shared/ui/page-card";
+import { StatusChip } from "@/shared/ui/status-chip";
+import { SidePanel } from "@/shared/ui/side-panel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+
+function formatDateTime(isoString: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(isoString));
+}
+
+function formatTime(isoString: string): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(isoString));
+}
+
+type BookingRowProps = {
+  booking: BookingListItem;
+  onViewDetail: (id: string) => void;
+  onCancel: (id: string) => void;
+};
+
+function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
+  return (
+    <tr className="border-b border-neutral-dark hover:bg-neutral transition-colors">
+      <td className="px-4 py-3 text-sm text-primary">{booking.clientName}</td>
+      <td className="px-4 py-3 text-sm text-primary-light">{booking.clientPhone}</td>
+      <td className="px-4 py-3 text-sm text-primary-light">{booking.serviceName}</td>
+      <td className="px-4 py-3 text-sm text-primary-light">{booking.resourceName}</td>
+      <td className="px-4 py-3 text-sm text-primary-light">
+        {formatDateTime(booking.startTime)}
+      </td>
+      <td className="px-4 py-3">
+        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
+      </td>
+      <td className="px-4 py-3 text-sm text-primary-light">
+        {getSourceChannelLabel(booking.sourceChannel)}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onViewDetail(booking.id)}
+            className="rounded-md p-1.5 text-primary-light hover:bg-neutral-dark hover:text-primary transition-colors"
+            aria-label="Ver detalle"
+          >
+            <Eye className="size-4" />
+          </button>
+          {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+            <button
+              onClick={() => onCancel(booking.id)}
+              className="rounded-md p-1.5 text-red-600 hover:bg-red-50 transition-colors"
+              aria-label="Cancelar turno"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+type CreateBookingFormProps = {
+  onClose: () => void;
+  onSuccess: () => void;
+};
+
+function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
+  const queryClient = useQueryClient();
+
+  const [locationId, setLocationId] = useState("");
+  const [resourceId, setResourceId] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [notes, setNotes] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const locationsQuery = useQuery({
+    queryKey: ["locations"],
+    queryFn: fetchLocations,
+    staleTime: 60_000,
+  });
+
+  const resourcesQuery = useQuery({
+    queryKey: ["location-resources", locationId],
+    queryFn: () => fetchLocationResources(locationId),
+    enabled: !!locationId,
+    staleTime: 60_000,
+  });
+
+  const servicesQuery = useQuery({
+    queryKey: ["bookings", "services"],
+    queryFn: fetchBookingServicesCatalog,
+    staleTime: 60_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (input: CreateBookingInput) => createBooking(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      onSuccess();
+      onClose();
+    },
+    onError: (error: AppError) => {
+      const nextFieldErrors: Record<string, string> = {};
+      for (const detail of error.details ?? []) {
+        if (detail.field) {
+          nextFieldErrors[detail.field] = detail.message;
+        }
+      }
+      setFieldErrors(nextFieldErrors);
+      setFormError(toBookingsFriendlyMessage(error));
+    },
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    setFieldErrors({});
+
+    createMutation.mutate({
+      resourceId,
+      serviceId,
+      clientName,
+      clientPhone,
+      clientEmail: clientEmail || undefined,
+      date,
+      startTime,
+      notes: notes || undefined,
+    });
+  }
+
+  const locations = locationsQuery.data?.filter((l) => l.active) ?? [];
+  const resources = resourcesQuery.data?.filter((r) => r.active) ?? [];
+  const services = servicesQuery.data?.filter((s) => s.active) ?? [];
+
+  return (
+    <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
+      {formError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {formError}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre del cliente *</span>
+          <input
+            type="text"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+            placeholder="Juan Pérez"
+          />
+          {fieldErrors.clientName && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientName}</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Teléfono *</span>
+          <input
+            type="tel"
+            value={clientPhone}
+            onChange={(e) => setClientPhone(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+            placeholder="+54 9 11 1234-5678"
+          />
+          {fieldErrors.clientPhone && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Email (opcional)</span>
+        <input
+          type="email"
+          value={clientEmail}
+          onChange={(e) => setClientEmail(e.target.value)}
+          className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          placeholder="cliente@ejemplo.com"
+        />
+      </label>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Local *</span>
+          <Select value={locationId} onValueChange={(value) => {
+            setLocationId(value);
+            setResourceId(""); // Reset resource when location changes
+          }}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar local" />
+            </SelectTrigger>
+            <SelectContent>
+              {locations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldErrors.resourceId && !locationId && (
+            <span className="mt-1 block text-xs text-red-700">Selecciona un local primero</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
+          <Select value={resourceId} onValueChange={setResourceId} disabled={!locationId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar recurso" />
+            </SelectTrigger>
+            <SelectContent>
+              {resources.map((resource) => (
+                <SelectItem key={resource.id} value={resource.id}>
+                  {resource.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldErrors.resourceId && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.resourceId}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Servicio *</span>
+        <Select value={serviceId} onValueChange={setServiceId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Seleccionar servicio" />
+          </SelectTrigger>
+          <SelectContent>
+            {services.map((service) => (
+              <SelectItem key={service.id} value={service.id}>
+                {service.name} ({service.durationMinutes} min)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {fieldErrors.serviceId && (
+          <span className="mt-1 block text-xs text-red-700">{fieldErrors.serviceId}</span>
+        )}
+      </label>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Fecha *</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          />
+          {fieldErrors.date && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.date}</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Hora de inicio *</span>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          />
+          {fieldErrors.startTime && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.startTime}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Notas (opcional)</span>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          className="w-full rounded-md border border-neutral-dark px-3 py-2 text-sm outline-none ring-primary-light focus:ring-2"
+          placeholder="Información adicional sobre el turno"
+        />
+      </label>
+
+      <div className="flex justify-end gap-3 border-t border-neutral-dark pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={createMutation.isPending}>
+          {createMutation.isPending ? "Guardando..." : "Crear turno"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+type BookingDetailPanelProps = {
+  bookingId: string;
+  onClose: () => void;
+  onRefresh: () => void;
+};
+
+function BookingDetailPanel({ bookingId, onClose, onRefresh }: BookingDetailPanelProps) {
+  const queryClient = useQueryClient();
+  const detailQuery = useBookingDetailQuery(bookingId);
+  const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: BookingStatus }) =>
+      updateBookingStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
+      onRefresh();
+      setConfirmingAction(null);
+    },
+    onError: (error: AppError) => {
+      alert(toBookingsFriendlyMessage(error));
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => deleteBooking(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      onRefresh();
+      onClose();
+    },
+    onError: (error: AppError) => {
+      alert(toBookingsFriendlyMessage(error));
+    },
+  });
+
+  if (detailQuery.isLoading) {
+    return (
+      <div className="px-6 py-8 text-center text-sm text-primary-light">
+        Cargando detalles del turno...
+      </div>
+    );
+  }
+
+  if (detailQuery.isError || !detailQuery.data) {
+    return (
+      <div className="px-6 py-8 text-center text-sm text-red-600">
+        Error al cargar el turno. Intenta nuevamente.
+      </div>
+    );
+  }
+
+  const booking = detailQuery.data;
+  const validTransitions = getValidStatusTransitions(booking.status);
+
+  function handleStatusChange(newStatus: BookingStatus) {
+    setConfirmingAction({ action: "status", newStatus });
+  }
+
+  function handleCancelBooking() {
+    setConfirmingAction({ action: "cancel" });
+  }
+
+  function executeAction() {
+    if (!confirmingAction) return;
+
+    if (confirmingAction.action === "cancel") {
+      cancelMutation.mutate(bookingId);
+    } else if (confirmingAction.action === "status" && confirmingAction.newStatus) {
+      statusMutation.mutate({ id: bookingId, status: confirmingAction.newStatus });
+    }
+  }
+
+  return (
+    <div className="px-6 py-4">
+      <div className="space-y-6">
+        {/* Client Info */}
+        <section>
+          <h3 className="mb-3 text-sm font-semibold text-primary">Cliente</h3>
+          <div className="space-y-2 rounded-md bg-neutral p-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Nombre:</span>
+              <span className="text-sm font-medium text-primary">{booking.clientName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Teléfono:</span>
+              <span className="text-sm font-medium text-primary">{booking.clientPhone}</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Booking Details */}
+        <section>
+          <h3 className="mb-3 text-sm font-semibold text-primary">Detalles del Turno</h3>
+          <div className="space-y-2 rounded-md bg-neutral p-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Servicio:</span>
+              <span className="text-sm font-medium text-primary">{booking.serviceName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Recurso:</span>
+              <span className="text-sm font-medium text-primary">{booking.resourceName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Inicio:</span>
+              <span className="text-sm font-medium text-primary">
+                {formatDateTime(booking.startTime)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Fin:</span>
+              <span className="text-sm font-medium text-primary">
+                {formatTime(booking.endTime)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Estado:</span>
+              <StatusChip
+                tone={getStatusTone(booking.status)}
+                label={getStatusLabel(booking.status)}
+              />
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Canal:</span>
+              <span className="text-sm font-medium text-primary">
+                {getSourceChannelLabel(booking.sourceChannel)}
+              </span>
+            </div>
+            {booking.notes && (
+              <div className="pt-2 border-t border-neutral-dark">
+                <span className="text-sm text-primary-light block mb-1">Notas:</span>
+                <p className="text-sm text-primary">{booking.notes}</p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Status Actions */}
+        {validTransitions.length > 0 && (
+          <section>
+            <h3 className="mb-3 text-sm font-semibold text-primary">Cambiar Estado</h3>
+            <div className="flex flex-wrap gap-2">
+              {validTransitions.map((status) => (
+                <Button
+                  key={status}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleStatusChange(status)}
+                  disabled={statusMutation.isPending}
+                >
+                  → {getStatusLabel(status)}
+                </Button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Cancel Action */}
+        {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+          <section>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelBooking}
+              disabled={cancelMutation.isPending}
+              className="w-full border-red-300 text-red-600 hover:bg-red-50"
+            >
+              {cancelMutation.isPending ? "Cancelando..." : "Cancelar Turno"}
+            </Button>
+          </section>
+        )}
+
+        {/* Metadata */}
+        <section className="border-t border-neutral-dark pt-4">
+          <div className="space-y-1 text-xs text-primary-light">
+            <p>Creado: {formatDateTime(booking.createdAt)}</p>
+            <p>Actualizado: {formatDateTime(booking.updatedAt)}</p>
+          </div>
+        </section>
+      </div>
+
+      {/* Confirmation Modal */}
+      {confirmingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl border border-neutral-dark bg-white p-6 shadow-2xl">
+            <h3 className="mb-4 text-lg font-semibold text-primary">
+              {confirmingAction.action === "cancel"
+                ? "Confirmar Cancelación"
+                : "Confirmar Cambio de Estado"}
+            </h3>
+            <p className="mb-6 text-sm text-primary-light">
+              {confirmingAction.action === "cancel"
+                ? "¿Estás seguro de que querés cancelar este turno? Esta acción no se puede deshacer."
+                : `¿Confirmas el cambio de estado a "${getStatusLabel(confirmingAction.newStatus!)}"?`}
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setConfirmingAction(null)}>
+                No, volver
+              </Button>
+              <Button onClick={executeAction}>
+                Sí, confirmar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function BookingsPage() {
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(20);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+
+  const bookingsQuery = useBookingsQuery({ page, pageSize });
+  const queryClient = useQueryClient();
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: (id: string) => deleteBooking(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: (error: AppError) => {
+      alert(toBookingsFriendlyMessage(error));
+    },
+  });
+
+  const data = bookingsQuery.data?.data ?? [];
+  const total = bookingsQuery.data?.total ?? 0;
+  const totalPages = Math.ceil(total / pageSize);
+
+  function handleCancelBooking(id: string) {
+    if (!confirm("¿Confirmas la cancelación de este turno?")) return;
+    cancelBookingMutation.mutate(id);
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-primary">Turnos</h1>
+          <p className="text-sm text-primary-light">
+            Gestión completa de reservas y turnos del negocio
+          </p>
+        </div>
+        <Button onClick={() => setShowCreateForm(true)}>
+          <Plus className="mr-2 size-4" />
+          Nuevo Turno
+        </Button>
+      </header>
+
+      <PageCard>
+        {bookingsQuery.isLoading && (
+          <div className="py-12 text-center text-sm text-primary-light">
+            Cargando turnos...
+          </div>
+        )}
+
+        {bookingsQuery.isError && (
+          <div className="py-12 text-center text-sm text-red-600">
+            Error al cargar los turnos. Intenta nuevamente.
+          </div>
+        )}
+
+        {bookingsQuery.isSuccess && (
+          <>
+            {data.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm text-primary-light">
+                  No hay turnos registrados. Creá el primero para comenzar.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="border-b-2 border-neutral-dark bg-neutral">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Cliente
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Teléfono
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Servicio
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Recurso
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Fecha y Hora
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Estado
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Canal
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
+                          Acciones
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((booking) => (
+                        <BookingRow
+                          key={booking.id}
+                          booking={booking}
+                          onViewDetail={setSelectedBookingId}
+                          onCancel={handleCancelBooking}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between border-t border-neutral-dark pt-4">
+                    <p className="text-sm text-primary-light">
+                      Mostrando {page * pageSize + 1} a {Math.min((page + 1) * pageSize, total)} de{" "}
+                      {total} turnos
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                      >
+                        <ChevronLeft className="size-4" />
+                      </Button>
+                      <span className="text-sm text-primary">
+                        Página {page + 1} de {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                      >
+                        <ChevronRight className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </PageCard>
+
+      {/* Create Form Side Panel */}
+      <SidePanel
+        isOpen={showCreateForm}
+        onClose={() => setShowCreateForm(false)}
+        title="Nuevo Turno"
+      >
+        <CreateBookingForm
+          onClose={() => setShowCreateForm(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["bookings"] });
+          }}
+        />
+      </SidePanel>
+
+      {/* Detail Side Panel */}
+      <SidePanel
+        isOpen={!!selectedBookingId}
+        onClose={() => setSelectedBookingId(null)}
+        title="Detalle del Turno"
+      >
+        {selectedBookingId && (
+          <BookingDetailPanel
+            bookingId={selectedBookingId}
+            onClose={() => setSelectedBookingId(null)}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ["bookings"] });
+            }}
+          />
+        )}
+      </SidePanel>
+    </div>
+  );
+}

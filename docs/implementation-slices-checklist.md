@@ -189,20 +189,20 @@ Goal: Complete bookings management around table/list and details.
 
 ### Scope
 
-- [ ] Bookings list table with pagination
-- [ ] Booking create form
-- [ ] Booking detail drawer/modal
-- [ ] Status change actions and cancel flow
+- [x] Bookings list table with pagination
+- [x] Booking create form
+- [x] Booking detail drawer/modal
+- [x] Status change actions and cancel flow
 
 ### Deliverables
 
-- [ ] Bookings module MVP complete
+- [x] Bookings module MVP complete
 
 ### QA checks
 
 - [ ] Invalid transition 422 UX verified
 - [ ] Cancel flow restrictions verified
-- [ ] Source channel visible in list/detail
+- [x] Source channel visible in list/detail
 
 ## Slice 8 - Services + Availability (Day 25-27)
 
