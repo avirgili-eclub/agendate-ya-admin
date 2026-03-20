@@ -1,0 +1,495 @@
+import { FormEvent, useMemo, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import { PhoneInput } from "react-international-phone";
+
+import type { AppError } from "@/core/errors/app-error";
+import { register } from "@/core/auth/auth-service";
+import { Button } from "@/shared/ui/button";
+import { PasswordInput } from "@/shared/ui/password-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
+
+type RegisterStep = 1 | 2;
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/Asuncion", label: "Asuncion (UTC-3)" },
+  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires (UTC-3)" },
+  { value: "America/Montevideo", label: "Montevideo (UTC-3)" },
+  { value: "America/Sao_Paulo", label: "Sao Paulo (UTC-3)" },
+  { value: "America/Santiago", label: "Santiago (UTC-4)" },
+  { value: "America/Lima", label: "Lima (UTC-5)" },
+  { value: "America/Bogota", label: "Bogota (UTC-5)" },
+  { value: "America/La_Paz", label: "La Paz (UTC-4)" },
+  { value: "America/Caracas", label: "Caracas (UTC-4)" },
+  { value: "America/Mexico_City", label: "Ciudad de Mexico (UTC-6)" },
+];
+
+const PASSWORD_REQUIREMENTS = [
+  {
+    key: "minLength",
+    label: "Minimo 8 caracteres",
+    test: (value: string) => value.length >= 8,
+  },
+  {
+    key: "uppercase",
+    label: "Al menos una letra mayuscula",
+    test: (value: string) => /[A-Z]/.test(value),
+  },
+  {
+    key: "lowercase",
+    label: "Al menos una letra minuscula",
+    test: (value: string) => /[a-z]/.test(value),
+  },
+  {
+    key: "number",
+    label: "Al menos un numero",
+    test: (value: string) => /\d/.test(value),
+  },
+] as const;
+
+function getPyLocalDigits(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  const withoutDialCode = digits.startsWith("595") ? digits.slice(3) : digits;
+  return withoutDialCode;
+}
+
+function normalizePyPhone(phone: string) {
+  let localDigits = getPyLocalDigits(phone);
+  localDigits = localDigits.replace(/^0+/, "");
+  localDigits = localDigits.slice(0, 9);
+  return localDigits ? `+595${localDigits}` : "+595";
+}
+
+function toFriendlyRegisterMessage(appError: AppError) {
+  if (
+    appError.code === "REQUEST_TIMEOUT" ||
+    appError.code === "SERVICE_UNAVAILABLE" ||
+    appError.status === 408 ||
+    appError.status === 503
+  ) {
+    return "El servicio no esta disponible por ahora. Intentalo nuevamente en unos minutos.";
+  }
+  if (appError.code === "VALIDATION_ERROR" || appError.status === 400) {
+    return "Revisa los datos del formulario y vuelve a intentar.";
+  }
+  if (appError.code === "UNAUTHORIZED" || appError.status === 401) {
+    return "No se pudo completar el registro. Vuelve a intentarlo.";
+  }
+  return "No pudimos completar el onboarding por ahora. Intentalo nuevamente.";
+}
+
+export function RegisterPage() {
+  const navigate = useNavigate();
+
+  const [step, setStep] = useState<RegisterStep>(1);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const [businessName, setBusinessName] = useState("");
+  const [businessType, setBusinessType] = useState<"SERVICE" | "HOSPITALITY">("SERVICE");
+  const [timezone, setTimezone] = useState("America/Asuncion");
+
+  const [locationName, setLocationName] = useState("Sede Principal");
+  const [locationAddress, setLocationAddress] = useState("");
+  const [locationPhone, setLocationPhone] = useState("+595");
+  const [locationCountryIso2, setLocationCountryIso2] = useState("py");
+
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  const progressWidth = useMemo(() => (step === 1 ? "50%" : "100%"), [step]);
+  const passwordRequirementStatus = useMemo(
+    () =>
+      PASSWORD_REQUIREMENTS.map((rule) => ({
+        key: rule.key,
+        label: rule.label,
+        isMet: rule.test(password),
+      })),
+    [password],
+  );
+
+  function validateStep1() {
+    const nextErrors: Record<string, string> = {};
+    if (!businessName.trim()) {
+      nextErrors.businessName = "Ingresa el nombre del negocio.";
+    }
+    if (!timezone.trim()) {
+      nextErrors.timezone = "Selecciona una zona horaria.";
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  function validateStep2() {
+    const nextErrors: Record<string, string> = {};
+    if (!locationName.trim()) {
+      nextErrors.locationName = "Ingresa un nombre para la sede.";
+    }
+    if (!locationAddress.trim()) {
+      nextErrors.locationAddress = "Ingresa la direccion de la sede.";
+    }
+    if (!locationPhone || !isValidPhoneNumber(locationPhone)) {
+      nextErrors.locationPhone = "Ingresa un telefono valido.";
+    }
+    if (locationCountryIso2 === "py" && !locationPhone.startsWith("+595")) {
+      nextErrors.locationPhone = "El telefono debe corresponder a Paraguay (+595).";
+    }
+    if (locationCountryIso2 === "py") {
+      const pyLocalDigits = getPyLocalDigits(locationPhone);
+      if (pyLocalDigits.length !== 9) {
+        nextErrors.locationPhone = "Ingresa 9 digitos para Paraguay (sin contar +595).";
+      } else if (pyLocalDigits.startsWith("0")) {
+        nextErrors.locationPhone = "El primer digito no puede ser 0.";
+      }
+    }
+    if (!fullName.trim()) {
+      nextErrors.fullName = "Ingresa tu nombre completo.";
+    }
+    const normalizedEmail = email.trim();
+    const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    if (!normalizedEmail || !isValidEmail) {
+      nextErrors.email = "Ingresa un email valido.";
+    }
+    const failedPasswordRules = PASSWORD_REQUIREMENTS.filter((rule) => !rule.test(password));
+    if (failedPasswordRules.length > 0) {
+      nextErrors.password = "La contrasena debe incluir mayuscula, minuscula, numero y minimo 8 caracteres.";
+    }
+    if (password !== confirmPassword) {
+      nextErrors.confirmPassword = "Las contrasenas no coinciden.";
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  function toFieldErrors(appError: AppError) {
+    const nextErrors: Record<string, string> = {};
+    const details = Array.isArray(appError.details) ? appError.details : [];
+    for (const detail of details) {
+      if (!detail.field) {
+        continue;
+      }
+      if (detail.field.includes("business.name")) {
+        nextErrors.businessName = detail.message;
+      }
+      if (detail.field.includes("business.timezone")) {
+        nextErrors.timezone = detail.message;
+      }
+      if (detail.field.includes("location.name")) {
+        nextErrors.locationName = detail.message;
+      }
+      if (detail.field.includes("location.address")) {
+        nextErrors.locationAddress = detail.message;
+      }
+      if (detail.field.includes("location.phone")) {
+        nextErrors.locationPhone = detail.message;
+      }
+      if (detail.field.includes("admin.fullName")) {
+        nextErrors.fullName = detail.message;
+      }
+      if (detail.field.includes("admin.email")) {
+        nextErrors.email = detail.message;
+      }
+      if (detail.field.includes("admin.password")) {
+        nextErrors.password = detail.message;
+      }
+    }
+    return nextErrors;
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setPasswordTouched(true);
+
+    if (!validateStep2()) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      await register({
+        business: {
+          name: businessName,
+          businessType,
+          timezone,
+        },
+        location: {
+          name: locationName,
+          address: locationAddress,
+          phone: locationPhone,
+        },
+        admin: {
+          email,
+          password,
+          fullName,
+        },
+      });
+      await navigate({ to: "/" });
+    } catch (e) {
+      const appError = e as Partial<AppError>;
+      const normalizedError: AppError = {
+        code: (appError.code as AppError["code"]) ?? "UNKNOWN_ERROR",
+        status: typeof appError.status === "number" ? appError.status : 500,
+        message: typeof appError.message === "string" ? appError.message : "Unexpected error",
+        details: Array.isArray(appError.details) ? appError.details : [],
+      };
+      setFieldErrors((prev) => ({ ...prev, ...toFieldErrors(normalizedError) }));
+      setError(toFriendlyRegisterMessage(normalizedError));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <section className="relative mx-auto mt-6 w-full max-w-3xl overflow-hidden rounded-2xl border border-neutral-dark bg-neutral-light p-6 shadow-sm md:mt-12 md:p-8">
+      <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-secondary/20 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-16 -left-12 h-48 w-48 rounded-full bg-primary/15 blur-2xl" />
+
+      <div className="relative z-10">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-light">Onboarding AgendateYA</p>
+        <h1 className="mt-2 text-3xl font-semibold text-primary">Crea tu cuenta en minutos</h1>
+        <p className="mt-2 text-sm text-primary-light">
+          Configuramos tu negocio, tu sede principal y tu usuario administrador en un unico flujo.
+        </p>
+
+        <div className="mt-5 h-2 w-full rounded-full bg-neutral-dark">
+          <div
+            className="h-2 rounded-full bg-secondary transition-all duration-500"
+            style={{ width: progressWidth }}
+          />
+        </div>
+
+        <div className="mt-2 flex items-center justify-between text-xs font-medium text-primary-light">
+          <span className={step === 1 ? "text-primary" : undefined}>Paso 1: Negocio</span>
+          <span className={step === 2 ? "text-primary" : undefined}>Paso 2: Sede y admin</span>
+        </div>
+
+        {error ? (
+          <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        ) : null}
+
+        <form className="mt-6" onSubmit={onSubmit}>
+          {step === 1 ? (
+            <div className="animate-step-in grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm text-primary-dark">Nombre del negocio</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  name="businessName"
+                  autoComplete="organization"
+                  value={businessName}
+                  onChange={(e) => setBusinessName(e.target.value)}
+                  placeholder="Mi Barberia"
+                />
+                {fieldErrors.businessName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.businessName}</span> : null}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Tipo de negocio</span>
+                <Select value={businessType} onValueChange={(value) => setBusinessType(value as "SERVICE" | "HOSPITALITY")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SERVICE">Servicios</SelectItem>
+                    <SelectItem value="HOSPITALITY">Hospitalidad</SelectItem>
+                  </SelectContent>
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Zona horaria</span>
+                <Select value={timezone} onValueChange={setTimezone}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona zona horaria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIMEZONE_OPTIONS.map((timezoneOption) => (
+                      <SelectItem key={timezoneOption.value} value={timezoneOption.value}>
+                        {timezoneOption.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fieldErrors.timezone ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.timezone}</span> : null}
+              </label>
+
+              <div className="md:col-span-2 mt-2 flex justify-between gap-2">
+                <Link to="/login" className="text-sm font-medium text-primary-light transition hover:text-primary">
+                  Ya tengo cuenta
+                </Link>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    if (!validateStep1()) {
+                      return;
+                    }
+                    setStep(2);
+                  }}
+                >
+                  Continuar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="animate-step-in grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Nombre de la sede</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  name="locationName"
+                  autoComplete="organization"
+                  value={locationName}
+                  onChange={(e) => setLocationName(e.target.value)}
+                  placeholder="Sede Principal"
+                />
+                {fieldErrors.locationName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationName}</span> : null}
+              </label>
+
+              <label className="block md:col-span-1">
+                <span className="mb-1 block text-sm text-primary-dark">Telefono de contacto</span>
+                <div className="register-phone-wrapper ring-primary-light focus-within:ring-2">
+                  <PhoneInput
+                    defaultCountry="py"
+                    preferredCountries={["py", "ar", "br", "cl", "uy"]}
+                    disableDialCodeAndPrefix
+                    showDisabledDialCodeAndPrefix
+                    defaultMask="(...) ... - ..."
+                    placeholder="(981) 123 - 456"
+                    value={locationPhone}
+                    onChange={(phone, meta) => {
+                      const nextPhone = meta.country.iso2 === "py" ? normalizePyPhone(phone) : phone;
+                      setLocationPhone(nextPhone);
+                      setLocationCountryIso2(meta.country.iso2);
+                    }}
+                    className="register-phone-root"
+                    inputClassName="register-phone-input"
+                    inputProps={{
+                      name: "locationPhone",
+                      autoComplete: "tel",
+                    }}
+                    countrySelectorStyleProps={{
+                      buttonClassName: "register-phone-country-button",
+                      flagClassName: "register-phone-flag",
+                      dropdownArrowClassName: "register-phone-country-arrow",
+                      dropdownStyleProps: {
+                        className: "register-phone-country-dropdown",
+                        listItemClassName: "register-phone-country-item",
+                        listItemSelectedClassName: "register-phone-country-item-selected",
+                        listItemFocusedClassName: "register-phone-country-item-focused",
+                      },
+                    }}
+                  />
+                </div>
+                {fieldErrors.locationPhone ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationPhone}</span> : null}
+              </label>
+
+              <label className="block md:col-span-2">
+                <span className="mb-1 block text-sm text-primary-dark">Direccion</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  name="locationAddress"
+                  autoComplete="street-address"
+                  value={locationAddress}
+                  onChange={(e) => setLocationAddress(e.target.value)}
+                  placeholder="Av. Mariscal Lopez 1234"
+                />
+                {fieldErrors.locationAddress ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationAddress}</span> : null}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Tu nombre completo</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  name="fullName"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Juan Perez"
+                />
+                {fieldErrors.fullName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.fullName}</span> : null}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Email administrador</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  name="adminEmail"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="admin@minegocio.com"
+                />
+                {fieldErrors.email ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.email}</span> : null}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Contrasena</span>
+                <PasswordInput
+                  name="adminPassword"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => setPasswordTouched(true)}
+                  placeholder="Minimo 8 caracteres"
+                />
+                {fieldErrors.password ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.password}</span> : null}
+                <p className="mt-1 text-xs text-primary-light">* Tu contrasena debe cumplir:</p>
+                <ul className="mt-1 space-y-1">
+                  {passwordRequirementStatus.map((ruleStatus) => (
+                    <li
+                      key={ruleStatus.key}
+                      className={
+                        passwordTouched && !ruleStatus.isMet
+                          ? "text-xs text-red-700"
+                          : ruleStatus.isMet
+                            ? "text-xs text-success-dark"
+                            : "text-xs text-primary-light"
+                      }
+                    >
+                      {ruleStatus.label}
+                    </li>
+                  ))}
+                </ul>
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm text-primary-dark">Confirmar contrasena</span>
+                <PasswordInput
+                  name="adminPasswordConfirm"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirma tu contrasena"
+                />
+                {fieldErrors.confirmPassword ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.confirmPassword}</span> : null}
+              </label>
+
+              <div className="md:col-span-2 mt-2 flex items-center justify-between gap-2">
+                <Button type="button" variant="outline" onClick={() => setStep(1)}>
+                  Volver
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Creando cuenta..." : "Crear cuenta e ingresar"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+}

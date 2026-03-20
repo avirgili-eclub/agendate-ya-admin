@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "@tanstack/react-router";
 
+import "react-international-phone/style.css";
 import "@/styles/globals.css";
 import { AppProviders } from "@/app/providers";
 import { configureAuthHandlers } from "@/core/auth/auth-service";

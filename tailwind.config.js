@@ -29,6 +29,46 @@ module.exports = {
           dark: "#e2e8f0",
         },
       },
+      keyframes: {
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+        "fade-out": {
+          from: { opacity: "1" },
+          to: { opacity: "0" },
+        },
+        "zoom-in": {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "zoom-out": {
+          from: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "0", transform: "scale(0.95)" },
+        },
+        "slide-in-from-top": {
+          from: { transform: "translateY(-8px)" },
+          to: { transform: "translateY(0)" },
+        },
+        "slide-in-from-bottom": {
+          from: { transform: "translateY(8px)" },
+          to: { transform: "translateY(0)" },
+        },
+        "slide-in-from-left": {
+          from: { transform: "translateX(-8px)" },
+          to: { transform: "translateX(0)" },
+        },
+        "slide-in-from-right": {
+          from: { transform: "translateX(8px)" },
+          to: { transform: "translateX(0)" },
+        },
+      },
+      animation: {
+        in: "fade-in 200ms ease-out",
+        out: "fade-out 150ms ease-in",
+        "zoom-in": "zoom-in 200ms ease-out",
+        "zoom-out": "zoom-out 150ms ease-in",
+      },
     },
   },
   plugins: [],

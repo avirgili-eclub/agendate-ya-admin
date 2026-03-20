@@ -10,6 +10,7 @@ import { isAuthenticated } from "@/core/auth/session-store";
 import { AppShell } from "@/shared/layout/app-shell";
 import { ForbiddenPage } from "@/features/auth/forbidden-page";
 import { LoginPage } from "@/features/auth/login-page";
+import { RegisterPage } from "@/features/auth/register-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { HealthPage } from "@/features/health/health-page";
 import { ModulePlaceholderPage } from "@/features/placeholders/module-placeholder-page";
@@ -63,6 +64,12 @@ const loginRoute = createRoute({
   getParentRoute: () => publicRoute,
   path: "/login",
   component: LoginPage,
+});
+
+const registerRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/registro",
+  component: RegisterPage,
 });
 
 const indexRoute = createRoute({
@@ -138,7 +145,7 @@ const forbiddenRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  publicRoute.addChildren([loginRoute]),
+  publicRoute.addChildren([loginRoute, registerRoute]),
   privateRoute.addChildren([
     indexRoute,
     dashboardRoute,

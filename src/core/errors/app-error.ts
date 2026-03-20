@@ -22,11 +22,37 @@ export type AppError = {
   details?: AppErrorDetail[];
 };
 
+function normalizeDetails(details: unknown): AppErrorDetail[] | undefined {
+  if (!details) {
+    return undefined;
+  }
+
+  if (Array.isArray(details)) {
+    return details
+      .filter((item) => typeof item === "object" && item !== null)
+      .map((item) => {
+        const candidate = item as { field?: unknown; message?: unknown };
+        return {
+          field: typeof candidate.field === "string" ? candidate.field : undefined,
+          message: typeof candidate.message === "string" ? candidate.message : "Validation error",
+        };
+      });
+  }
+
+  if (typeof details === "object") {
+    return Object.entries(details as Record<string, unknown>)
+      .filter(([, message]) => typeof message === "string")
+      .map(([field, message]) => ({ field, message: message as string }));
+  }
+
+  return undefined;
+}
+
 export function toAppError(input: {
   status: number;
   code?: string;
   message?: string;
-  details?: AppErrorDetail[];
+  details?: unknown;
 }): AppError {
   const fallbackByStatus: Record<number, AppErrorCode> = {
     400: "VALIDATION_ERROR",
@@ -46,6 +72,6 @@ export function toAppError(input: {
     code,
     message: input.message ?? "Unexpected error",
     status: input.status,
-    details: input.details,
+    details: normalizeDetails(input.details),
   };
 }

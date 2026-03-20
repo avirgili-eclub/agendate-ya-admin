@@ -1,9 +1,10 @@
 import { FormEvent, useMemo, useState } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import type { AppError } from "@/core/errors/app-error";
 import { login } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
+import { PasswordInput } from "@/shared/ui/password-input";
 
 function toFriendlyLoginMessage(appError: AppError) {
   if (
@@ -60,13 +61,13 @@ export function LoginPage() {
       ) : null}
 
       {sessionExpired ? (
-        <div className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
+        <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
           Tu sesion expiro. Inicia sesion nuevamente.
         </div>
       ) : null}
 
       {error ? (
-        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+        <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
       ) : null}
 
       <form className="mt-5 space-y-4" onSubmit={onSubmit}>
@@ -74,6 +75,8 @@ export function LoginPage() {
           <span className="mb-1 block text-sm text-primary-dark">Email</span>
           <input
             className="h-10 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+            name="email"
+            autoComplete="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -83,9 +86,9 @@ export function LoginPage() {
 
         <label className="block">
           <span className="mb-1 block text-sm text-primary-dark">Contrasena</span>
-          <input
-            className="h-10 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
-            type="password"
+          <PasswordInput
+            name="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -95,6 +98,13 @@ export function LoginPage() {
         <Button className="w-full" type="submit" disabled={isLoading}>
           {isLoading ? "Ingresando..." : "Ingresar"}
         </Button>
+
+        <Link
+          to="/registro"
+          className="block w-full rounded-md border border-primary/30 px-3 py-2 text-center text-sm font-medium text-primary transition hover:border-primary hover:bg-primary/5"
+        >
+          Crear cuenta nueva
+        </Link>
       </form>
     </section>
   );

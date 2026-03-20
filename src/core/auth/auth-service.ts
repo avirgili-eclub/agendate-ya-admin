@@ -19,6 +19,32 @@ type RefreshResponseData = {
   expiresIn: number;
 };
 
+type RegisterRequest = {
+  business: {
+    name: string;
+    businessType: "SERVICE" | "HOSPITALITY";
+    timezone: string;
+  };
+  location: {
+    name: string;
+    address: string;
+    phone: string;
+  };
+  admin: {
+    email: string;
+    password: string;
+    fullName: string;
+  };
+};
+
+type RegisterResponseData = LoginResponseData & {
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+};
+
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
 
@@ -99,6 +125,25 @@ export async function login(payload: LoginRequest) {
 
 export async function logout() {
   clearSessionState();
+}
+
+export async function register(payload: RegisterRequest) {
+  const response = await httpRequest<{ data: RegisterResponseData }>("/auth/register", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 8000,
+    skipAuth: true,
+    skipAuthRefresh: true,
+  });
+
+  const data = unwrapData<RegisterResponseData>(response);
+  setSessionState({
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    user: data.user,
+  });
+
+  return data;
 }
 
 export function configureAuthHandlers(onSessionExpired: () => void) {
