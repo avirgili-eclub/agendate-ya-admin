@@ -17,6 +17,8 @@ import { ModulePlaceholderPage } from "@/features/placeholders/module-placeholde
 import { ResourcesPage } from "@/features/resources/resources-page";
 import { AgendaPage } from "@/features/agenda/agenda-page";
 import { BookingsPage } from "@/features/bookings/bookings-page";
+import { ServicesPage } from "@/features/services/services-page";
+import { AvailabilityPage } from "@/features/availability/availability-page";
 
 function RootLayout() {
   return (
@@ -119,13 +121,13 @@ const resourcesRoute = createRoute({
 const servicesRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/servicios",
-  component: () => <ModulePlaceholderPage moduleName="Servicios" routePath="/servicios" />,
+  component: ServicesPage,
 });
 
 const availabilityRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/disponibilidad",
-  component: () => <ModulePlaceholderPage moduleName="Disponibilidad" routePath="/disponibilidad" />,
+  component: AvailabilityPage,
 });
 
 const teamRoute = createRoute({

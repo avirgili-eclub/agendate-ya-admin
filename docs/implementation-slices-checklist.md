@@ -210,14 +210,14 @@ Goal: Complete service catalog and availability setup.
 
 ### Scope
 
-- [ ] Services list/create/edit
-- [ ] Availability weekly rules editor
-- [ ] Availability overrides editor
-- [ ] Rule/override visual composition panel
+- [x] Services list/create/edit
+- [x] Availability weekly rules editor
+- [x] Availability overrides editor
+- [x] Rule/override visual composition panel
 
 ### Deliverables
 
-- [ ] Services and availability modules MVP complete
+- [x] Services and availability modules MVP complete
 
 ### QA checks
 
