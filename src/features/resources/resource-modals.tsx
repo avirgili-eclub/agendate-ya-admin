@@ -1,10 +1,12 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { AlertTriangle, X } from "lucide-react";
 
-import type {
-  ResourceCardItem,
-  ResourceServiceCatalogItem,
-  ResourceUpsertInput,
+import type { AppError } from "@/core/errors/app-error";
+import {
+  processFormError,
+  type ResourceCardItem,
+  type ResourceServiceCatalogItem,
+  type ResourceUpsertInput,
 } from "@/features/resources/resources-service";
 import { Button } from "@/shared/ui/button";
 
@@ -67,15 +69,9 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
         active,
       });
     } catch (error) {
-      const err = error as { message?: string; details?: Array<{ field?: string; message: string }> };
-      const nextFieldErrors: Record<string, string> = {};
-      for (const detail of err.details ?? []) {
-        if (detail.field) {
-          nextFieldErrors[detail.field] = detail.message;
-        }
-      }
-      setFieldErrors(nextFieldErrors);
-      setFormError(err.message ?? "No pudimos guardar el recurso.");
+      const { fieldErrors, formError } = processFormError(error as AppError);
+      setFieldErrors(fieldErrors);
+      setFormError(formError);
     } finally {
       setIsSubmitting(false);
     }
@@ -192,8 +188,8 @@ export function TransferResourceModal({ resource, locations, onClose, onSubmit }
     try {
       await onSubmit({ locationName, clearSchedule });
     } catch (e) {
-      const err = e as { message?: string };
-      setError(err.message ?? "No pudimos transferir el recurso.");
+      const { formError } = processFormError(e as AppError);
+      setError(formError);
     } finally {
       setIsSubmitting(false);
     }

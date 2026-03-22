@@ -1,7 +1,11 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { X } from "lucide-react";
+import { PhoneInput } from "react-international-phone";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import "react-international-phone/style.css";
 
 import type { AppError } from "@/core/errors/app-error";
+import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { toClientsFriendlyMessage, type ClientItem, type ClientUpsertInput } from "@/features/clients/clients-service";
 import { Button } from "@/shared/ui/button";
 
@@ -26,7 +30,8 @@ export function ClientFormModal({
 }: ClientFormModalProps) {
   const [firstName, setFirstName] = useState(initialClient?.firstName ?? "");
   const [lastName, setLastName] = useState(initialClient?.lastName ?? "");
-  const [phone, setPhone] = useState(initialClient?.phone ?? "");
+  const [phone, setPhone] = useState(initialClient?.phone ?? "+595");
+  const [phoneCountryIso2, setPhoneCountryIso2] = useState("py");
   const [email, setEmail] = useState(initialClient?.email ?? "");
   const [notes, setNotes] = useState(initialClient?.notes ?? "");
 
@@ -35,6 +40,17 @@ export function ClientFormModal({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFieldErrors({});
+
+    // Frontend validation for phone (mandatory in UI)
+    const validationErrors: Record<string, string> = {};
+    if (!phone || phone === "+595" || !isValidPhoneNumber(phone)) {
+      validationErrors.phone = "El teléfono es obligatorio y debe ser válido.";
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      return;
+    }
 
     const input: ClientUpsertInput = {
       firstName: firstName.trim(),
@@ -48,15 +64,8 @@ export function ClientFormModal({
       await onSubmit(input);
     } catch (err) {
       const appError = err as AppError;
-      if (appError.details) {
-        const errors: Record<string, string> = {};
-        appError.details.forEach((detail) => {
-          if (detail.field) {
-            errors[detail.field] = detail.message;
-          }
-        });
-        setFieldErrors(errors);
-      }
+      // Use the reusable extractFieldErrors helper instead of manual mapping
+      setFieldErrors(extractFieldErrors(appError));
     }
   };
 
@@ -148,16 +157,39 @@ export function ClientFormModal({
               <label htmlFor="phone" className="block text-sm font-medium text-primary">
                 Teléfono <span className="text-red-600">*</span>
               </label>
-              <input
-                type="tel"
-                id="phone"
-                value={phone}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
-                className={`mt-1 w-full rounded-md border ${
-                  fieldErrors.phone ? "border-red-500" : "border-neutral-dark"
-                } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
-                placeholder="+595 981 123 456"
-              />
+              <div className={`register-phone-wrapper mt-1 ${fieldErrors.phone ? "!border-red-500" : ""}`}>
+                <PhoneInput
+                  defaultCountry="py"
+                  preferredCountries={["py", "ar", "br", "cl", "uy"]}
+                  disableDialCodeAndPrefix
+                  showDisabledDialCodeAndPrefix
+                  defaultMask="(...) ... - ..."
+                  placeholder="(981) 123 - 456"
+                  value={phone}
+                  onChange={(phone, meta) => {
+                    setPhone(phone);
+                    setPhoneCountryIso2(meta.country.iso2);
+                  }}
+                  className="register-phone-root"
+                  inputClassName="register-phone-input"
+                  inputProps={{
+                    name: "phone",
+                    autoComplete: "tel",
+                    id: "phone",
+                  }}
+                  countrySelectorStyleProps={{
+                    buttonClassName: "register-phone-country-button",
+                    flagClassName: "register-phone-flag",
+                    dropdownArrowClassName: "register-phone-country-arrow",
+                    dropdownStyleProps: {
+                      className: "register-phone-country-dropdown",
+                      listItemClassName: "register-phone-country-item",
+                      listItemSelectedClassName: "register-phone-country-item-selected",
+                      listItemFocusedClassName: "register-phone-country-item-focused",
+                    },
+                  }}
+                />
+              </div>
               {fieldErrors.phone && (
                 <p className="mt-1 text-xs text-red-600">{fieldErrors.phone}</p>
               )}

@@ -1,0 +1,6238 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AgendateYA API",
+    "description": "Generic multi-tenant scheduling/booking SaaS API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "Generated server url"
+    }
+  ],
+  "security": [
+    {
+      "Bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Users",
+      "description": "Gestion de usuarios del tenant (profesionales y managers)"
+    },
+    {
+      "name": "Clients",
+      "description": "Gestion de clientes e historial de turnos del tenant actual"
+    },
+    {
+      "name": "Authentication",
+      "description": "Endpoints de autenticacion JWT: login y renovacion de tokens"
+    },
+    {
+      "name": "Subscription",
+      "description": "Gestion de suscripciones SaaS via Stripe"
+    },
+    {
+      "name": "Tenant Settings",
+      "description": "Configuracion de notificaciones y recordatorios del tenant"
+    },
+    {
+      "name": "Dashboard",
+      "description": "Business analytics and KPIs"
+    },
+    {
+      "name": "Resources",
+      "description": "Gestion de recursos (profesionales, salas, equipamiento) por sede"
+    },
+    {
+      "name": "Services",
+      "description": "Gestion de servicios ofrecidos por el tenant actual"
+    },
+    {
+      "name": "Availability",
+      "description": "Gestion de reglas de disponibilidad y excepciones por recurso"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Endpoints de webhook para integraciones externas"
+    },
+    {
+      "name": "Google Calendar",
+      "description": "Gestion de sincronizacion bidireccional con Google Calendar por recurso"
+    },
+    {
+      "name": "Bookings",
+      "description": "Gestion de turnos y reservas del tenant actual"
+    },
+    {
+      "name": "Public",
+      "description": "Endpoints publicos sin autenticacion para el widget de turnos online"
+    },
+    {
+      "name": "WhatsApp Webhook",
+      "description": "Handlers del webhook de Meta Cloud API para mensajes entrantes de WhatsApp"
+    },
+    {
+      "name": "Tenants",
+      "description": "Gestion de tenants: creacion, consulta y actualizacion"
+    },
+    {
+      "name": "Locations",
+      "description": "Gestion de sedes fisicas o virtuales del tenant actual"
+    },
+    {
+      "name": "Chat History",
+      "description": "Historial de mensajes WhatsApp por cliente"
+    }
+  ],
+  "paths": {
+    "/api/v1/tenant": {
+      "get": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Obtener el tenant actual",
+        "description": "Devuelve el tenant resuelto del contexto JWT. El SUPER_ADMIN debe usar /all para listar todos.",
+        "operationId": "getCurrent",
+        "responses": {
+          "400": {
+            "description": "Sin contexto de tenant — usar /all para SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Tenant devuelto",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — rol insuficiente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Actualizar el tenant actual",
+        "description": "Actualiza el nombre, zona horaria u otras configuraciones del tenant resuelto del contexto JWT",
+        "operationId": "update",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion o sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Tenant actualizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Crear un nuevo tenant",
+        "description": "Solo SUPER_ADMIN. Provisiona un nuevo tenant con un slug unico",
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "409": {
+            "description": "El slug ya existe",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Tenant creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/tenant/settings": {
+      "get": {
+        "tags": [
+          "Tenant Settings"
+        ],
+        "summary": "Obtener configuracion del tenant",
+        "description": "Devuelve la configuracion de recordatorios del tenant actual. Si no existe, retorna los valores por defecto (24h, EMAIL habilitado).",
+        "operationId": "getSettings",
+        "responses": {
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Configuracion devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Tenant Settings"
+        ],
+        "summary": "Actualizar configuracion del tenant",
+        "description": "Actualiza la configuracion de recordatorios automaticos. Los campos son opcionales — solo se actualizan los enviados. reminderHoursBefore acepta valores entre 1 y 168 (1h a 7 dias). reminderChannels acepta: EMAIL, WHATSAPP.",
+        "operationId": "updateSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion o sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Configuracion actualizada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/services/{id}": {
+      "get": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Obtener un servicio por ID",
+        "operationId": "getById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del servicio",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Servicio no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Servicio encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Actualizar un servicio",
+        "operationId": "update_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del servicio",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Servicio actualizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Servicio no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Eliminar un servicio",
+        "operationId": "delete",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del servicio",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Servicio no encontrado"
+          },
+          "204": {
+            "description": "Servicio eliminado"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{id}": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Obtener un recurso por ID",
+        "operationId": "getById_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Recurso encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Actualizar un recurso",
+        "operationId": "update_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateResourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Recurso actualizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Eliminar un recurso",
+        "operationId": "delete_1",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Recurso eliminado"
+          },
+          "404": {
+            "description": "Recurso no encontrado"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{id}/location": {
+      "put": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Transferir un recurso a otra localidad",
+        "description": "Mueve el recurso a una nueva localidad del mismo tenant. Opcionalmente cancela todos los bookings activos.",
+        "operationId": "transferLocation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferResourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Recurso transferido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso o localidad no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Localidad de otro tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{id}": {
+      "get": {
+        "tags": [
+          "Locations"
+        ],
+        "summary": "Obtener una sede por ID",
+        "operationId": "getById_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la sede",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sede devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sede no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Locations"
+        ],
+        "summary": "Actualizar una sede",
+        "operationId": "update_3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la sede",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Sede actualizada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sede no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Locations"
+        ],
+        "summary": "Eliminar una sede",
+        "operationId": "delete_2",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la sede",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Sede no encontrada"
+          },
+          "204": {
+            "description": "Sede eliminada"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clients/{id}": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Obtener un cliente por ID",
+        "operationId": "getById_3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del cliente",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cliente encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cliente no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Actualizar un cliente",
+        "operationId": "update_4",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del cliente",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Cliente actualizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cliente no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}/status": {
+      "put": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Cambiar estado de un turno",
+        "description": "Transiciona el turno a un nuevo estado. Las transiciones invalidas son rechazadas con 422. Valores validos: PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW.",
+        "operationId": "updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del turno",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBookingStatusRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Turno no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Estado actualizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Transicion de estado invalida",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/availability-rules/{id}": {
+      "put": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Actualizar una regla de disponibilidad",
+        "operationId": "updateRule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la regla de disponibilidad",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAvailabilityRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Regla no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Regla actualizada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Eliminar una regla de disponibilidad",
+        "operationId": "deleteRule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la regla de disponibilidad",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Regla eliminada"
+          },
+          "404": {
+            "description": "Regla no encontrada"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/availability-overrides/{id}": {
+      "put": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Actualizar una excepcion de disponibilidad",
+        "operationId": "updateOverride",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la excepcion de disponibilidad",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAvailabilityOverrideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Excepcion no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Excepcion actualizada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Eliminar una excepcion de disponibilidad",
+        "operationId": "deleteOverride",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID de la excepcion de disponibilidad",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Excepcion no encontrada"
+          },
+          "204": {
+            "description": "Excepcion eliminada"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/webhooks/whatsapp": {
+      "get": {
+        "tags": [
+          "WhatsApp Webhook"
+        ],
+        "summary": "Verificar webhook de WhatsApp",
+        "description": "Verificacion challenge-response requerida por Meta Cloud API al registrar el webhook",
+        "operationId": "verify",
+        "parameters": [
+          {
+            "name": "hub.mode",
+            "in": "query",
+            "description": "Modo de suscripcion enviado por Meta",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "subscribe"
+          },
+          {
+            "name": "hub.challenge",
+            "in": "query",
+            "description": "Challenge string a devolver para confirmar la verificacion",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hub.verify_token",
+            "in": "query",
+            "description": "Token de verificacion configurado en la app de Meta",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Token de verificacion invalido o modo incorrecto",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Verificacion exitosa — devuelve el challenge recibido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "WhatsApp Webhook"
+        ],
+        "summary": "Recibir mensajes de WhatsApp",
+        "description": "Procesa mensajes entrantes del webhook de Meta Cloud API. Siempre devuelve 200 para evitar reintentos de Meta.",
+        "operationId": "receive",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JsonNode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Mensaje procesado (o ignorado si es un evento no soportado)"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/stripe": {
+      "post": {
+        "tags": [
+          "Webhooks"
+        ],
+        "summary": "Webhook de Stripe",
+        "description": "Recibe eventos de Stripe (subscription updates, payment failures, etc.). No requiere JWT — la autenticacion se realiza via firma HMAC del payload.",
+        "operationId": "handleStripeWebhook",
+        "parameters": [
+          {
+            "name": "Stripe-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Evento procesado correctamente"
+          },
+          "400": {
+            "description": "Firma invalida o payload malformado"
+          },
+          "500": {
+            "description": "Error interno al procesar el evento"
+          }
+        }
+      }
+    },
+    "/api/v1/webhooks/google-calendar": {
+      "post": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Recibir notificaciones push de Google Calendar",
+        "description": "Llamado por Google cuando cambian eventos del calendario. Endpoint publico — sin autenticacion requerida.",
+        "operationId": "handlePushNotification",
+        "parameters": [
+          {
+            "name": "X-Goog-Channel-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Goog-Resource-State",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Headers requeridos faltantes"
+          },
+          "200": {
+            "description": "Notificacion procesada"
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Listar usuarios del tenant",
+        "description": "El TENANT_ADMIN ve solo los usuarios de su tenant. El SUPER_ADMIN puede listar cualquier tenant.",
+        "operationId": "list",
+        "responses": {
+          "400": {
+            "description": "Sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Lista de usuarios devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Crear usuario en el tenant",
+        "description": "Crea un usuario con rol PROFESSIONAL o LOCATION_MANAGER. No se permiten roles TENANT_ADMIN ni SUPER_ADMIN.",
+        "operationId": "create_1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "409": {
+            "description": "Email duplicado en el tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion o rol no permitido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Usuario creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscription/portal": {
+      "post": {
+        "tags": [
+          "Subscription"
+        ],
+        "summary": "Abrir portal de facturacion Stripe",
+        "description": "Genera una URL al portal de facturacion de Stripe donde el tenant puede gestionar su suscripcion.",
+        "operationId": "getPortal",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": ""
+            }
+          }
+        ],
+        "responses": {
+          "422": {
+            "description": "Tenant sin customer de Stripe aun",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "URL del portal generada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol TENANT_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscription/checkout": {
+      "post": {
+        "tags": [
+          "Subscription"
+        ],
+        "summary": "Crear sesion de pago Stripe",
+        "description": "Genera una Stripe Checkout Session para suscribirse a un plan. Retorna la URL de pago.",
+        "operationId": "createCheckout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCheckoutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Stripe no configurado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Requiere rol TENANT_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "URL de checkout generada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/services": {
+      "get": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Listar servicios del tenant actual",
+        "description": "Devuelve todos los servicios pertenecientes al tenant resuelto del contexto JWT",
+        "operationId": "list_1",
+        "responses": {
+          "200": {
+            "description": "Servicios listados correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Services"
+        ],
+        "summary": "Crear un servicio",
+        "description": "Crea un nuevo servicio para el tenant resuelto del contexto JWT",
+        "operationId": "create_2",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Servicio creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{resourceId}/availability-rules": {
+      "get": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Listar reglas de disponibilidad de un recurso",
+        "description": "Devuelve todas las reglas semanales recurrentes configuradas para el recurso indicado",
+        "operationId": "listRules",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reglas listadas correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Crear una regla de disponibilidad para un recurso",
+        "description": "Define una ventana de disponibilidad semanal recurrente (ej: lunes 09:00–18:00)",
+        "operationId": "createRule",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAvailabilityRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Regla creada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{resourceId}/availability-overrides": {
+      "get": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Listar excepciones de disponibilidad de un recurso",
+        "description": "Devuelve todas las excepciones puntuales de horario del recurso indicado",
+        "operationId": "listOverrides",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Excepciones listadas correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Availability"
+        ],
+        "summary": "Crear una excepcion de disponibilidad para un recurso",
+        "description": "Define una excepcion puntual al horario regular (ej: feriado o horario especial)",
+        "operationId": "createOverride",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAvailabilityOverrideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Excepcion creada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{id}/services": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Listar servicios asignados a un recurso",
+        "operationId": "listServices",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servicios listados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Asignar un servicio a un recurso",
+        "operationId": "assignService",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignServiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "403": {
+            "description": "Sin permisos",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Servicio asignado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Asignacion duplicada o tenant distinto",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Recurso o servicio no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/public/{tenantSlug}/bookings": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Reservar un turno desde el widget publico",
+        "description": "Crea un turno con source=WEB. Sin autenticacion — el cliente se identifica por telefono/email en el body.",
+        "operationId": "createPublicBooking",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "path",
+            "description": "Slug del tenant (identificador amigable para URL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mi-clinica"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBookingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de horario — el recurso ya tiene un turno en ese intervalo",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant, servicio o recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Turno creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/locations": {
+      "get": {
+        "tags": [
+          "Locations"
+        ],
+        "summary": "Listar sedes del tenant actual",
+        "description": "Devuelve todas las sedes pertenecientes al tenant resuelto del contexto JWT",
+        "operationId": "list_2",
+        "responses": {
+          "200": {
+            "description": "Lista de sedes devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Locations"
+        ],
+        "summary": "Crear una sede",
+        "description": "Crea una nueva sede para el tenant resuelto del contexto JWT",
+        "operationId": "create_3",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Sede creada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion o sin contexto de tenant",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/locations/{locationId}/resources": {
+      "get": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Listar recursos de una sede",
+        "description": "Devuelve todos los recursos (profesionales, salas, equipamiento) pertenecientes a la sede indicada",
+        "operationId": "listByLocation",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "description": "UUID de la sede",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recursos listados correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sede no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Crear un recurso en una sede",
+        "description": "Crea un nuevo recurso (profesional, sala o equipamiento) dentro de la sede indicada",
+        "operationId": "create_4",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "description": "UUID de la sede",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResourceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Recurso creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Limite de profesionales alcanzado para el plan actual",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Sede no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calendar/sync/{resourceId}": {
+      "post": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Forzar sincronizacion completa del calendario de un recurso",
+        "description": "Dispara una sincronizacion full de Google Calendar para el recurso indicado. Util para resolver inconsistencias.",
+        "operationId": "triggerSync",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso a sincronizar",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sincronizacion completada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conexion no encontrada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bookings": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Listar turnos del tenant actual",
+        "description": "Devuelve una lista paginada de turnos pertenecientes al tenant resuelto del contexto JWT",
+        "operationId": "list_3",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Numero de pagina (base 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "example": 0
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Cantidad de resultados por pagina",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Turnos listados correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Crear un turno (desde el panel de administracion)",
+        "description": "Crea un turno en nombre de un cliente desde el panel admin (source=ADMIN). Detecta conflictos via constraint GIST de PostgreSQL.",
+        "operationId": "create_5",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBookingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Error de validacion",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicto de horario — el recurso ya tiene un turno en ese intervalo",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Turno creado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Restablecer contrasena con token",
+        "description": "Valida el token de reset (1 hora de vigencia) y actualiza la contrasena del usuario.",
+        "operationId": "resetPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Contrasena actualizada correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Token invalido, expirado o contrasena que no cumple los requisitos",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Registrar nuevo negocio (onboarding)",
+        "description": "Crea el tenant, settings por defecto, primera ubicacion y usuario administrador en una sola transaccion. Retorna tokens JWT para que el usuario quede autenticado de inmediato.",
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OnboardingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "409": {
+            "description": "Email o slug ya registrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Onboarding exitoso — tokens emitidos",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion — campos faltantes o invalidos",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Renovar access token usando un refresh token",
+        "description": "Valida el refresh token recibido y emite un nuevo access token de corta duracion",
+        "operationId": "refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "401": {
+            "description": "Refresh token invalido o expirado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Nuevo access token emitido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion — campos faltantes o malformados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Iniciar sesion con email y contrasena",
+        "description": "Autentica al usuario y devuelve un access token JWT (15 min) y un refresh token (7 dias)",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens emitidos correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion — campos faltantes o malformados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Credenciales invalidas o cuenta desactivada",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Solicitar recupero de contrasena",
+        "description": "Envia un email con link de reset si el email existe. Siempre retorna 200 para no revelar si el email esta registrado.",
+        "operationId": "forgotPassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Solicitud procesada — se enviara email si el usuario existe",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion — email malformado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenant/all": {
+      "get": {
+        "tags": [
+          "Tenants"
+        ],
+        "summary": "Listar todos los tenants",
+        "description": "Solo SUPER_ADMIN. Devuelve una lista paginada de todos los tenants de la plataforma",
+        "operationId": "listAll",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Numero de pagina (base 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "example": 0
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Cantidad de resultados por pagina",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de tenants devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/public/{tenantSlug}/slots": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Consultar turnos disponibles (publico)",
+        "description": "Devuelve los horarios libres para una combinacion recurso/servicio en la fecha indicada. Sin autenticacion.",
+        "operationId": "listAvailableSlots",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "path",
+            "description": "Slug del tenant (identificador amigable para URL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mi-clinica"
+          },
+          {
+            "name": "serviceId",
+            "in": "query",
+            "description": "UUID del servicio",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          {
+            "name": "resourceId",
+            "in": "query",
+            "description": "UUID del recurso (profesional o sala)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          {
+            "name": "date",
+            "in": "query",
+            "description": "Fecha para consultar horarios disponibles (formato ISO-8601)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2026-03-25"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Horarios disponibles listados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant, servicio o recurso no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/{tenantSlug}/services": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Listar servicios activos de un tenant (publico)",
+        "description": "Devuelve solo los servicios activos. Sin autenticacion — destinado al widget de turnos.",
+        "operationId": "listServices_1",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "path",
+            "description": "Slug del tenant (identificador amigable para URL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mi-clinica"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Servicios listados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/public/{tenantSlug}/resources": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Listar recursos activos de un tenant (publico)",
+        "description": "Devuelve solo los recursos activos de todas las sedes. Sin autenticacion.",
+        "operationId": "listResources",
+        "parameters": [
+          {
+            "name": "tenantSlug",
+            "in": "path",
+            "description": "Slug del tenant (identificador amigable para URL)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "mi-clinica"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recursos listados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/top-services": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Top services by booking count",
+        "description": "Returns the most booked services with revenue in the given period, ordered by booking count descending.",
+        "operationId": "getTopServices",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of services to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            },
+            "example": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top services returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/top-resources": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Top resources by booking count",
+        "description": "Returns the most booked resources (professionals, rooms, tables) in the given period.",
+        "operationId": "getTopResources",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of resources to return",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 5
+            },
+            "example": 5
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top resources returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Dashboard summary",
+        "description": "Returns total bookings, revenue, and period-over-period change percentages for the given date range.",
+        "operationId": "getSummary",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Start date (inclusive), ISO 8601",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2025-01-01"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "End date (inclusive), ISO 8601",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2025-01-31"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Summary returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/revenue-trend": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Revenue trend over time",
+        "description": "Returns revenue and booking count grouped by the given time granularity (daily, weekly, monthly, hourly).",
+        "operationId": "getRevenueTrend",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "granularity",
+            "in": "query",
+            "description": "Time granularity: daily, weekly, monthly, hourly",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "daily"
+            },
+            "example": "daily"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revenue trend returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/occupancy": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Resource occupancy rates",
+        "description": "Returns occupancy percentage per resource, calculated as booked minutes vs available minutes (defaults to 8h/day when no availability rules are configured).",
+        "operationId": "getOccupancy",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Occupancy data returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/bookings-by-status": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Bookings grouped by status",
+        "description": "Returns booking counts broken down by status (PENDING, CONFIRMED, COMPLETED, CANCELLED, NO_SHOW).",
+        "operationId": "getBookingsByStatus",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Breakdown returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/dashboard/bookings-by-source": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "summary": "Bookings grouped by source channel",
+        "description": "Returns booking counts broken down by source channel (WEB, WHATSAPP, API, MCP, ADMIN).",
+        "operationId": "getBookingsBySource",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Breakdown returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden — requires TENANT_ADMIN or SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clients": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Listar clientes del tenant actual",
+        "description": "Devuelve una lista paginada de clientes pertenecientes al tenant resuelto del contexto JWT",
+        "operationId": "list_4",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Numero de pagina (base 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 0
+            },
+            "example": 0
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Cantidad de resultados por pagina",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 20
+            },
+            "example": 20
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clientes listados correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Crear un cliente",
+        "description": "Crea un nuevo cliente para el tenant actual. Falla con 409 si ya existe un cliente con el mismo telefono.",
+        "operationId": "createClient",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateClientRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cliente creado correctamente",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientResponseEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error de validacion"
+          },
+          "401": {
+            "description": "No autorizado � token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido � requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          },
+          "409": {
+            "description": "Ya existe un cliente con ese telefono"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clients/{id}/bookings": {
+      "get": {
+        "tags": [
+          "Clients"
+        ],
+        "summary": "Listar turnos de un cliente",
+        "description": "Devuelve todos los turnos (de todos los estados) asociados al cliente indicado",
+        "operationId": "listBookings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del cliente",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Turnos del cliente listados",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cliente no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/clients/{clientId}/messages": {
+      "get": {
+        "tags": [
+          "Chat History"
+        ],
+        "summary": "Obtener historial de chat del cliente",
+        "description": "Devuelve mensajes paginados con cursor-based pagination. Sin 'before': devuelve los 12 mas recientes. Con 'before': devuelve mensajes anteriores a ese timestamp (scroll infinito hacia arriba).",
+        "operationId": "getMessages",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "UUID del cliente",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Cursor ISO-8601: devuelve mensajes anteriores a este timestamp",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "example": "2026-03-21T14:30:00Z"
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "description": "Cantidad de mensajes a devolver (max 50, default 12)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "default": 12
+            },
+            "example": 12
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Prohibido — cliente no pertenece a este tenant o rol insuficiente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Mensajes devueltos correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Cliente no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calendar/connections": {
+      "get": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Listar conexiones de Google Calendar del tenant actual",
+        "description": "Devuelve todas las conexiones activas e inactivas del tenant resuelto del contexto JWT",
+        "operationId": "listConnections",
+        "responses": {
+          "200": {
+            "description": "Conexiones listadas",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calendar/callback": {
+      "get": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Callback OAuth2 de Google — intercambia codigo de autorizacion por tokens",
+        "description": "Llamado por Google tras la aprobacion del usuario. No debe invocarse directamente.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Codigo de autorizacion de Google",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Parametro state que codifica resourceId:tenantId en base64",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "502": {
+            "description": "Error al intercambiar el codigo con Google",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Conexion establecida correctamente",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "State o codigo invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/calendar/auth-url": {
+      "get": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Obtener URL de autorizacion OAuth2 de Google para un recurso",
+        "description": "Genera la URL a la que redirigir al usuario para que otorgue acceso a su Google Calendar",
+        "operationId": "getAuthUrl",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "query",
+            "description": "UUID del recurso a conectar",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No autorizado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "URL de autorizacion devuelta",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/bookings/{id}": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Obtener un turno por ID",
+        "operationId": "getById_4",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del turno",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Turno no encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Turno encontrado",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Cancelar un turno",
+        "description": "Cancela el turno. No se puede cancelar un turno ya completado o cancelado.",
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del turno",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Turno cancelado"
+          },
+          "404": {
+            "description": "Turno no encontrado"
+          },
+          "422": {
+            "description": "El turno no puede cancelarse en su estado actual"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/google/login": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Iniciar login con Google OAuth2",
+        "description": "Redirige al usuario a la pantalla de autorizacion de Google. El parametro returnUrl indica a que URL del frontend redirigir tras el login exitoso.",
+        "operationId": "googleLogin",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "/dashboard"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redireccion a Google OAuth2"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/google/callback": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Callback de Google OAuth2",
+        "description": "Google redirige aqui con el authorization code. El backend lo intercambia por tokens propios y redirige al frontend con ?token=ACCESS_TOKEN&refresh=REFRESH_TOKEN.",
+        "operationId": "googleCallback",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "/dashboard"
+            }
+          }
+        ],
+        "responses": {
+          "502": {
+            "description": "Error al comunicarse con Google"
+          },
+          "403": {
+            "description": "Usuario no registrado en el sistema"
+          },
+          "302": {
+            "description": "Redireccion al frontend con tokens JWT"
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}": {
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Desactivar usuario",
+        "description": "Desactiva (soft-delete logico) un usuario. El TENANT_ADMIN solo puede desactivar usuarios de su propio tenant.",
+        "operationId": "deactivate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del usuario",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Usuario desactivado"
+          },
+          "404": {
+            "description": "Usuario no encontrado"
+          },
+          "401": {
+            "description": "No autorizado — token faltante o invalido"
+          },
+          "403": {
+            "description": "Prohibido — sin permisos"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/subscription/cancel": {
+      "delete": {
+        "tags": [
+          "Subscription"
+        ],
+        "summary": "Cancelar suscripcion",
+        "description": "Cancela la suscripcion activa del tenant en Stripe. El acceso continua hasta el fin del periodo actual.",
+        "operationId": "cancelSubscription",
+        "responses": {
+          "204": {
+            "description": "Suscripcion cancelada"
+          },
+          "401": {
+            "description": "No autorizado"
+          },
+          "403": {
+            "description": "Requiere rol TENANT_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/resources/{id}/services/{serviceId}": {
+      "delete": {
+        "tags": [
+          "Resources"
+        ],
+        "summary": "Desasignar un servicio de un recurso",
+        "operationId": "unassignService",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "UUID del recurso",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "serviceId",
+            "in": "path",
+            "description": "UUID del servicio",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "403": {
+            "description": "Sin permisos"
+          },
+          "204": {
+            "description": "Servicio desasignado"
+          },
+          "404": {
+            "description": "Asignacion no encontrada"
+          },
+          "401": {
+            "description": "No autorizado"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/v1/calendar/disconnect/{resourceId}": {
+      "delete": {
+        "tags": [
+          "Google Calendar"
+        ],
+        "summary": "Desconectar Google Calendar de un recurso",
+        "description": "Revoca la conexion y elimina los tokens almacenados para el recurso indicado",
+        "operationId": "disconnect",
+        "parameters": [
+          {
+            "name": "resourceId",
+            "in": "path",
+            "description": "UUID del recurso a desconectar",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Desconectado correctamente"
+          },
+          "404": {
+            "description": "Conexion no encontrada"
+          },
+          "403": {
+            "description": "Prohibido — requiere rol TENANT_ADMIN o SUPER_ADMIN"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "UpdateTenantRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "TenantSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "reminderHoursBefore": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 168,
+            "minimum": 1
+          },
+          "reminderEnabled": {
+            "type": "boolean"
+          },
+          "reminderChannels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UpdateServiceRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "price": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "requiresResource": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateResourceRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TransferResourceRequest": {
+        "type": "object",
+        "properties": {
+          "locationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clearSchedule": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "locationId"
+        ]
+      },
+      "UpdateLocationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "UpdateClientRequest": {
+        "type": "object",
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 0
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          }
+        }
+      },
+      "UpdateBookingStatusRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Nuevo estado del turno",
+            "enum": [
+              "PENDING",
+              "CONFIRMED",
+              "CANCELLED",
+              "COMPLETED",
+              "NO_SHOW"
+            ],
+            "example": "CONFIRMED"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "LocalTime": {
+        "type": "object",
+        "properties": {
+          "hour": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "minute": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "second": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UpdateAvailabilityRuleRequest": {
+        "type": "object",
+        "properties": {
+          "dayOfWeek": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 6,
+            "minimum": 0
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date"
+          }
+        }
+      },
+      "UpdateAvailabilityOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          }
+        }
+      },
+      "JsonNode": {
+        "type": "object"
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SUPER_ADMIN",
+              "TENANT_ADMIN",
+              "LOCATION_MANAGER",
+              "PROFESSIONAL"
+            ]
+          },
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password",
+          "role"
+        ]
+      },
+      "CreateTenantRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+$"
+          },
+          "businessType": {
+            "type": "string",
+            "enum": [
+              "SERVICE",
+              "HOSPITALITY"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "businessType",
+          "name",
+          "slug"
+        ]
+      },
+      "CreateCheckoutRequest": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string",
+            "enum": [
+              "PRO",
+              "PREMIUM",
+              "ENTERPRISE"
+            ]
+          },
+          "successUrl": {
+            "type": "string"
+          },
+          "cancelUrl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cancelUrl",
+          "successUrl",
+          "tier"
+        ]
+      },
+      "CreateServiceRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "durationMinutes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string"
+          },
+          "requiresResource": {
+            "type": "boolean"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "durationMinutes",
+          "name",
+          "price"
+        ]
+      },
+      "CreateAvailabilityRuleRequest": {
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dayOfWeek": {
+            "type": "integer",
+            "format": "int32",
+            "maximum": 6,
+            "minimum": 0
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        "required": [
+          "dayOfWeek",
+          "endTime",
+          "resourceId",
+          "startTime"
+        ]
+      },
+      "CreateAvailabilityOverrideRequest": {
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "endTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          }
+        },
+        "required": [
+          "available",
+          "date",
+          "resourceId"
+        ]
+      },
+      "AssignServiceRequest": {
+        "type": "object",
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "serviceId"
+        ]
+      },
+      "CreateBookingRequest": {
+        "type": "object",
+        "properties": {
+          "resourceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "serviceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clientName": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "clientPhone": {
+            "type": "string",
+            "maxLength": 30,
+            "minLength": 0
+          },
+          "clientEmail": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "startTime": {
+            "$ref": "#/components/schemas/LocalTime"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "clientName",
+          "clientPhone",
+          "date",
+          "resourceId",
+          "serviceId",
+          "startTime"
+        ]
+      },
+      "CreateLocationRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "CreateResourceRequest": {
+        "type": "object",
+        "properties": {
+          "resourceType": {
+            "type": "string",
+            "description": "Tipo de recurso. PROFESSIONAL=profesional (medico, estilista, etc.), TABLE=mesa, ROOM=sala o consultorio, EQUIPMENT=equipamiento",
+            "enum": [
+              "PROFESSIONAL",
+              "TABLE",
+              "ROOM",
+              "EQUIPMENT"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "capacity": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "imageUrl": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "resourceType"
+        ]
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8
+          }
+        },
+        "required": [
+          "newPassword",
+          "token"
+        ]
+      },
+      "AdminInfo": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 2147483647,
+            "minLength": 8,
+            "pattern": "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).+$"
+          },
+          "fullName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "fullName",
+          "password"
+        ]
+      },
+      "BusinessInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "businessType": {
+            "type": "string",
+            "enum": [
+              "SERVICE",
+              "HOSPITALITY"
+            ]
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "businessType",
+          "name",
+          "timezone"
+        ]
+      },
+      "LocationInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "address",
+          "name",
+          "phone"
+        ]
+      },
+      "OnboardingRequest": {
+        "type": "object",
+        "properties": {
+          "business": {
+            "$ref": "#/components/schemas/BusinessInfo"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationInfo"
+          },
+          "admin": {
+            "$ref": "#/components/schemas/AdminInfo"
+          }
+        },
+        "required": [
+          "admin",
+          "business",
+          "location"
+        ]
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "CreateClientRequest": {
+        "type": "object",
+        "required": [
+          "fullName"
+        ],
+        "properties": {
+          "fullName": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Nombre completo del cliente",
+            "example": "Juan Perez"
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 30,
+            "description": "Telefono del cliente (opcional)",
+            "example": "+595991234567"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 200,
+            "description": "Email del cliente (opcional)",
+            "example": "juan@email.com"
+          }
+        }
+      },
+      "ClientResponseEnvelope": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ClientResponse"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

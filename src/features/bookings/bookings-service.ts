@@ -1,6 +1,7 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError, type AppError } from "@/core/errors/app-error";
+import { createErrorMapper } from "@/shared/utils/api-error-mapper";
 
 // Reutilizamos tipos base del módulo agenda
 export type {
@@ -227,7 +228,22 @@ export function getSourceChannelLabel(channel: SourceChannel): string {
   return labels[channel];
 }
 
-export function toBookingsFriendlyMessage(error: AppError): string {
+/**
+ * Reusable error mapper configured for Bookings module.
+ * Maps API errors to user-friendly Spanish messages.
+ */
+export const toBookingsFriendlyMessage = createErrorMapper({
+  notFound: "El turno solicitado no existe o ya fue eliminado.",
+  conflict: "Conflicto detectado: puede haber un turno superpuesto. Verifica los horarios.",
+  validationError: "Error de validación en los datos del turno.",
+  fallback: "Ocurrió un error al procesar la solicitud.",
+});
+
+/**
+ * Extended error handler for booking-specific error codes not covered by the generic mapper.
+ * Use this when you need custom logic beyond field-based or status-based errors.
+ */
+export function handleBookingSpecificErrors(error: AppError): string | null {
   if (error.code === "BOOKING_CONFLICT") {
     return "El recurso ya tiene un turno reservado en ese horario. Elegí otro horario o recurso.";
   }
@@ -240,17 +256,14 @@ export function toBookingsFriendlyMessage(error: AppError): string {
     return "La operación no es válida en el estado actual del turno.";
   }
 
-  if (error.status === 409) {
-    return "Conflicto detectado: puede haber un turno superpuesto. Verifica los horarios.";
-  }
+  return null; // Fall through to generic mapper
+}
 
-  if (error.status === 404) {
-    return "El turno solicitado no existe o ya fue eliminado.";
-  }
-
-  if (error.code === "VALIDATION_ERROR" && error.details) {
-    return error.details.map((d) => d.message).join(". ");
-  }
-
-  return error.message || "Ocurrió un error al procesar la solicitud.";
+/**
+ * Complete error message resolver for bookings.
+ * First checks booking-specific errors, then falls back to the generic mapper.
+ */
+export function getBookingErrorMessage(error: AppError): string {
+  const specificMessage = handleBookingSpecificErrors(error);
+  return specificMessage ?? toBookingsFriendlyMessage(error);
 }

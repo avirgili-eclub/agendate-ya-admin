@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
 import {
+  createClient,
   fetchClients,
   toClientsFriendlyMessage,
   type ClientItem,
@@ -20,12 +21,20 @@ export function ClientsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
-  const [formMode, setFormMode] = useState<"edit" | null>(null);
+  const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["clients", { search: debouncedSearch }],
     queryFn: () => fetchClients({ search: debouncedSearch }),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (input: ClientUpsertInput) => createClient(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      setFormMode(null);
+    },
   });
 
   const updateMutation = useMutation({
@@ -50,7 +59,9 @@ export function ClientsPage() {
   };
 
   const handleFormSubmit = async (input: ClientUpsertInput) => {
-    if (formMode === "edit" && editingClient) {
+    if (formMode === "create") {
+      await createMutation.mutateAsync(input);
+    } else if (formMode === "edit" && editingClient) {
       await updateMutation.mutateAsync({ id: editingClient.id, input });
     }
   };
@@ -58,12 +69,13 @@ export function ClientsPage() {
   const handleCloseForm = () => {
     setFormMode(null);
     setEditingClient(null);
+    createMutation.reset();
     updateMutation.reset();
   };
 
   const clients = data?.clients ?? [];
-  const formError = updateMutation.error;
-  const isFormLoading = updateMutation.isPending;
+  const formError = formMode === "create" ? createMutation.error : updateMutation.error;
+  const isFormLoading = formMode === "create" ? createMutation.isPending : updateMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -75,8 +87,12 @@ export function ClientsPage() {
             Gestiona tu base de clientes, historial de turnos y comunicaciones.
           </p>
         </div>
-        <Button variant="outline" className="flex items-center gap-2" disabled>
-          Alta de cliente (pendiente de backend)
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => setFormMode("create")}
+        >
+          Alta de cliente
         </Button>
       </header>
 

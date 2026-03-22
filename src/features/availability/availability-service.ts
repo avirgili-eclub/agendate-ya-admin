@@ -1,6 +1,7 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError, type AppError } from "@/core/errors/app-error";
+import { createErrorMapper } from "@/shared/utils/api-error-mapper";
 
 export type AvailabilityRule = {
   id: string;
@@ -224,11 +225,13 @@ export async function deleteAvailabilityOverride(id: string): Promise<void> {
   await httpRequest(`/availability-overrides/${id}`, { method: "DELETE" });
 }
 
-export function toAvailabilityFriendlyMessage(error: AppError): string {
-  if (error.code === "VALIDATION_ERROR" && error.details && error.details.length > 0) {
-    return error.details.map((d) => d.message).join(" ");
-  }
-  return error.message || "Ocurrió un error al gestionar la disponibilidad.";
-}
+/**
+ * Availability-specific error message mapper.
+ * Uses the reusable createErrorMapper helper with module-specific overrides.
+ */
+export const toAvailabilityFriendlyMessage = createErrorMapper({
+  notFound: "Regla de disponibilidad no encontrada.",
+  fallback: "Ocurrió un error al gestionar la disponibilidad.",
+});
 
 export const DAY_NAMES = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];

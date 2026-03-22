@@ -9,7 +9,7 @@ import {
   createResource,
   fetchResourceLocations,
   fetchServicesCatalog,
-  toResourcesFriendlyMessage,
+  toResourcesOperationError,
   transferResource,
   updateResourceDetails,
   updateResourceActiveStatus,
@@ -79,7 +79,7 @@ export function ResourcesPage() {
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toResourcesFriendlyMessage(appError) });
+      setFeedback({ tone: "error", message: toResourcesOperationError(appError) });
     },
   });
 
@@ -128,7 +128,7 @@ export function ResourcesPage() {
   const cards = data.data;
 
   const errorMessage = resourcesQuery.isError
-    ? toResourcesFriendlyMessage(resourcesQuery.error as unknown as AppError)
+    ? toResourcesOperationError(resourcesQuery.error as unknown as AppError)
     : null;
 
   const supportDataError = locationsQuery.isError || servicesCatalogQuery.isError;

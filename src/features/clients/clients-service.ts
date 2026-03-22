@@ -1,7 +1,11 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError, type AppError } from "@/core/errors/app-error";
+import { createErrorMapper } from "@/shared/utils/api-error-mapper";
 
+/**
+ * Domain model: Client representation for UI/business logic.
+ */
 export type ClientItem = {
   id: string;
   firstName: string;
@@ -15,6 +19,9 @@ export type ClientItem = {
   totalBookings: number;
 };
 
+/**
+ * Form input model: Data structure for create/update forms.
+ */
 export type ClientUpsertInput = {
   firstName: string;
   lastName: string;
@@ -56,6 +63,9 @@ type PagedEnvelope<T> = {
   };
 };
 
+/**
+ * API response schema: Client from backend GET endpoints.
+ */
 type ApiClient = {
   id: string;
   tenantId: string;
@@ -72,6 +82,18 @@ type ApiClient = {
   };
 };
 
+/**
+ * API request schema: Client for backend POST/PUT endpoints.
+ * Explicit contract reduces drift risk between form and API.
+ */
+type ApiClientRequest = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+  notes?: string;
+};
+
 type ApiClientBooking = {
   id: string;
   serviceName: string;
@@ -82,6 +104,15 @@ type ApiClientBooking = {
   createdAt: string;
 };
 
+// =====================
+// DTO Mapping Layer
+// =====================
+// Explicit mapping functions reduce contract drift and make API changes visible at compile time.
+
+/**
+ * Maps API response (backend schema) to domain model (UI schema).
+ * Handles null -> undefined conversion and nested metadata extraction.
+ */
 function mapApiClientToItem(api: ApiClient): ClientItem {
   return {
     id: api.id,
@@ -94,6 +125,21 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
     updatedAt: api.updatedAt,
     lastBookingDate: api.metadata?.lastBookingDate,
     totalBookings: api.metadata?.totalBookings ?? 0,
+  };
+}
+
+/**
+ * Maps form input to API request body.
+ * Ensures form data matches backend contract exactly.
+ * If backend schema changes, TypeScript will catch it here.
+ */
+function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
+  return {
+    firstName: input.firstName.trim(),
+    lastName: input.lastName.trim(),
+    phone: input.phone.trim(),
+    email: input.email?.trim() || undefined,
+    notes: input.notes?.trim() || undefined,
   };
 }
 
@@ -145,12 +191,27 @@ export async function fetchClientById(id: string): Promise<ClientItem> {
   return mapApiClientToItem(unwrapData<ApiClient>(response));
 }
 
+export async function createClient(input: ClientUpsertInput): Promise<ClientItem> {
+  assertClientInput(input);
+
+  const requestBody = mapFormInputToApiRequest(input);
+
+  const response = await httpRequest<DataEnvelope<ApiClient>>("/clients", {
+    method: "POST",
+    body: requestBody,
+  });
+
+  return mapApiClientToItem(unwrapData<ApiClient>(response));
+}
+
 export async function updateClient(id: string, input: ClientUpsertInput): Promise<ClientItem> {
   assertClientInput(input);
 
+  const requestBody = mapFormInputToApiRequest(input);
+
   const response = await httpRequest<DataEnvelope<ApiClient>>(`/clients/${id}`, {
     method: "PUT",
-    body: input,
+    body: requestBody,
   });
 
   return mapApiClientToItem(unwrapData<ApiClient>(response));
@@ -205,27 +266,15 @@ export async function fetchClientChatHistory(
   };
 }
 
-export function toClientsFriendlyMessage(error: AppError): string {
-  if (error.status === 409) {
-    const phoneConflict = error.details?.find((d) => d.field === "phone");
-    const emailConflict = error.details?.find((d) => d.field === "email");
-    
-    if (phoneConflict) {
-      return "Ya existe un cliente con este teléfono. Por favor, revisa el número ingresado.";
-    }
-    if (emailConflict) {
-      return "Ya existe un cliente con este email. Por favor, revisa el email ingresado.";
-    }
-    return "Ya existe un cliente con estos datos. Verifica teléfono o email.";
-  }
-
-  if (error.code === "NOT_FOUND") {
-    return "Cliente no encontrado.";
-  }
-
-  if (error.code === "VALIDATION_ERROR" && error.details) {
-    return error.details.map((d) => d.message).join(" ");
-  }
-
-  return error.message ?? "Ocurrió un error inesperado.";
-}
+/**
+ * Client-specific error message mapper.
+ * Uses the reusable createErrorMapper helper with module-specific overrides.
+ */
+export const toClientsFriendlyMessage = createErrorMapper({
+  notFound: "Cliente no encontrado.",
+  conflict: "Ya existe un cliente con estos datos. Verifica teléfono o email.",
+  conflictFields: {
+    phone: "Ya existe un cliente con este teléfono. Por favor, revisa el número ingresado.",
+    email: "Ya existe un cliente con este email. Por favor, revisa el email ingresado.",
+  },
+});

@@ -1,6 +1,7 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError, type AppError } from "@/core/errors/app-error";
+import { createErrorMapper, extractFieldErrors } from "@/shared/utils/api-error-mapper";
 
 export type ResourceCardItem = {
   id: string;
@@ -77,6 +78,143 @@ type ApiService = {
   active: boolean;
 };
 
+// ============================================================================
+// DTO Mapping Layer
+// ============================================================================
+
+/**
+ * API -> Domain: Transform API resource to domain card item
+ */
+function toCardItem(
+  resource: ApiResource,
+  locationName: string,
+  assignedServices: ApiService[],
+): ResourceCardItem {
+  return {
+    id: resource.id,
+    locationId: resource.locationId,
+    name: resource.name,
+    locationName,
+    type: resource.resourceType,
+    serviceIds: assignedServices.map((service) => service.id),
+    services: assignedServices.map((service) => service.name),
+    active: resource.active,
+    description: resource.description ?? undefined,
+    capacity: resource.capacity ?? undefined,
+  };
+}
+
+/**
+ * Form -> API DTO: Create resource payload
+ */
+type CreateResourceDTO = {
+  resourceType: ResourceCardItem["type"];
+  name: string;
+  description: string | null;
+  capacity: number | null;
+};
+
+function toCreateResourceDTO(input: ResourceUpsertInput): CreateResourceDTO {
+  return {
+    resourceType: input.type,
+    name: input.name,
+    description: input.description || null,
+    capacity: input.capacity ?? null,
+  };
+}
+
+/**
+ * Form -> API DTO: Update resource details payload
+ */
+type UpdateResourceDetailsDTO = {
+  name: string;
+  description: string | null;
+  capacity: number | null;
+  active: boolean;
+};
+
+function toUpdateResourceDetailsDTO(input: ResourceUpsertInput): UpdateResourceDetailsDTO {
+  return {
+    name: input.name,
+    description: input.description || null,
+    capacity: input.capacity ?? null,
+    active: input.active,
+  };
+}
+
+/**
+ * Form -> API DTO: Transfer resource payload
+ */
+type TransferResourceDTO = {
+  locationId: string;
+  clearSchedule: boolean;
+};
+
+function toTransferResourceDTO(locationId: string, clearSchedule: boolean): TransferResourceDTO {
+  return {
+    locationId,
+    clearSchedule,
+  };
+}
+
+// ============================================================================
+// Error Mapping
+// ============================================================================
+
+/**
+ * Reusable error mapper for Resources module.
+ * Uses shared createErrorMapper with module-specific overrides.
+ */
+export const toResourcesFriendlyMessage = createErrorMapper({
+  notFound: "No se encontraron recursos para la busqueda aplicada.",
+  fallback: "No pudimos cargar recursos por ahora. Vuelve a intentarlo.",
+});
+
+/**
+ * Specific error mapper for subscription limits (402/SUBSCRIPTION_LIMIT).
+ * Handles edge case not covered by generic mapper.
+ */
+export function toResourcesOperationError(error: AppError): string {
+  if (error.status === 402 || error.code === "SUBSCRIPTION_LIMIT") {
+    return "Alcanzaste el limite del plan para profesionales activos.";
+  }
+  if (error.status === 403 || error.code === "FORBIDDEN") {
+    return "No tienes permisos para ver o modificar recursos.";
+  }
+  return toResourcesFriendlyMessage(error);
+}
+
+// ============================================================================
+// Form Error Processing
+// ============================================================================
+
+/**
+ * Process API error for form handling.
+ * Extracts field-level errors and general message.
+ * 
+ * Usage in forms:
+ * ```ts
+ * const { fieldErrors, formError } = processFormError(error);
+ * setFieldErrors(fieldErrors);
+ * setFormError(formError);
+ * ```
+ */
+export function processFormError(error: AppError): {
+  fieldErrors: Record<string, string>;
+  formError: string;
+} {
+  const fieldErrors = extractFieldErrors(error);
+
+  // Get general error message using the mapper
+  const formError = toResourcesOperationError(error);
+
+  return { fieldErrors, formError };
+}
+
+// ============================================================================
+// Validation
+// ============================================================================
+
 function assertResourceInput(input: ResourceUpsertInput) {
   const details: Array<{ field: string; message: string }> = [];
   if (!input.name.trim()) {
@@ -113,25 +251,6 @@ function ensureLocationId(locations: ResourceLocationItem[], locationName: strin
     });
   }
   return location.id;
-}
-
-function toCardItem(
-  resource: ApiResource,
-  locationName: string,
-  assignedServices: ApiService[],
-): ResourceCardItem {
-  return {
-    id: resource.id,
-    locationId: resource.locationId,
-    name: resource.name,
-    locationName,
-    type: resource.resourceType,
-    serviceIds: assignedServices.map((service) => service.id),
-    services: assignedServices.map((service) => service.name),
-    active: resource.active,
-    description: resource.description ?? undefined,
-    capacity: resource.capacity ?? undefined,
-  };
 }
 
 async function fetchResourceById(id: string): Promise<ApiResource> {
@@ -242,12 +361,7 @@ export async function createResource(input: ResourceUpsertInput): Promise<Resour
     `/locations/${locationId}/resources`,
     {
       method: "POST",
-      body: {
-        resourceType: input.type,
-        name: input.name,
-        description: input.description || null,
-        capacity: input.capacity,
-      },
+      body: toCreateResourceDTO(input),
     },
   );
   let created = unwrapData<ApiResource>(createResponse);
@@ -269,12 +383,7 @@ export async function updateResourceDetails(id: string, input: ResourceUpsertInp
     fetchResourceLocations(),
     httpRequest<DataEnvelope<ApiResource>>(`/resources/${id}`, {
       method: "PUT",
-      body: {
-        name: input.name,
-        description: input.description || null,
-        capacity: input.capacity,
-        active: input.active,
-      },
+      body: toUpdateResourceDetailsDTO(input),
     }),
   ]);
 
@@ -284,10 +393,7 @@ export async function updateResourceDetails(id: string, input: ResourceUpsertInp
   if (desiredLocationId !== updated.locationId) {
     const transferResponse = await httpRequest<DataEnvelope<ApiResource>>(`/resources/${id}/location`, {
       method: "PUT",
-      body: {
-        locationId: desiredLocationId,
-        clearSchedule: false,
-      },
+      body: toTransferResourceDTO(desiredLocationId, false),
     });
     updated = unwrapData<ApiResource>(transferResponse);
   }
@@ -302,10 +408,7 @@ export async function transferResource(id: string, input: TransferResourceInput)
   const locationId = ensureLocationId(locations, input.locationName);
   const response = await httpRequest<DataEnvelope<ApiResource>>(`/resources/${id}/location`, {
     method: "PUT",
-    body: {
-      locationId,
-      clearSchedule: input.clearSchedule,
-    },
+    body: toTransferResourceDTO(locationId, input.clearSchedule),
   });
   const updated = unwrapData<ApiResource>(response);
   const assignedServices = await fetchAssignedServices(id);
@@ -345,17 +448,4 @@ export async function assignServicesToResource(id: string, serviceIds: string[])
 
   const locationName = locations.find((item) => item.id === resource.locationId)?.name ?? "Sin ubicacion";
   return toCardItem(resource, locationName, finalServices);
-}
-
-export function toResourcesFriendlyMessage(error: AppError) {
-  if (error.status === 402 || error.code === "SUBSCRIPTION_LIMIT") {
-    return "Alcanzaste el limite del plan para profesionales activos.";
-  }
-  if (error.status === 403 || error.code === "FORBIDDEN") {
-    return "No tienes permisos para ver o modificar recursos.";
-  }
-  if (error.status === 404 || error.code === "NOT_FOUND") {
-    return "No se encontraron recursos para la busqueda aplicada.";
-  }
-  return "No pudimos cargar recursos por ahora. Vuelve a intentarlo.";
 }

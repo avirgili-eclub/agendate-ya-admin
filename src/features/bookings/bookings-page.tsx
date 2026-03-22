@@ -3,6 +3,7 @@ import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "luci
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
+import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useBookingsQuery, useBookingDetailQuery } from "@/features/bookings/use-bookings-query";
 import {
   createBooking,
@@ -13,7 +14,7 @@ import {
   getStatusTone,
   getSourceChannelLabel,
   getValidStatusTransitions,
-  toBookingsFriendlyMessage,
+  getBookingErrorMessage,
   type BookingListItem,
   type BookingStatus,
   type CreateBookingInput,
@@ -144,14 +145,9 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
       onClose();
     },
     onError: (error: AppError) => {
-      const nextFieldErrors: Record<string, string> = {};
-      for (const detail of error.details ?? []) {
-        if (detail.field) {
-          nextFieldErrors[detail.field] = detail.message;
-        }
-      }
-      setFieldErrors(nextFieldErrors);
-      setFormError(toBookingsFriendlyMessage(error));
+      // Use shared extractFieldErrors utility for DRY field error mapping
+      setFieldErrors(extractFieldErrors(error));
+      setFormError(getBookingErrorMessage(error));
     },
   });
 
@@ -342,9 +338,10 @@ type BookingDetailPanelProps = {
   bookingId: string;
   onClose: () => void;
   onRefresh: () => void;
+  onFeedback: (feedback: { tone: "success" | "error"; message: string }) => void;
 };
 
-function BookingDetailPanel({ bookingId, onClose, onRefresh }: BookingDetailPanelProps) {
+function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: BookingDetailPanelProps) {
   const queryClient = useQueryClient();
   const detailQuery = useBookingDetailQuery(bookingId);
   const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
@@ -356,10 +353,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh }: BookingDetailPane
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
       onRefresh();
+      onFeedback({ tone: "success", message: "Estado del turno actualizado correctamente." });
       setConfirmingAction(null);
     },
     onError: (error: AppError) => {
-      alert(toBookingsFriendlyMessage(error));
+      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
     },
   });
 
@@ -368,10 +366,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh }: BookingDetailPane
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       onRefresh();
+      onFeedback({ tone: "success", message: "Turno cancelado correctamente." });
       onClose();
     },
     onError: (error: AppError) => {
-      alert(toBookingsFriendlyMessage(error));
+      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
     },
   });
 
@@ -566,7 +565,7 @@ export function BookingsPage() {
       setFeedback({ tone: "success", message: "Turno cancelado correctamente." });
     },
     onError: (error: AppError) => {
-      setFeedback({ tone: "error", message: toBookingsFriendlyMessage(error) });
+      setFeedback({ tone: "error", message: getBookingErrorMessage(error) });
     },
   });
 
@@ -723,6 +722,7 @@ export function BookingsPage() {
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["bookings"] });
             }}
+            onFeedback={setFeedback}
           />
         )}
       </SidePanel>

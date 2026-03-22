@@ -233,6 +233,7 @@ Goal: Complete operational management modules.
 
 - [x] Clients list and client detail history
 - [x] Client edit flow with phone conflict handling
+- [x] Client create flow with phone validation (reuses onboarding phone input component)
 - [x] Users list/create/deactivate
 - [x] Tenant settings page
 - [x] Client detail chat history UI (WhatsApp-like with upward pagination)

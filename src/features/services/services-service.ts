@@ -1,6 +1,7 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError, type AppError } from "@/core/errors/app-error";
+import { createErrorMapper } from "@/shared/utils/api-error-mapper";
 
 export type ServiceItem = {
   id: string;
@@ -139,12 +140,20 @@ export async function deleteService(id: string): Promise<void> {
   await httpRequest(`/services/${id}`, { method: "DELETE" });
 }
 
+/**
+ * Service-specific error message mapper.
+ * Uses the reusable createErrorMapper helper with module-specific overrides.
+ * Handles special 402 payment limit case not covered by the base mapper.
+ */
+const baseServiceErrorMapper = createErrorMapper({
+  notFound: "Servicio no encontrado.",
+  fallback: "Ocurrió un error al gestionar el servicio.",
+});
+
 export function toServicesFriendlyMessage(error: AppError): string {
-  if (error.code === "VALIDATION_ERROR" && error.details && error.details.length > 0) {
-    return error.details.map((d) => d.message).join(" ");
-  }
+  // Handle 402 Payment Required (not covered by base mapper)
   if (error.status === 402) {
     return "Límite de servicios alcanzado. Actualiza tu plan para crear más servicios.";
   }
-  return error.message || "Ocurrió un error al gestionar el servicio.";
+  return baseServiceErrorMapper(error);
 }
