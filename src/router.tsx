@@ -19,6 +19,9 @@ import { AgendaPage } from "@/features/agenda/agenda-page";
 import { BookingsPage } from "@/features/bookings/bookings-page";
 import { ServicesPage } from "@/features/services/services-page";
 import { AvailabilityPage } from "@/features/availability/availability-page";
+import { ClientsPage } from "@/features/clients/clients-page";
+import { UsersPage } from "@/features/users/users-page";
+import { TenantSettingsPage } from "@/features/tenant/tenant-settings-page";
 
 function RootLayout() {
   return (
@@ -103,7 +106,7 @@ const bookingsRoute = createRoute({
 const clientsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/clientes",
-  component: () => <ModulePlaceholderPage moduleName="Clientes" routePath="/clientes" />,
+  component: ClientsPage,
 });
 
 const locationsRoute = createRoute({
@@ -133,13 +136,13 @@ const availabilityRoute = createRoute({
 const teamRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/equipo",
-  component: () => <ModulePlaceholderPage moduleName="Equipo" routePath="/equipo" />,
+  component: UsersPage,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/configuracion",
-  component: () => <ModulePlaceholderPage moduleName="Configuracion" routePath="/configuracion" />,
+  component: TenantSettingsPage,
 });
 
 const healthRoute = createRoute({

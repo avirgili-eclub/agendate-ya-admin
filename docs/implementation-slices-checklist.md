@@ -231,20 +231,24 @@ Goal: Complete operational management modules.
 
 ### Scope
 
-- [ ] Clients list and client detail history
-- [ ] Client edit flow with phone conflict handling
-- [ ] Users list/create/deactivate
-- [ ] Tenant settings page
+- [x] Clients list and client detail history
+- [x] Client edit flow with phone conflict handling
+- [x] Users list/create/deactivate
+- [x] Tenant settings page
+- [x] Client detail chat history UI (WhatsApp-like with upward pagination)
 
 ### Deliverables
 
-- [ ] Clients, users, tenant settings ready for MVP
+- [x] Clients, users, tenant settings ready for MVP
+- [x] Chat history UI implemented with API-ready architecture (backend pending)
 
 ### QA checks
 
 - [ ] Role restrictions for user create enforced
 - [ ] 409 conflict messaging for unique phone/email handled
 - [ ] Read-only subscription information rendered correctly
+- [ ] Chat history loads older messages on scroll up
+- [ ] Client booking history displays correctly
 
 ## Slice 10 - Hardening + Visual Gap Closure (Day 31-33)
 
