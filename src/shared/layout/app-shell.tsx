@@ -20,20 +20,21 @@ export function AppShell() {
 
   return (
     <div className="min-h-screen bg-neutral font-sans text-primary-dark">
-      <header className="sticky top-0 z-20 border-b border-neutral-dark bg-neutral-light/95 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-neutral-dark bg-neutral-light/95 backdrop-blur" role="banner">
         <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-4 px-4 lg:px-6">
           <div className="text-lg font-bold text-primary">AgendateYA</div>
           <div className="relative ml-2 hidden flex-1 md:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
             <input
-              className="h-10 w-full rounded-lg border border-neutral-dark bg-white pl-10 pr-3 text-sm outline-none ring-primary-light focus:ring-2"
+              className="h-10 w-full rounded-lg border border-neutral-dark bg-white pl-10 pr-3 text-sm outline-none ring-primary-light focus:ring-2 focus-visible:ring-2"
               placeholder="Buscar recursos, clientes o turnos..."
+              aria-label="Busqueda global"
             />
           </div>
-          <button className="rounded-md p-2 text-primary-light hover:bg-neutral" type="button" aria-label="Notificaciones">
+          <button className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary" type="button" aria-label="Notificaciones">
             <Bell className="size-5" />
           </button>
-          <button className="rounded-md p-2 text-primary-light hover:bg-neutral" type="button" aria-label="Mensajes">
+          <button className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary" type="button" aria-label="Mensajes">
             <MessageSquare className="size-5" />
           </button>
           <Button variant="outline" size="sm" onClick={handleLogout} className="gap-2">
@@ -43,10 +44,10 @@ export function AppShell() {
       </header>
 
       <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
-        <aside className="rounded-xl border border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm">
+        <aside className="rounded-xl border border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm lg:sticky lg:top-20 lg:h-fit" role="navigation" aria-label="Menu principal">
           <div className="mb-4 border-b border-white/20 px-3 pb-3">
             <p className="text-sm font-semibold">Admin Console</p>
-            <p className="mt-1 text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
+            <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
           </div>
 
           <nav className="space-y-1">
@@ -54,17 +55,17 @@ export function AppShell() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white"
+                className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 activeProps={{ className: "bg-white/15 text-white" }}
               >
-                <item.icon className="size-4" />
+                <item.icon className="size-4" aria-hidden="true" />
                 <span>{item.label}</span>
               </Link>
             ))}
           </nav>
         </aside>
 
-        <section className="min-w-0 space-y-4">
+        <main className="min-w-0 space-y-4">
           <PageCard className="bg-neutral-light">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary-light">Admin / {pageMeta.title}</p>
             <h1 className="mt-1 text-3xl font-bold text-primary-dark">{pageMeta.title}</h1>
@@ -72,7 +73,7 @@ export function AppShell() {
           </PageCard>
 
           <Outlet />
-        </section>
+        </main>
       </div>
     </div>
   );

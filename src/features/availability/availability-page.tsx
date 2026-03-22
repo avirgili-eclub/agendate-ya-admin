@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Clock, Plus, Trash2 } from "lucide-react";
+import { Clock, Plus, Trash2, Calendar } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -21,6 +21,10 @@ import { useResourcesQuery } from "@/features/resources/use-resources-query";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
 
@@ -93,14 +97,6 @@ export function AvailabilityPage() {
     enabled: !!selectedResourceId,
     staleTime: 30_000,
   });
-
-  const locationsByName = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const item of locationsQuery.data ?? []) {
-      map.set(item.name, item.id);
-    }
-    return map;
-  }, [locationsQuery.data]);
 
   const locations = useMemo(
     () => ["Todas las ubicaciones", ...(locationsQuery.data ?? []).map((loc) => loc.name)],
@@ -265,8 +261,6 @@ export function AvailabilityPage() {
     });
   }
 
-  const selectedLocationId = locationsByName.get(selectedLocationName);
-
   return (
     <div className="space-y-6">
       <PageCard>
@@ -277,16 +271,23 @@ export function AvailabilityPage() {
           </p>
         </div>
 
-        {feedback && (
-          <div
-            className={`mb-4 rounded-md border p-3 text-sm ${
-              feedback.tone === "success"
-                ? "border-success bg-success/10 text-success-dark"
-                : "border-red-300 bg-red-50 text-red-700"
-            }`}
-          >
-            {feedback.message}
-          </div>
+        {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+
+        {locationsQuery.isLoading && <LoadingState message="Cargando localidades..." />}
+        {locationsQuery.isError && (
+          <ErrorState
+            title="No se pudieron cargar localidades"
+            message="Reintenta para continuar con la configuración de disponibilidad."
+            onRetry={() => void locationsQuery.refetch()}
+          />
+        )}
+
+        {!locationsQuery.isLoading && !locationsQuery.isError && (locationsQuery.data?.length ?? 0) === 0 && (
+          <EmptyState
+            icon={Calendar}
+            title="Sin localidades"
+            description="No hay localidades disponibles para configurar horarios."
+          />
         )}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

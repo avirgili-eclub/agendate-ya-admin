@@ -1,5 +1,5 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { Search, SlidersHorizontal, Plus, Image as ImageIcon } from "lucide-react";
+import { Search, SlidersHorizontal, Plus, Image as ImageIcon, Briefcase } from "lucide-react";
 import { NumericFormat } from "react-number-format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -18,6 +18,10 @@ import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 
 type SupportedCurrency = "PYG" | "ARS" | "USD" | "EUR";
 
@@ -441,7 +445,7 @@ export function ServicesPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-2xl font-semibold text-primary">Servicios</h1>
             <p className="mt-1 text-sm text-primary-light">Gestiona el catálogo de servicios del negocio.</p>
@@ -452,34 +456,26 @@ export function ServicesPage() {
           </Button>
         </div>
 
-        {feedback && (
-          <div
-            className={`mb-4 rounded-md border p-3 text-sm ${
-              feedback.tone === "success"
-                ? "border-success bg-success/10 text-success-dark"
-                : "border-red-300 bg-red-50 text-red-700"
-            }`}
-          >
-            {feedback.message}
-          </div>
-        )}
+        {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
             <input
               type="text"
               placeholder="Buscar servicios..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-md border border-neutral-dark bg-white py-2 pl-10 pr-4 text-sm text-primary transition-colors focus:border-primary focus:outline-none"
+              className="w-full rounded-md border border-neutral-dark bg-white py-2 pl-10 pr-4 text-sm text-primary transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Buscar servicios"
             />
           </div>
 
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="rounded-md border border-neutral-dark bg-white px-4 py-2 text-sm text-primary transition-colors focus:border-primary focus:outline-none"
+            className="rounded-md border border-neutral-dark bg-white px-4 py-2 text-sm text-primary transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label="Filtrar por ubicacion"
           >
             {locations.map((loc) => (
               <option key={loc} value={loc}>
@@ -488,25 +484,27 @@ export function ServicesPage() {
             ))}
           </select>
 
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" aria-label="Filtros adicionales">
             <SlidersHorizontal className="size-4" />
           </Button>
         </div>
 
-        {servicesQuery.isLoading && (
-          <div className="py-12 text-center text-sm text-primary-light">Cargando servicios...</div>
-        )}
+        {servicesQuery.isLoading && <LoadingState message="Cargando servicios..." />}
 
         {servicesQuery.isError && (
-          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            Error al cargar los servicios. Intenta nuevamente.
-          </div>
+          <ErrorState
+            title="Error al cargar servicios"
+            message="No pudimos cargar el catálogo de servicios. Intenta nuevamente."
+            onRetry={() => void servicesQuery.refetch()}
+          />
         )}
 
         {servicesQuery.isSuccess && filteredServices.length === 0 && (
-          <div className="py-12 text-center text-sm text-primary-light">
-            {search ? "No se encontraron servicios con ese criterio." : "No hay servicios creados aún."}
-          </div>
+          <EmptyState
+            icon={Briefcase}
+            title="No hay servicios"
+            description={search ? "No se encontraron servicios con ese criterio." : "Aún no hay servicios creados. Crea tu primer servicio para comenzar."}
+          />
         )}
 
         {servicesQuery.isSuccess && filteredServices.length > 0 && (
@@ -523,22 +521,24 @@ export function ServicesPage() {
                     className="mb-3 h-32 w-full rounded-md object-cover"
                   />
                 ) : (
-                  <div className="mb-3 flex h-32 w-full items-center justify-center rounded-md bg-neutral">
+                  <div className="mb-3 flex h-32 w-full items-center justify-center rounded-md bg-neutral" aria-hidden="true">
                     <ImageIcon className="size-6 text-primary-light" />
                   </div>
                 )}
 
-                <div className="mb-3 flex items-start justify-between">
-                  <div className="flex-1">
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
                     <h3 className="font-semibold text-primary">{service.name}</h3>
                     {service.description && (
                       <p className="mt-1 text-xs text-primary-light line-clamp-2">{service.description}</p>
                     )}
                   </div>
-                  <StatusChip
-                    tone={service.active ? "success" : "neutral"}
-                    label={service.active ? "Activo" : "Inactivo"}
-                  />
+                  <div className="shrink-0">
+                    <StatusChip
+                      tone={service.active ? "success" : "neutral"}
+                      label={service.active ? "Activo" : "Inactivo"}
+                    />
+                  </div>
                 </div>
 
                 <div className="mb-3 space-y-1 text-xs text-primary-light">
@@ -553,12 +553,13 @@ export function ServicesPage() {
                   )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     onClick={() => setEditingService(service)}
                     className="flex-1 text-xs"
+                    aria-label={`Editar ${service.name}`}
                   >
                     Editar
                   </Button>
@@ -567,6 +568,7 @@ export function ServicesPage() {
                     variant="outline"
                     onClick={() => handleDelete(service)}
                     className="flex-1 text-xs text-red-600 hover:bg-red-50"
+                    aria-label={`Eliminar ${service.name}`}
                   >
                     Eliminar
                   </Button>

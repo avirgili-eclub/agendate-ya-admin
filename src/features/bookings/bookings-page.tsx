@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Plus, Eye, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -27,6 +27,10 @@ import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 
 function formatDateTime(isoString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -550,6 +554,7 @@ export function BookingsPage() {
   const [pageSize] = useState(20);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
   const queryClient = useQueryClient();
@@ -558,9 +563,10 @@ export function BookingsPage() {
     mutationFn: (id: string) => deleteBooking(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      setFeedback({ tone: "success", message: "Turno cancelado correctamente." });
     },
     onError: (error: AppError) => {
-      alert(toBookingsFriendlyMessage(error));
+      setFeedback({ tone: "error", message: toBookingsFriendlyMessage(error) });
     },
   });
 
@@ -575,7 +581,7 @@ export function BookingsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-primary">Turnos</h1>
           <p className="text-sm text-primary-light">
@@ -588,27 +594,27 @@ export function BookingsPage() {
         </Button>
       </header>
 
+      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+
       <PageCard>
-        {bookingsQuery.isLoading && (
-          <div className="py-12 text-center text-sm text-primary-light">
-            Cargando turnos...
-          </div>
-        )}
+        {bookingsQuery.isLoading && <LoadingState message="Cargando turnos..." />}
 
         {bookingsQuery.isError && (
-          <div className="py-12 text-center text-sm text-red-600">
-            Error al cargar los turnos. Intenta nuevamente.
-          </div>
+          <ErrorState
+            title="Error al cargar turnos"
+            message="No pudimos cargar la lista de reservas. Intenta nuevamente."
+            onRetry={() => void bookingsQuery.refetch()}
+          />
         )}
 
         {bookingsQuery.isSuccess && (
           <>
             {data.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm text-primary-light">
-                  No hay turnos registrados. Creá el primero para comenzar.
-                </p>
-              </div>
+              <EmptyState
+                icon={CalendarDays}
+                title="Sin turnos"
+                description="No hay turnos registrados. Crea el primero para comenzar."
+              />
             ) : (
               <>
                 <div className="overflow-x-auto">
@@ -656,7 +662,7 @@ export function BookingsPage() {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between border-t border-neutral-dark pt-4">
+                  <div className="mt-4 flex flex-col gap-3 border-t border-neutral-dark pt-4 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-primary-light">
                       Mostrando {page * pageSize + 1} a {Math.min((page + 1) * pageSize, total)} de{" "}
                       {total} turnos
@@ -670,7 +676,7 @@ export function BookingsPage() {
                       >
                         <ChevronLeft className="size-4" />
                       </Button>
-                      <span className="text-sm text-primary">
+                      <span className="text-sm text-primary" aria-current="page">
                         Página {page + 1} de {totalPages}
                       </span>
                       <Button

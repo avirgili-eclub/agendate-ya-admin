@@ -256,20 +256,53 @@ Goal: close pending visual gaps and stabilize UX quality.
 
 ### Scope
 
-- [ ] Empty/loading/error states across all modules
-- [ ] Mobile layout refinements
-- [ ] Accessibility pass on key screens
-- [ ] Consistency pass for tokens and spacing
+- [x] Created shared UI primitives for consistent state handling
+  - [x] LoadingState and SkeletonCards components
+  - [x] ErrorState component with retry capability
+  - [x] EmptyState component with icon and description
+  - [x] FeedbackBanner component for success/error messages
+- [x] Updated Resources page with loading/empty/error states and accessibility improvements
+- [x] Updated Services page with loading/empty/error states and accessibility improvements
+- [x] Improved AppShell accessibility with semantic landmarks (header, nav, main)
+- [ ] Full state handling for Agenda, Bookings, Availability pages (foundation ready, can be applied)
+- [ ] Full state handling for Users, Clients, Tenant pages (foundation ready, can be applied)
+- [x] Mobile layout improvements (flex-wrap on cards, responsive controls)
+- [x] Accessibility pass started: aria-labels, focus-visible, semantic HTML
+- [ ] Comprehensive accessibility audit across all pages
+- [ ] Consistency pass for spacing and tokens
 
 ### Deliverables
 
-- [ ] MVP UI quality baseline completed
+- [x] Reusable UI primitives for state management created
+- [x] Resources and Services modules updated with polished UX
+- [x] Improved mobile responsiveness baseline
+- [x] Accessibility foundations established
+- [ ] All modules updated with consistent patterns (partial - foundation complete)
 
 ### QA checks
 
 - [ ] No major visual regressions in core pages
 - [ ] Keyboard navigation works in critical forms
 - [ ] Contrast acceptable in primary components
+
+### Implementation Notes
+
+Created four shared UI primitives in src/shared/ui/:
+
+1. loading-state.tsx - LoadingState spinner and SkeletonCards grid
+2. error-state.tsx - ErrorState with retry button
+3. empty-state.tsx - EmptyState with icon, title, description
+4. feedback-banner.tsx - FeedbackBanner for alerts
+
+Updated pages:
+
+- Resources: Full update with new state components, aria-labels on buttons/inputs, mobile-responsive pagination
+- Services: Full update with new state components, aria-labels, mobile improvements
+- AppShell: Added semantic landmarks (role="banner", role="navigation", role="main"), focus-visible styles, aria-labels
+
+Remaining pages (Agenda, Bookings, Availability, Users, Clients, Tenant) have the foundation ready and can apply the same patterns using the shared components.
+
+Mobile improvements: button groups use flex-wrap, pagination controls stack on mobile, search/filter controls are responsive.
 
 ## Suggested Agent Task Envelope (for every slice)
 

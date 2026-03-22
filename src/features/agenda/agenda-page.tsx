@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Plus, Calendar, ChevronLeft, ChevronRight, MapPin, Users } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, MapPin, Users, CalendarDays } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -13,13 +13,15 @@ import {
   getValidStatusTransitions,
   type BookingCardItem,
   type BookingStatus,
-  type LocationItem,
-  type ResourceItem,
 } from "@/features/agenda/agenda-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { SidePanel } from "@/shared/ui/side-panel";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 
 type ViewMode = "week" | "day" | "month";
 
@@ -65,14 +67,6 @@ function formatTime(isoString: string): string {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(isoString));
-}
-
-function isSameDay(date1: Date, date2: Date): boolean {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
 }
 
 type BookingCardProps = {
@@ -257,9 +251,11 @@ export function AgendaPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-neutral-dark bg-white">
+          <div className="flex rounded-lg border border-neutral-dark bg-white" role="tablist" aria-label="Vista de calendario">
             <button
               onClick={() => setViewMode("week")}
+              role="tab"
+              aria-selected={viewMode === "week"}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 viewMode === "week"
                   ? "bg-primary text-white"
@@ -270,6 +266,8 @@ export function AgendaPage() {
             </button>
             <button
               onClick={() => setViewMode("day")}
+              role="tab"
+              aria-selected={viewMode === "day"}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 viewMode === "day"
                   ? "bg-primary text-white"
@@ -280,6 +278,8 @@ export function AgendaPage() {
             </button>
             <button
               onClick={() => setViewMode("month")}
+              role="tab"
+              aria-selected={viewMode === "month"}
               className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                 viewMode === "month"
                   ? "bg-primary text-white"
@@ -306,11 +306,20 @@ export function AgendaPage() {
               <MapPin className="size-4" />
               Locales
             </h3>
-            {locationsQuery.isLoading && (
-              <p className="text-xs text-primary-light">Cargando locales...</p>
+            {locationsQuery.isLoading && <LoadingState message="Cargando locales..." />}
+            {locationsQuery.isError && (
+              <ErrorState
+                title="No se pudieron cargar locales"
+                message="Reintentá para continuar filtrando la agenda por sede."
+                onRetry={() => void locationsQuery.refetch()}
+              />
             )}
-            {locations.length === 0 && !locationsQuery.isLoading && (
-              <p className="text-xs text-primary-light">No hay locales disponibles.</p>
+            {locations.length === 0 && !locationsQuery.isLoading && !locationsQuery.isError && (
+              <EmptyState
+                icon={MapPin}
+                title="Sin locales"
+                description="No hay locales disponibles para este tenant."
+              />
             )}
             <div className="space-y-2">
               {locations.map((location) => (
@@ -333,15 +342,17 @@ export function AgendaPage() {
               <Users className="size-4" />
               Recursos
             </h3>
-            {resourcesQuery.isLoading && (
-              <p className="text-xs text-primary-light">Cargando recursos...</p>
-            )}
+            {resourcesQuery.isLoading && <LoadingState message="Cargando recursos..." />}
             {resources.length === 0 && !resourcesQuery.isLoading && (
-              <p className="text-xs text-primary-light">
-                {selectedLocations.length === 0
-                  ? "Seleccioná un local para ver recursos."
-                  : "No hay recursos en el local seleccionado."}
-              </p>
+              <EmptyState
+                icon={Users}
+                title="Sin recursos"
+                description={
+                  selectedLocations.length === 0
+                    ? "Seleccioná un local para ver recursos."
+                    : "No hay recursos activos en la selección actual."
+                }
+              />
             )}
             <div className="space-y-1">
               {resources.map((resource) => (
@@ -377,29 +388,13 @@ export function AgendaPage() {
 
         {/* Main calendar board */}
         <div>
-          {feedback && (
-            <div
-              className={`mb-4 rounded-lg border p-3 ${
-                feedback.tone === "success"
-                  ? "border-success bg-success/10 text-success-dark"
-                  : "border-red-300 bg-red-50 text-red-700"
-              }`}
-            >
-              <p className="text-sm">{feedback.message}</p>
-            </div>
-          )}
+          {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
 
           {errorMessage && (
-            <PageCard className="mb-4">
-              <p className="text-sm text-red-600">{errorMessage}</p>
-            </PageCard>
+            <ErrorState title="No se pudo cargar la agenda" message={errorMessage} onRetry={() => void bookingsQuery.refetch()} />
           )}
 
-          {bookingsQuery.isLoading && (
-            <PageCard>
-              <p className="text-center text-sm text-primary-light">Cargando agenda...</p>
-            </PageCard>
-          )}
+          {bookingsQuery.isLoading && <LoadingState message="Cargando agenda..." />}
 
           {!bookingsQuery.isLoading && viewMode === "week" && (
             <PageCard className="overflow-x-auto">
@@ -429,16 +424,20 @@ export function AgendaPage() {
                           </p>
                         </div>
                         <div className="p-2 min-h-[400px]">
-                          {dayBookings.map((booking) => (
-                            <BookingCard
-                              key={booking.id}
-                              booking={booking}
-                              onStatusChange={(id, status) =>
-                                updateStatusMutation.mutate({ id, status })
-                              }
-                              onDelete={(id) => deleteMutation.mutate(id)}
-                            />
-                          ))}
+                          {dayBookings.length === 0 ? (
+                            <p className="text-center text-xs text-primary-light">Sin turnos</p>
+                          ) : (
+                            dayBookings.map((booking) => (
+                              <BookingCard
+                                key={booking.id}
+                                booking={booking}
+                                onStatusChange={(id, status) =>
+                                  updateStatusMutation.mutate({ id, status })
+                                }
+                                onDelete={(id) => deleteMutation.mutate(id)}
+                              />
+                            ))
+                          )}
                         </div>
                       </div>
                     );
@@ -449,11 +448,11 @@ export function AgendaPage() {
           )}
 
           {!bookingsQuery.isLoading && (viewMode === "day" || viewMode === "month") && (
-            <PageCard>
-              <p className="text-center text-sm text-primary-light">
-                Vista de {viewMode === "day" ? "día" : "mes"} - Próximamente
-              </p>
-            </PageCard>
+            <EmptyState
+              icon={CalendarDays}
+              title="Vista en preparación"
+              description={`La vista de ${viewMode === "day" ? "día" : "mes"} estará disponible en próximos slices.`}
+            />
           )}
         </div>
       </div>

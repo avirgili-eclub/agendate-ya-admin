@@ -16,11 +16,16 @@ import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { UserFormModal } from "@/features/users/user-form-modal";
+import { LoadingState } from "@/shared/ui/loading-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 
 export function UsersPage() {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState<UserItem | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const { data: users = [], isLoading, error } = useQuery({
     queryKey: ["users"],
@@ -32,6 +37,10 @@ export function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setIsFormOpen(false);
+      setFeedback({ tone: "success", message: "Usuario creado correctamente." });
+    },
+    onError: (error) => {
+      setFeedback({ tone: "error", message: toUsersFriendlyMessage(error as unknown as AppError) });
     },
   });
 
@@ -40,6 +49,10 @@ export function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setConfirmDeactivate(null);
+      setFeedback({ tone: "success", message: "Usuario desactivado correctamente." });
+    },
+    onError: (error) => {
+      setFeedback({ tone: "error", message: toUsersFriendlyMessage(error as unknown as AppError) });
     },
   });
 
@@ -76,33 +89,27 @@ export function UsersPage() {
         </Button>
       </header>
 
+      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+
       {/* Error State */}
       {error && (
-        <PageCard>
-          <div className="text-center text-sm text-red-600">
-            {toUsersFriendlyMessage(error as unknown as AppError)}
-          </div>
-        </PageCard>
+        <ErrorState
+          title="Error al cargar usuarios"
+          message={toUsersFriendlyMessage(error as unknown as AppError)}
+          onRetry={() => void queryClient.invalidateQueries({ queryKey: ["users"] })}
+        />
       )}
 
       {/* Loading State */}
-      {isLoading && (
-        <PageCard>
-          <div className="text-center text-sm text-primary-light">Cargando usuarios...</div>
-        </PageCard>
-      )}
+      {isLoading && <LoadingState message="Cargando usuarios..." />}
 
       {/* Empty State */}
       {!isLoading && !error && users.length === 0 && (
-        <PageCard>
-          <div className="py-12 text-center">
-            <UserCircle className="mx-auto size-12 text-neutral-dark" />
-            <h3 className="mt-4 text-base font-semibold text-primary">No hay usuarios</h3>
-            <p className="mt-2 text-sm text-primary-light">
-              Comienza agregando tu primer usuario del equipo.
-            </p>
-          </div>
-        </PageCard>
+        <EmptyState
+          icon={UserCircle}
+          title="Sin usuarios"
+          description="Comienza agregando tu primer usuario del equipo."
+        />
       )}
 
       {/* Active Users */}
