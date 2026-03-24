@@ -12,7 +12,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
         <input
           type={showPassword ? "text" : "password"}
           className={cn(
-            "h-11 w-full rounded-md border border-neutral-dark px-3 pr-11 outline-none ring-primary-light focus:ring-2",
+            "h-11 w-full rounded-md border border-neutral-dark bg-white px-3 pr-11 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2",
             className
           )}
           ref={ref}

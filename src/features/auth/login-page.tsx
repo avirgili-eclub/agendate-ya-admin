@@ -5,6 +5,8 @@ import type { AppError } from "@/core/errors/app-error";
 import { login } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
+import { AuthLayout } from "./components/auth-layout";
+import { GoogleButton } from "./components/google-button";
 
 function toFriendlyLoginMessage(appError: AppError) {
   if (
@@ -53,59 +55,77 @@ export function LoginPage() {
   }
 
   return (
-    <section className="mx-auto mt-10 w-full max-w-md rounded-xl border border-neutral-dark bg-neutral-light p-6 shadow-sm">
-      <h1 className="text-2xl font-semibold text-primary">Iniciar sesion</h1>
-      <p className="mt-1 text-sm text-primary-light">Accede al panel administrador.</p>
-      {import.meta.env.DEV ? (
-        <p className="mt-1 text-xs text-primary-light">Bypass local habilitado: email admin@admin.com, contrasena admin123.</p>
-      ) : null}
+    <AuthLayout>
+      <div>
+        <h1 className="text-3xl font-bold text-primary">Bienvenido de vuelta</h1>
+        <p className="mt-2 text-sm text-primary-light">Ingresa tus credenciales para acceder al panel administrador.</p>
 
-      {sessionExpired ? (
-        <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
-          Tu sesion expiro. Inicia sesion nuevamente.
+        {sessionExpired ? (
+          <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
+            Tu sesion expiro. Inicia sesion nuevamente.
+          </div>
+        ) : null}
+
+        {error ? (
+          <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="mt-6">
+          <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+            Continuar con Google
+          </GoogleButton>
         </div>
-      ) : null}
 
-      {error ? (
-        <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
-      ) : null}
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-neutral-dark" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-neutral px-2 text-primary-light">O continua con email</span>
+          </div>
+        </div>
 
-      <form className="mt-5 space-y-4" onSubmit={onSubmit}>
-        <label className="block">
-          <span className="mb-1 block text-sm text-primary-dark">Email</span>
-          <input
-            className="h-10 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
-            name="email"
-            autoComplete="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-primary-dark">Email</span>
+            <input
+              className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
+              name="email"
+              autoComplete="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              required
+            />
+          </label>
 
-        <label className="block">
-          <span className="mb-1 block text-sm text-primary-dark">Contrasena</span>
-          <PasswordInput
-            name="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
+          <label className="block">
+            <span className="mb-1 block text-sm font-medium text-primary-dark">Contraseña</span>
+            <PasswordInput
+              name="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </label>
 
-        <Button className="w-full" type="submit" disabled={isLoading}>
-          {isLoading ? "Ingresando..." : "Ingresar"}
-        </Button>
+          <Button className="w-full" type="submit" disabled={isLoading} size="lg">
+            {isLoading ? "Ingresando..." : "Ingresar"}
+          </Button>
 
-        <Link
-          to="/registro"
-          className="block w-full rounded-md border border-primary/30 px-3 py-2 text-center text-sm font-medium text-primary transition hover:border-primary hover:bg-primary/5"
-        >
-          Crear cuenta nueva
-        </Link>
-      </form>
-    </section>
+          <p className="text-center text-sm text-primary-light">
+            ¿Todavía no tienes una cuenta?{" "}
+            <Link to="/registro" className="font-medium text-secondary hover:text-secondary-light transition">
+              Regístrate
+            </Link>
+          </p>
+        </form>
+      </div>
+    </AuthLayout>
   );
 }

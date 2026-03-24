@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import { AuthLayout } from "./components/auth-layout";
+import { GoogleButton } from "./components/google-button";
 
 type RegisterStep = 1 | 2;
 
@@ -252,51 +254,74 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="relative mx-auto mt-6 w-full max-w-3xl overflow-hidden rounded-2xl border border-neutral-dark bg-neutral-light p-6 shadow-sm md:mt-12 md:p-8">
-      <div className="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-secondary/20 blur-2xl" />
-      <div className="pointer-events-none absolute -bottom-16 -left-12 h-48 w-48 rounded-full bg-primary/15 blur-2xl" />
-
-      <div className="relative z-10">
-        <p className="text-xs font-semibold uppercase tracking-wide text-primary-light">Onboarding AgendateYA</p>
-        <h1 className="mt-2 text-3xl font-semibold text-primary">Crea tu cuenta en minutos</h1>
-        <p className="mt-2 text-sm text-primary-light">
-          Configuramos tu negocio, tu sede principal y tu usuario administrador en un unico flujo.
-        </p>
-
-        <div className="mt-5 h-2 w-full rounded-full bg-neutral-dark">
-          <div
-            className="h-2 rounded-full bg-secondary transition-all duration-500"
-            style={{ width: progressWidth }}
-          />
+    <AuthLayout showTestimonial={false}>
+      <div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-secondary">Onboarding AgendateYA</p>
+          <h1 className="mt-2 text-3xl font-bold text-primary">Crea tu cuenta</h1>
+          <p className="mt-2 text-sm text-primary-light">
+            Configuramos tu negocio, tu sede y tu usuario en un único flujo.
+          </p>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-xs font-medium text-primary-light">
-          <span className={step === 1 ? "text-primary" : undefined}>Paso 1: Negocio</span>
-          <span className={step === 2 ? "text-primary" : undefined}>Paso 2: Sede y admin</span>
+        {/* Barra de progreso */}
+        <div className="mt-6">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-dark">
+            <div
+              className="h-full bg-secondary transition-all duration-500"
+              style={{ width: progressWidth }}
+            />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-xs font-medium text-primary-light">
+            <span className={step === 1 ? "text-primary" : undefined}>Paso 1: Negocio</span>
+            <span className={step === 2 ? "text-primary" : undefined}>Paso 2: Sede y admin</span>
+          </div>
         </div>
 
         {error ? (
-          <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+          <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </div>
         ) : null}
+
+        {step === 2 && (
+          <div className="mt-6">
+            <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+              Continuar con Google
+            </GoogleButton>
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-neutral-dark" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-neutral px-2 text-primary-light">O completa el formulario</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form className="mt-6" onSubmit={onSubmit}>
           {step === 1 ? (
-            <div className="animate-step-in grid grid-cols-1 gap-4 md:grid-cols-2">
-              <label className="block md:col-span-2">
-                <span className="mb-1 block text-sm text-primary-dark">Nombre del negocio</span>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre del negocio</span>
                 <input
-                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
                   name="businessName"
                   autoComplete="organization"
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="Mi Barberia"
+                  placeholder="Mi Barbería"
                 />
-                {fieldErrors.businessName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.businessName}</span> : null}
+                {fieldErrors.businessName ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.businessName}
+                  </span>
+                ) : null}
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Tipo de negocio</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Tipo de negocio</span>
                 <Select value={businessType} onValueChange={(value) => setBusinessType(value as "SERVICE" | "HOSPITALITY")}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona tipo" />
@@ -309,7 +334,7 @@ export function RegisterPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Zona horaria</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Zona horaria</span>
                 <Select value={timezone} onValueChange={setTimezone}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona zona horaria" />
@@ -322,15 +347,23 @@ export function RegisterPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {fieldErrors.timezone ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.timezone}</span> : null}
+                {fieldErrors.timezone ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.timezone}
+                  </span>
+                ) : null}
               </label>
 
-              <div className="md:col-span-2 mt-2 flex justify-between gap-2">
-                <Link to="/login" className="text-sm font-medium text-primary-light transition hover:text-primary">
+              <div className="flex justify-between gap-3 pt-2">
+                <Link
+                  to="/login"
+                  className="text-sm font-medium text-primary-light transition hover:text-primary"
+                >
                   Ya tengo cuenta
                 </Link>
                 <Button
                   type="button"
+                  size="lg"
                   onClick={() => {
                     setError(null);
                     if (!validateStep1()) {
@@ -344,22 +377,43 @@ export function RegisterPage() {
               </div>
             </div>
           ) : (
-            <div className="animate-step-in grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-4">
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Nombre de la sede</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre de la sede</span>
                 <input
-                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
                   name="locationName"
                   autoComplete="organization"
                   value={locationName}
                   onChange={(e) => setLocationName(e.target.value)}
                   placeholder="Sede Principal"
                 />
-                {fieldErrors.locationName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationName}</span> : null}
+                {fieldErrors.locationName ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.locationName}
+                  </span>
+                ) : null}
               </label>
 
-              <label className="block md:col-span-1">
-                <span className="mb-1 block text-sm text-primary-dark">Telefono de contacto</span>
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Dirección</span>
+                <input
+                  className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
+                  name="locationAddress"
+                  autoComplete="street-address"
+                  value={locationAddress}
+                  onChange={(e) => setLocationAddress(e.target.value)}
+                  placeholder="Av. Mariscal Lopez 1234"
+                />
+                {fieldErrors.locationAddress ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.locationAddress}
+                  </span>
+                ) : null}
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Teléfono de contacto</span>
                 <div className="register-phone-wrapper ring-primary-light focus-within:ring-2">
                   <PhoneInput
                     defaultCountry="py"
@@ -393,39 +447,34 @@ export function RegisterPage() {
                     }}
                   />
                 </div>
-                {fieldErrors.locationPhone ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationPhone}</span> : null}
-              </label>
-
-              <label className="block md:col-span-2">
-                <span className="mb-1 block text-sm text-primary-dark">Direccion</span>
-                <input
-                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
-                  name="locationAddress"
-                  autoComplete="street-address"
-                  value={locationAddress}
-                  onChange={(e) => setLocationAddress(e.target.value)}
-                  placeholder="Av. Mariscal Lopez 1234"
-                />
-                {fieldErrors.locationAddress ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.locationAddress}</span> : null}
+                {fieldErrors.locationPhone ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.locationPhone}
+                  </span>
+                ) : null}
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Tu nombre completo</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Tu nombre completo</span>
                 <input
-                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
                   name="fullName"
                   autoComplete="name"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Juan Perez"
                 />
-                {fieldErrors.fullName ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.fullName}</span> : null}
+                {fieldErrors.fullName ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.fullName}
+                  </span>
+                ) : null}
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Email administrador</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Email administrador</span>
                 <input
-                  className="h-11 w-full rounded-md border border-neutral-dark px-3 outline-none ring-primary-light focus:ring-2"
+                  className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
                   name="adminEmail"
                   autoComplete="email"
                   value={email}
@@ -433,21 +482,29 @@ export function RegisterPage() {
                   type="email"
                   placeholder="admin@minegocio.com"
                 />
-                {fieldErrors.email ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.email}</span> : null}
+                {fieldErrors.email ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.email}
+                  </span>
+                ) : null}
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Contrasena</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Contraseña</span>
                 <PasswordInput
                   name="adminPassword"
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onBlur={() => setPasswordTouched(true)}
-                  placeholder="Minimo 8 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                 />
-                {fieldErrors.password ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.password}</span> : null}
-                <p className="mt-1 text-xs text-primary-light">* Tu contrasena debe cumplir:</p>
+                {fieldErrors.password ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.password}
+                  </span>
+                ) : null}
+                <p className="mt-1 text-xs text-primary-light">Tu contraseña debe cumplir:</p>
                 <ul className="mt-1 space-y-1">
                   {passwordRequirementStatus.map((ruleStatus) => (
                     <li
@@ -467,29 +524,33 @@ export function RegisterPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm text-primary-dark">Confirmar contrasena</span>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Confirmar contraseña</span>
                 <PasswordInput
                   name="adminPasswordConfirm"
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirma tu contrasena"
+                  placeholder="Confirma tu contraseña"
                 />
-                {fieldErrors.confirmPassword ? <span role="alert" className="mt-1 block text-xs text-red-700">{fieldErrors.confirmPassword}</span> : null}
+                {fieldErrors.confirmPassword ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.confirmPassword}
+                  </span>
+                ) : null}
               </label>
 
-              <div className="md:col-span-2 mt-2 flex items-center justify-between gap-2">
-                <Button type="button" variant="outline" onClick={() => setStep(1)}>
+              <div className="flex items-center justify-between gap-3 pt-2">
+                <Button type="button" variant="outline" size="lg" onClick={() => setStep(1)}>
                   Volver
                 </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? "Creando cuenta..." : "Crear cuenta e ingresar"}
+                <Button type="submit" size="lg" disabled={isLoading}>
+                  {isLoading ? "Creando..." : "Crear cuenta"}
                 </Button>
               </div>
             </div>
           )}
         </form>
       </div>
-    </section>
+    </AuthLayout>
   );
 }
