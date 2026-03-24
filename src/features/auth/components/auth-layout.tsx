@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TestimonialCarousel } from "./testimonial-carousel";
 
 type AuthLayoutProps = {
   children: ReactNode;
@@ -9,33 +10,24 @@ export function AuthLayout({ children, showTestimonial = true }: AuthLayoutProps
   return (
     <div className="flex min-h-screen">
       {/* Panel izquierdo: Branding (azul) */}
-      <aside className="hidden w-1/2 bg-primary lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <aside className="hidden w-1/2 bg-primary lg:flex lg:flex-col lg:p-12 lg:relative">
         <div>
           <div className="flex items-center gap-2">
             <div className="h-10 w-10 rounded-lg bg-secondary" />
             <h2 className="text-2xl font-bold text-white">AgendateYA</h2>
           </div>
-          <p className="mt-3 text-lg text-primary-light">
+          <p className="mt-3 text-lg text-white/90">
             La forma más simple de gestionar citas y reservas para tu negocio.
           </p>
         </div>
 
         {showTestimonial && (
-          <div className="mt-auto">
-            <blockquote className="rounded-2xl bg-primary-light/20 p-6">
-              <p className="text-base italic text-white">
-                "AgendateYA transformó la forma en que gestionamos las citas en nuestra barbería. Ahora podemos
-                enfocarnos en lo que realmente importa: nuestros clientes."
-              </p>
-              <footer className="mt-4">
-                <p className="text-sm font-semibold text-white">Carlos Mendoza</p>
-                <p className="text-xs text-primary-light">Dueño, Barbería Elite - Asunción</p>
-              </footer>
-            </blockquote>
+          <div className="flex flex-1 items-center">
+            <TestimonialCarousel />
           </div>
         )}
 
-        <div className="mt-8">
+        <div className="mt-auto">
           <p className="text-xs text-primary-light">© 2026 AgendateYA. Todos los derechos reservados.</p>
         </div>
       </aside>
