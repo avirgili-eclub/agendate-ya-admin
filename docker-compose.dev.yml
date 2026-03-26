@@ -1,0 +1,29 @@
+services:
+  agendateya-admin:
+    image: ghcr.io/${GITHUB_REPO:-your-org/agendate-ya-admin}:dev-current
+    container_name: agendateya-admin-dev
+    labels:
+      - traefik.enable=true
+      # HTTPS router — catch-all for the host (lower priority than backend API)
+      - traefik.http.routers.agendateya-admin-dev.rule=Host(`${ADMIN_HOST}`)
+      - traefik.http.routers.agendateya-admin-dev.entrypoints=websecure
+      - traefik.http.routers.agendateya-admin-dev.tls=true
+      - traefik.http.routers.agendateya-admin-dev.tls.certresolver=letsencrypt
+      - traefik.http.routers.agendateya-admin-dev.priority=1
+      - traefik.http.services.agendateya-admin-dev.loadbalancer.server.port=80
+      # HTTP → HTTPS redirect
+      - traefik.http.routers.agendateya-admin-dev-http.rule=Host(`${ADMIN_HOST}`)
+      - traefik.http.routers.agendateya-admin-dev-http.entrypoints=web
+      - traefik.http.routers.agendateya-admin-dev-http.middlewares=redirect-to-https
+      - traefik.docker.network=alva-network
+    networks:
+      - alva-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+networks:
+  alva-network:
+    external: true

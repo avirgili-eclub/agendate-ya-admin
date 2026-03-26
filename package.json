@@ -2,6 +2,7 @@
   "name": "agendate-ya-admin",
   "version": "1.0.0",
   "scripts": {
+    "build": "vite build",
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 4173",
     "typecheck": "tsc --noEmit",
