@@ -1,8 +1,8 @@
+@import "./theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import "./theme.css";
 
 @layer base {
   html,
@@ -211,13 +211,55 @@
     }
   }
 
-  @keyframes fade-in,
-  @keyframes fade-out,
-  @keyframes zoom-in,
-  @keyframes zoom-out,
-  @keyframes slide-in-from-top,
-  @keyframes slide-in-from-bottom,
-  @keyframes slide-in-from-left,
+  @keyframes fade-in {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes fade-out {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes zoom-in {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes zoom-out {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes slide-in-from-top {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes slide-in-from-bottom {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes slide-in-from-left {
+    from,
+    to {
+      transform: none;
+    }
+  }
+
   @keyframes slide-in-from-right {
     from,
     to {
