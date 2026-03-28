@@ -1,6 +1,6 @@
 services:
   agendateya-admin:
-    image: ghcr.io/${GITHUB_REPO:-your-org/agendate-ya-admin}:dev-current
+    image: ghcr.io/avirgili-eclub/agendate-ya-admin:dev-current
     container_name: agendateya-admin-dev
     labels:
       - traefik.enable=true

@@ -80,12 +80,12 @@ jobs:
             docker tag ghcr.io/${{ github.repository }}:main ghcr.io/${{ github.repository }}:dev-current
 
             # Restart frontend container
-            docker compose -f docker-compose.dev.yml up -d --no-deps agendateya-admin
+            docker compose -f docker-compose.dev.yml --env-file .env.dev up -d --no-deps agendateya-admin
 
             # Health check (30 attempts, 2s apart = 60s max)
             echo "Waiting for frontend to be healthy..."
             for i in $(seq 1 30); do
-              if docker exec agendateya-admin-dev wget --no-verbose --tries=1 --spider http://localhost/health 2>/dev/null; then
+              if docker exec agendateya-admin-dev wget --no-verbose --tries=1 --spider http://127.0.0.1/health 2>/dev/null; then
                 echo "Frontend is healthy!"
                 exit 0
               fi
