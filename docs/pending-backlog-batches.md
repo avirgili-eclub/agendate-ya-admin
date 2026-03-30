@@ -51,6 +51,7 @@ Referencia de contrato para implementacion:
 - [x] Mostrar formato visual:
   - [x] Hora inicio - hora fin
   - [x] Nombre del cliente
+  - [x] Icono WhatsApp junto al cliente para contacto rapido
   - [x] Servicio elegido
   - [x] Nota solo si existe
 - [x] Respetar colores por estado del turno para referencia visual consistente.
@@ -145,6 +146,7 @@ Estado actual: parcial (Batch A en progreso)
 - [x] A-14 Manejo de errores 400/401/403 del endpoint calendario
 - [x] A-15 Mapeo final de card calendario segun contrato (timezone local + nota opcional)
 - [ ] A-16 Verificacion QA de comportamiento esperado del endpoint calendario
+- [x] A-17 Accion manual WhatsApp Web desde card (mensaje prearmado con contexto)
 
 ### Batch B (Locales)
 

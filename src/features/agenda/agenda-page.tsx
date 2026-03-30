@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type FormEvent } from "react";
-import { Plus, ChevronLeft, ChevronRight, MapPin, Users, CalendarDays } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, MapPin, Users, CalendarDays, MessageCircle } from "lucide-react";
 import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -24,6 +24,7 @@ import {
   getBookingErrorMessage,
   type CreateBookingInput,
 } from "@/features/bookings/bookings-service";
+import { fetchTenantInfo } from "@/features/tenant/tenant-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -92,9 +93,45 @@ type BookingCardProps = {
   booking: BookingCardItem;
   onStatusChange: (id: string, status: BookingStatus) => void;
   onDelete: (id: string) => void;
+  businessName: string;
+  timezone: string;
 };
 
-function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
+function normalizeWhatsappPhone(phone: string): string {
+  return phone.replace(/\D/g, "");
+}
+
+function formatBookingDateTime(isoString: string, timezone: string): string {
+  return new Intl.DateTimeFormat("es-PY", {
+    timeZone: timezone,
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(isoString));
+}
+
+function buildWhatsappMessage(
+  booking: BookingCardItem,
+  businessName: string,
+  timezone: string,
+): string {
+  const formattedDateTime = formatBookingDateTime(booking.startTime, timezone);
+
+  return [
+    businessName,
+    `Hola ${booking.clientName}! Esperamos que estes muy bien.`,
+    `Queremos confirmar si asistiras a tu turno del ${formattedDateTime}.`,
+    `Servicio: ${booking.serviceName}`,
+    `Profesional: ${booking.resourceName}`,
+    "Quedamos atentos. Muchas gracias!",
+  ].join("\n");
+}
+
+function BookingCard({ booking, onStatusChange, onDelete, businessName, timezone }: BookingCardProps) {
   const [showActions, setShowActions] = useState(false);
   const validTransitions = getValidStatusTransitions(booking.status).filter(
     (status) => status !== "CANCELLED",
@@ -113,6 +150,21 @@ function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
     danger: "bg-red-600",
   };
 
+  const whatsappPhone = booking.clientPhone ? normalizeWhatsappPhone(booking.clientPhone) : "";
+
+  const handleOpenWhatsapp = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+
+    if (!whatsappPhone) {
+      return;
+    }
+
+    const message = buildWhatsappMessage(booking, businessName, timezone);
+    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div
       className={`group relative mb-2 cursor-pointer rounded-lg border border-neutral-dark bg-white p-2 shadow-sm transition-all hover:shadow-md ${accentByTone[tone]}`}
@@ -128,9 +180,21 @@ function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
             {getStatusLabel(booking.status)}
           </span>
         </div>
-        <p className="truncate text-xs font-medium text-primary" title={booking.clientName}>
-          {booking.clientName}
-        </p>
+        <div className="flex min-w-0 items-center gap-1">
+          <p className="truncate text-xs font-medium text-primary" title={booking.clientName}>
+            {booking.clientName}
+          </p>
+          <button
+            type="button"
+            onClick={handleOpenWhatsapp}
+            disabled={!whatsappPhone}
+            className="inline-flex size-4 shrink-0 items-center justify-center rounded text-green-600 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:text-neutral-dark"
+            aria-label={`Enviar WhatsApp a ${booking.clientName}`}
+            title={whatsappPhone ? "Enviar mensaje por WhatsApp" : "Cliente sin teléfono"}
+          >
+            <MessageCircle className="size-3" />
+          </button>
+        </div>
         <p className="truncate text-xs text-primary-light" title={booking.serviceName}>
           {booking.serviceName}
         </p>
@@ -464,6 +528,11 @@ export function AgendaPage() {
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   const locationsQuery = useLocationsQuery();
+  const tenantQuery = useQuery({
+    queryKey: ["tenant-info"],
+    queryFn: fetchTenantInfo,
+    staleTime: 300_000,
+  });
 
   const resourcesByLocationQueries = useQueries({
     queries: selectedLocations.map((locationId) => ({
@@ -494,6 +563,8 @@ export function AgendaPage() {
 
   const hasResourcesError = resourcesByLocationQueries.some((query) => query.isError);
   const isResourcesLoading = resourcesByLocationQueries.some((query) => query.isLoading);
+  const businessName = tenantQuery.data?.name ?? "AgendateYA";
+  const tenantTimezone = tenantQuery.data?.timezone ?? "America/Asuncion";
 
   const weekDays = useMemo(() => getWeekDays(currentWeek), [currentWeek]);
 
@@ -825,6 +896,8 @@ export function AgendaPage() {
                               <BookingCard
                                 key={booking.id}
                                 booking={booking}
+                                businessName={businessName}
+                                timezone={tenantTimezone}
                                 onStatusChange={(id, status) =>
                                   updateStatusMutation.mutate({ id, status })
                                 }
