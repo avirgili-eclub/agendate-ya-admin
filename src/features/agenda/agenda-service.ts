@@ -149,6 +149,38 @@ export async function fetchBookings(params: BookingListParams): Promise<BookingL
   };
 }
 
+export type CalendarBookingsParams = {
+  resourceIds: string[];
+  startDate: string;
+  endDate: string;
+  statuses?: BookingStatus[];
+};
+
+export async function fetchCalendarBookings(params: CalendarBookingsParams): Promise<BookingCardItem[]> {
+  if (params.endDate < params.startDate) {
+    throw toAppError({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "La fecha final no puede ser anterior a la fecha inicial.",
+    });
+  }
+
+  const searchParams = new URLSearchParams({
+    resourceIds: params.resourceIds.join(","),
+    startDate: params.startDate,
+    endDate: params.endDate,
+    statuses: (params.statuses && params.statuses.length > 0
+      ? params.statuses
+      : ["PENDING", "CONFIRMED"]).join(","),
+  });
+
+  const response = await httpRequest<DataEnvelope<ApiBooking[]>>(
+    `/bookings/calendar?${searchParams.toString()}`,
+  );
+
+  return unwrapData<ApiBooking[]>(response).map(mapApiBookingToCard);
+}
+
 export async function fetchLocations(): Promise<LocationItem[]> {
   const response = await httpRequest<DataEnvelope<ApiLocation[]>>("/locations");
   return unwrapData<ApiLocation[]>(response).map(mapApiLocationToItem);
@@ -226,6 +258,14 @@ export function toAgendaFriendlyMessage(error: AppError): string {
 
   if (error.status === 409) {
     return "Conflicto detectado: puede haber un turno superpuesto. Verifica los horarios.";
+  }
+
+  if (error.status === 401) {
+    return "Tu sesión expiró o no es válida. Inicia sesión nuevamente para continuar.";
+  }
+
+  if (error.status === 403) {
+    return "No tienes permisos para ver esta agenda.";
   }
 
   if (error.status === 404) {

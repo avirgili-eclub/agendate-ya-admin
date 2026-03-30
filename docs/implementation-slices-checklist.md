@@ -312,3 +312,7 @@ Mobile improvements: button groups use flex-wrap, pagination controls stack on m
 - [ ] Files changed listed
 - [ ] QA checks run and reported
 - [ ] Risks and follow-ups documented
+
+## Active Backlog Tracking
+
+- [x] Batch backlog synced and tracked in docs/pending-backlog-batches.md

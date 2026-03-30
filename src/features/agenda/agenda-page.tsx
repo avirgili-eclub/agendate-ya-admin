@@ -1,9 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, type FormEvent } from "react";
 import { Plus, ChevronLeft, ChevronRight, MapPin, Users, CalendarDays } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
+import { PhoneInput } from "react-international-phone";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import "react-international-phone/style.css";
 
 import type { AppError } from "@/core/errors/app-error";
-import { useBookingsQuery, useLocationsQuery, useLocationResourcesQuery } from "@/features/agenda/use-agenda-query";
+import { useCalendarBookingsQuery, useLocationsQuery } from "@/features/agenda/use-agenda-query";
 import {
   updateBookingStatus,
   deleteBooking,
@@ -11,9 +14,16 @@ import {
   getStatusLabel,
   getStatusTone,
   getValidStatusTransitions,
+  fetchLocationResources,
   type BookingCardItem,
   type BookingStatus,
 } from "@/features/agenda/agenda-service";
+import {
+  createBooking,
+  fetchBookingServicesCatalog,
+  getBookingErrorMessage,
+  type CreateBookingInput,
+} from "@/features/bookings/bookings-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -22,6 +32,8 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
+import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 
 type ViewMode = "week" | "day" | "month";
 
@@ -69,6 +81,13 @@ function formatTime(isoString: string): string {
   }).format(new Date(isoString));
 }
 
+function formatDateParam(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 type BookingCardProps = {
   booking: BookingCardItem;
   onStatusChange: (id: string, status: BookingStatus) => void;
@@ -78,21 +97,42 @@ type BookingCardProps = {
 function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
   const [showActions, setShowActions] = useState(false);
   const validTransitions = getValidStatusTransitions(booking.status);
+  const tone = getStatusTone(booking.status);
+  const accentByTone: Record<typeof tone, string> = {
+    success: "border-l-4 border-l-green-500",
+    warning: "border-l-4 border-l-amber-500",
+    neutral: "border-l-4 border-l-slate-400",
+    danger: "border-l-4 border-l-red-500",
+  };
 
   return (
     <div
-      className="group relative mb-2 cursor-pointer rounded-lg border border-neutral-dark bg-white p-2 shadow-sm transition-all hover:shadow-md"
+      className={`group relative mb-2 cursor-pointer rounded-lg border border-neutral-dark bg-white p-2 shadow-sm transition-all hover:shadow-md ${accentByTone[tone]}`}
       onClick={() => setShowActions(!showActions)}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-primary truncate">{booking.clientName}</p>
-          <p className="text-xs text-primary-light truncate">{booking.serviceName}</p>
-          <p className="text-xs text-primary-light">
-            {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+      <div className="min-w-0 space-y-1">
+        <p className="text-xs font-semibold text-primary">
+          {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+        </p>
+        <StatusChip
+          label={getStatusLabel(booking.status)}
+          tone={getStatusTone(booking.status)}
+          className="w-fit max-w-full whitespace-nowrap px-2 py-0.5 text-[10px] normal-case tracking-normal"
+        />
+        <p className="truncate text-xs font-medium text-primary" title={booking.clientName}>
+          {booking.clientName}
+        </p>
+        <p className="truncate text-xs text-primary-light" title={booking.serviceName}>
+          {booking.serviceName}
+        </p>
+        <p className="truncate text-[11px] text-primary-light" title={booking.resourceName}>
+          Prof.: {booking.resourceName}
+        </p>
+        {booking.notes && (
+          <p className="line-clamp-2 text-[11px] text-primary-light" title={booking.notes}>
+            Nota: {booking.notes}
           </p>
-        </div>
-        <StatusChip label={getStatusLabel(booking.status)} tone={getStatusTone(booking.status)} />
+        )}
       </div>
 
       {showActions && validTransitions.length > 0 && (
@@ -128,32 +168,356 @@ function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
   );
 }
 
+type AgendaCreateBookingFormProps = {
+  initialLocationId?: string;
+  onClose: () => void;
+  onCreated: () => void;
+};
+
+function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: AgendaCreateBookingFormProps) {
+  const queryClient = useQueryClient();
+
+  const [locationId, setLocationId] = useState(initialLocationId ?? "");
+  const [resourceId, setResourceId] = useState("");
+  const [serviceId, setServiceId] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("+595");
+  const [clientEmail, setClientEmail] = useState("");
+  const [date, setDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [notes, setNotes] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (initialLocationId) {
+      setLocationId(initialLocationId);
+    }
+  }, [initialLocationId]);
+
+  const locationsQuery = useLocationsQuery();
+
+  const resourcesQuery = useQuery({
+    queryKey: ["agenda", "resources", locationId],
+    queryFn: () => fetchLocationResources(locationId),
+    enabled: !!locationId,
+    staleTime: 60_000,
+  });
+
+  const servicesQuery = useQuery({
+    queryKey: ["bookings", "services"],
+    queryFn: fetchBookingServicesCatalog,
+    staleTime: 60_000,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (input: CreateBookingInput) => createBooking(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
+      setFormError(null);
+      setFieldErrors({});
+      onCreated();
+      onClose();
+    },
+    onError: (error: AppError) => {
+      setFieldErrors(extractFieldErrors(error));
+      setFormError(getBookingErrorMessage(error));
+    },
+  });
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFormError(null);
+    setFieldErrors({});
+
+    const validationErrors: Record<string, string> = {};
+    if (!locationId) {
+      validationErrors.locationId = "Debes seleccionar un local.";
+    }
+    if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
+      validationErrors.clientPhone = "Ingresa un telefono valido.";
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      return;
+    }
+
+    createMutation.mutate({
+      resourceId,
+      serviceId,
+      clientName,
+      clientPhone,
+      clientEmail: clientEmail || undefined,
+      date,
+      startTime,
+      notes: notes || undefined,
+    });
+  }
+
+  const locations = locationsQuery.data?.filter((location) => location.active) ?? [];
+  const resources = resourcesQuery.data?.filter((resource) => resource.active) ?? [];
+  const services = servicesQuery.data?.filter((service) => service.active) ?? [];
+
+  return (
+    <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
+      {formError && (
+        <FeedbackBanner tone="error" message={formError} />
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre del cliente *</span>
+          <input
+            type="text"
+            value={clientName}
+            onChange={(e) => setClientName(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+            placeholder="Juan Perez"
+          />
+          {fieldErrors.clientName && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientName}</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Telefono *</span>
+          <div className={`register-phone-wrapper ${fieldErrors.clientPhone ? "!border-red-500" : ""}`}>
+            <PhoneInput
+              defaultCountry="py"
+              preferredCountries={["py", "ar", "br", "cl", "uy"]}
+              disableDialCodeAndPrefix
+              showDisabledDialCodeAndPrefix
+              defaultMask="(...) ... - ..."
+              placeholder="(981) 123 - 456"
+              value={clientPhone}
+              onChange={(phone) => setClientPhone(phone)}
+              className="register-phone-root"
+              inputClassName="register-phone-input"
+              inputProps={{
+                name: "clientPhone",
+                autoComplete: "tel",
+              }}
+              countrySelectorStyleProps={{
+                buttonClassName: "register-phone-country-button",
+                flagClassName: "register-phone-flag",
+                dropdownArrowClassName: "register-phone-country-arrow",
+                dropdownStyleProps: {
+                  className: "register-phone-country-dropdown",
+                  listItemClassName: "register-phone-country-item",
+                  listItemSelectedClassName: "register-phone-country-item-selected",
+                  listItemFocusedClassName: "register-phone-country-item-focused",
+                },
+              }}
+            />
+          </div>
+          {fieldErrors.clientPhone && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Email (opcional)</span>
+        <input
+          type="email"
+          value={clientEmail}
+          onChange={(e) => setClientEmail(e.target.value)}
+          className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          placeholder="cliente@ejemplo.com"
+        />
+      </label>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Local *</span>
+          <Select
+            value={locationId}
+            onValueChange={(value) => {
+              setLocationId(value);
+              setResourceId("");
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar local" />
+            </SelectTrigger>
+            <SelectContent>
+              {locations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {location.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldErrors.locationId && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.locationId}</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
+          <Select value={resourceId} onValueChange={setResourceId} disabled={!locationId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar recurso" />
+            </SelectTrigger>
+            <SelectContent>
+              {resources.map((resource) => (
+                <SelectItem key={resource.id} value={resource.id}>
+                  {resource.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {fieldErrors.resourceId && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.resourceId}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Servicio *</span>
+        <Select value={serviceId} onValueChange={setServiceId}>
+          <SelectTrigger>
+            <SelectValue placeholder="Seleccionar servicio" />
+          </SelectTrigger>
+          <SelectContent>
+            {services.map((service) => (
+              <SelectItem key={service.id} value={service.id}>
+                {service.name} ({service.durationMinutes} min)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {fieldErrors.serviceId && (
+          <span className="mt-1 block text-xs text-red-700">{fieldErrors.serviceId}</span>
+        )}
+      </label>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Fecha *</span>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          />
+          {fieldErrors.date && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.date}</span>
+          )}
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-primary-dark">Hora de inicio *</span>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
+          />
+          {fieldErrors.startTime && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.startTime}</span>
+          )}
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="mb-1 block text-sm font-medium text-primary-dark">Notas (opcional)</span>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          className="w-full rounded-md border border-neutral-dark px-3 py-2 text-sm outline-none ring-primary-light focus:ring-2"
+          placeholder="Informacion adicional sobre el turno"
+        />
+      </label>
+
+      <div className="flex justify-end gap-3 border-t border-neutral-dark pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={createMutation.isPending}>
+          {createMutation.isPending ? "Guardando..." : "Crear turno"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 export function AgendaPage() {
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+  const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [showNewBookingPanel, setShowNewBookingPanel] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
-  const bookingsQuery = useBookingsQuery({ page: 0, pageSize: 200 });
   const locationsQuery = useLocationsQuery();
 
-  // Get all resources for selected locations
-  const firstLocationId = selectedLocations.length > 0 ? selectedLocations[0] : null;
-  const resourcesQuery = useLocationResourcesQuery(firstLocationId);
+  const resourcesByLocationQueries = useQueries({
+    queries: selectedLocations.map((locationId) => ({
+      queryKey: ["agenda", "resources", locationId],
+      queryFn: () => fetchLocationResources(locationId),
+      staleTime: 60_000,
+    })),
+  });
 
   const locations = locationsQuery.data ?? [];
-  const resources = resourcesQuery.data ?? [];
-  const bookings = bookingsQuery.data?.data ?? [];
+  const resources = useMemo(() => {
+    const map = new Map<string, { id: string; locationId: string; name: string; active: boolean }>();
+
+    resourcesByLocationQueries.forEach((query) => {
+      const items = query.data ?? [];
+      items.forEach((resource) => {
+        map.set(resource.id, {
+          id: resource.id,
+          locationId: resource.locationId,
+          name: resource.name,
+          active: resource.active,
+        });
+      });
+    });
+
+    return Array.from(map.values()).filter((resource) => resource.active);
+  }, [resourcesByLocationQueries]);
+
+  const hasResourcesError = resourcesByLocationQueries.some((query) => query.isError);
+  const isResourcesLoading = resourcesByLocationQueries.some((query) => query.isLoading);
 
   const weekDays = useMemo(() => getWeekDays(currentWeek), [currentWeek]);
+
+  // Calcular rango de fechas del calendario visible (semana completa)
+  const calendarDateRange = useMemo(() => {
+    if (weekDays.length === 0) {
+      return { startDate: "", endDate: "" };
+    }
+    const startDate = formatDateParam(weekDays[0].date);
+    const endDate = formatDateParam(weekDays[weekDays.length - 1].date);
+    return { startDate, endDate };
+  }, [weekDays]);
+
+  // Query de calendario: solo se ejecuta si hay recursos seleccionados
+  const calendarBookingsQuery = useCalendarBookingsQuery({
+    resourceIds: selectedResources,
+    startDate: calendarDateRange.startDate,
+    endDate: calendarDateRange.endDate,
+    statuses: ["PENDING", "CONFIRMED"],
+  });
+
+  const bookings = calendarBookingsQuery.data ?? [];
+
+  // Limpiar recursos seleccionados cuando cambian las locaciones
+  useEffect(() => {
+    setSelectedResources([]);
+  }, [selectedLocations]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) => updateBookingStatus(id, status),
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Estado del turno actualizado correctamente." });
-      void queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -165,7 +529,7 @@ export function AgendaPage() {
     mutationFn: deleteBooking,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Turno cancelado exitosamente." });
-      void queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -195,25 +559,22 @@ export function AgendaPage() {
     );
   };
 
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((booking) => {
-      if (selectedLocations.length > 0 && !selectedLocations.includes(booking.locationId)) {
-        return false;
-      }
-      return true;
-    });
-  }, [bookings, selectedLocations]);
+  const handleResourceToggle = (resourceId: string) => {
+    setSelectedResources((prev) =>
+      prev.includes(resourceId) ? prev.filter((id) => id !== resourceId) : [...prev, resourceId]
+    );
+  };
 
   const bookingsByDay = useMemo(() => {
     const map: Record<string, BookingCardItem[]> = {};
     weekDays.forEach((day) => {
-      const key = day.date.toISOString().split("T")[0];
+      const key = formatDateParam(day.date);
       map[key] = [];
     });
 
-    filteredBookings.forEach((booking) => {
+    bookings.forEach((booking) => {
       const bookingDate = new Date(booking.startTime);
-      const key = bookingDate.toISOString().split("T")[0];
+      const key = formatDateParam(bookingDate);
       if (map[key]) {
         map[key].push(booking);
       }
@@ -225,10 +586,10 @@ export function AgendaPage() {
     });
 
     return map;
-  }, [weekDays, filteredBookings]);
+  }, [weekDays, bookings]);
 
-  const errorMessage = bookingsQuery.isError
-    ? toAgendaFriendlyMessage(bookingsQuery.error as unknown as AppError)
+  const errorMessage = calendarBookingsQuery.isError
+    ? toAgendaFriendlyMessage(calendarBookingsQuery.error as unknown as AppError)
     : null;
 
   return (
@@ -342,8 +703,14 @@ export function AgendaPage() {
               <Users className="size-4" />
               Recursos
             </h3>
-            {resourcesQuery.isLoading && <LoadingState message="Cargando recursos..." />}
-            {resources.length === 0 && !resourcesQuery.isLoading && (
+            {isResourcesLoading && selectedLocations.length > 0 && <LoadingState message="Cargando recursos..." />}
+            {hasResourcesError && (
+              <ErrorState
+                title="No se pudieron cargar recursos"
+                message="Reintentá luego de ajustar la seleccion de locales."
+              />
+            )}
+            {resources.length === 0 && !isResourcesLoading && !hasResourcesError && (
               <EmptyState
                 icon={Users}
                 title="Sin recursos"
@@ -356,9 +723,15 @@ export function AgendaPage() {
             )}
             <div className="space-y-1">
               {resources.map((resource) => (
-                <div key={resource.id} className="text-sm text-primary-light">
-                  {resource.name}
-                </div>
+                <label key={resource.id} className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedResources.includes(resource.id)}
+                    onChange={() => handleResourceToggle(resource.id)}
+                    className="size-4 rounded border-neutral-dark text-primary focus:ring-primary-light"
+                  />
+                  <span className="text-sm text-primary">{resource.name}</span>
+                </label>
               ))}
             </div>
           </PageCard>
@@ -391,17 +764,29 @@ export function AgendaPage() {
           {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
 
           {errorMessage && (
-            <ErrorState title="No se pudo cargar la agenda" message={errorMessage} onRetry={() => void bookingsQuery.refetch()} />
+            <ErrorState
+              title="No se pudo cargar la agenda"
+              message={errorMessage}
+              onRetry={() => void calendarBookingsQuery.refetch()}
+            />
           )}
 
-          {bookingsQuery.isLoading && <LoadingState message="Cargando agenda..." />}
+          {calendarBookingsQuery.isLoading && <LoadingState message="Cargando agenda..." />}
 
-          {!bookingsQuery.isLoading && viewMode === "week" && (
+          {selectedResources.length === 0 && !calendarBookingsQuery.isLoading && (
+            <EmptyState
+              icon={Users}
+              title="Seleccioná recursos para ver turnos"
+              description="Elegí uno o más recursos desde el panel lateral para visualizar los turnos del calendario."
+            />
+          )}
+
+          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && viewMode === "week" && (
             <PageCard className="overflow-x-auto">
-              <div className="min-w-[800px]">
+              <div className="min-w-[1120px]">
                 <div className="grid grid-cols-7 gap-2">
                   {weekDays.map((day) => {
-                    const dayKey = day.date.toISOString().split("T")[0];
+                    const dayKey = formatDateParam(day.date);
                     const dayBookings = bookingsByDay[dayKey] ?? [];
 
                     return (
@@ -447,7 +832,7 @@ export function AgendaPage() {
             </PageCard>
           )}
 
-          {!bookingsQuery.isLoading && (viewMode === "day" || viewMode === "month") && (
+          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && (viewMode === "day" || viewMode === "month") && (
             <EmptyState
               icon={CalendarDays}
               title="Vista en preparación"
@@ -463,18 +848,13 @@ export function AgendaPage() {
         onClose={() => setShowNewBookingPanel(false)}
         title="Nuevo Turno"
       >
-        <div className="space-y-4">
-          <p className="text-sm text-primary-light">
-            Formulario de creación de turnos - Se implementará en Slice 7 (Bookings CRUD Details).
-          </p>
-          <p className="text-sm text-primary-light">
-            Este panel está listo para recibir el formulario completo con validación de conflictos,
-            selección de cliente, servicio y recurso según la especificación de la API.
-          </p>
-          <Button onClick={() => setShowNewBookingPanel(false)} variant="outline" className="w-full">
-            Cerrar
-          </Button>
-        </div>
+        <AgendaCreateBookingForm
+          initialLocationId={selectedLocations.length === 1 ? selectedLocations[0] : undefined}
+          onClose={() => setShowNewBookingPanel(false)}
+          onCreated={() => {
+            setFeedback({ tone: "success", message: "Turno creado correctamente." });
+          }}
+        />
       </SidePanel>
     </div>
   );

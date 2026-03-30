@@ -22,6 +22,44 @@ export type AppError = {
   details?: AppErrorDetail[];
 };
 
+function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefined {
+  if (!rawCode) {
+    return undefined;
+  }
+
+  const normalized = rawCode.toUpperCase().replace(/\s+/g, "_");
+
+  if (normalized.includes("BOOKING_CONFLICT") || normalized.includes("_CONFLICT")) {
+    return "BOOKING_CONFLICT";
+  }
+  if (normalized.includes("INVALID_STATE_TRANSITION")) {
+    return "INVALID_STATE_TRANSITION";
+  }
+  if (normalized.includes("VALIDATION_ERROR")) {
+    return "VALIDATION_ERROR";
+  }
+  if (normalized.includes("UNAUTHORIZED")) {
+    return "UNAUTHORIZED";
+  }
+  if (normalized.includes("FORBIDDEN")) {
+    return "FORBIDDEN";
+  }
+  if (normalized.includes("NOT_FOUND")) {
+    return "NOT_FOUND";
+  }
+  if (normalized.includes("SUBSCRIPTION_LIMIT")) {
+    return "SUBSCRIPTION_LIMIT";
+  }
+  if (normalized.includes("REQUEST_TIMEOUT")) {
+    return "REQUEST_TIMEOUT";
+  }
+  if (normalized.includes("SERVICE_UNAVAILABLE")) {
+    return "SERVICE_UNAVAILABLE";
+  }
+
+  return undefined;
+}
+
 function normalizeDetails(details: unknown): AppErrorDetail[] | undefined {
   if (!details) {
     return undefined;
@@ -66,7 +104,7 @@ export function toAppError(input: {
     503: "SERVICE_UNAVAILABLE",
   };
 
-  const code = (input.code as AppErrorCode | undefined) ?? fallbackByStatus[input.status] ?? "UNKNOWN_ERROR";
+  const code = normalizeErrorCode(input.code) ?? fallbackByStatus[input.status] ?? "UNKNOWN_ERROR";
 
   return {
     code,

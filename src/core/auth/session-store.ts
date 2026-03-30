@@ -13,11 +13,79 @@ type SessionState = {
 
 type SessionListener = (state: SessionState) => void;
 
-const state: SessionState = {
-  accessToken: null,
-  refreshToken: null,
-  user: null,
-};
+const SESSION_STORAGE_KEY = "agendateya_admin_session";
+
+function sanitizeUser(candidate: unknown): AuthUser | null {
+  if (!candidate || typeof candidate !== "object") {
+    return null;
+  }
+
+  const user = candidate as Record<string, unknown>;
+  if (
+    typeof user.id !== "string" ||
+    typeof user.email !== "string" ||
+    typeof user.fullName !== "string" ||
+    typeof user.role !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    role: user.role,
+  };
+}
+
+function loadSessionState(): SessionState {
+  if (typeof window === "undefined") {
+    return {
+      accessToken: null,
+      refreshToken: null,
+      user: null,
+    };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      return {
+        accessToken: null,
+        refreshToken: null,
+        user: null,
+      };
+    }
+
+    const parsed = JSON.parse(raw) as Partial<SessionState>;
+    return {
+      accessToken: typeof parsed.accessToken === "string" ? parsed.accessToken : null,
+      refreshToken: typeof parsed.refreshToken === "string" ? parsed.refreshToken : null,
+      user: sanitizeUser(parsed.user),
+    };
+  } catch {
+    return {
+      accessToken: null,
+      refreshToken: null,
+      user: null,
+    };
+  }
+}
+
+function persistSessionState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!state.accessToken && !state.refreshToken && !state.user) {
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+}
+
+const state: SessionState = loadSessionState();
 
 const listeners = new Set<SessionListener>();
 
@@ -47,6 +115,7 @@ export function setSessionState(next: Partial<SessionState>) {
   if (next.user !== undefined) {
     state.user = next.user;
   }
+  persistSessionState();
   emit();
 }
 
@@ -54,6 +123,7 @@ export function clearSessionState() {
   state.accessToken = null;
   state.refreshToken = null;
   state.user = null;
+  persistSessionState();
   emit();
 }
 
