@@ -32,6 +32,7 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 function formatDateTime(isoString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -55,7 +56,7 @@ function formatTime(isoString: string): string {
 type BookingRowProps = {
   booking: BookingListItem;
   onViewDetail: (id: string) => void;
-  onCancel: (id: string) => void;
+  onCancel: (booking: BookingListItem) => void;
 };
 
 function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
@@ -85,7 +86,7 @@ function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
           </button>
           {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
             <button
-              onClick={() => onCancel(booking.id)}
+              onClick={() => onCancel(booking)}
               className="rounded-md p-1.5 text-red-600 hover:bg-red-50 transition-colors"
               aria-label="Cancelar turno"
             >
@@ -554,6 +555,7 @@ export function BookingsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
   const queryClient = useQueryClient();
@@ -563,9 +565,11 @@ export function BookingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       setFeedback({ tone: "success", message: "Turno cancelado correctamente." });
+      setBookingPendingCancel(null);
     },
     onError: (error: AppError) => {
       setFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      setBookingPendingCancel(null);
     },
   });
 
@@ -573,9 +577,8 @@ export function BookingsPage() {
   const total = bookingsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
-  function handleCancelBooking(id: string) {
-    if (!confirm("¿Confirmas la cancelación de este turno?")) return;
-    cancelBookingMutation.mutate(id);
+  function handleCancelBooking(booking: BookingListItem) {
+    setBookingPendingCancel(booking);
   }
 
   return (
@@ -726,6 +729,24 @@ export function BookingsPage() {
           />
         )}
       </SidePanel>
+
+      <ConfirmDialog
+        isOpen={Boolean(bookingPendingCancel)}
+        title="Confirmar cancelación"
+        message="¿Confirmas la cancelación de este turno?"
+        confirmLabel="Sí, confirmar"
+        cancelLabel="No, volver"
+        pendingLabel="Cancelando..."
+        isPending={cancelBookingMutation.isPending}
+        tone="danger"
+        onClose={() => setBookingPendingCancel(null)}
+        onConfirm={() => {
+          if (!bookingPendingCancel) {
+            return;
+          }
+          cancelBookingMutation.mutate(bookingPendingCancel.id);
+        }}
+      />
     </div>
   );
 }
