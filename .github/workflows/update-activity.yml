@@ -6,7 +6,7 @@ name: Update Public Activity Feed
 
 on:
   push:
-    branches: [main, master, develop]
+    branches: [main, master, develop, dev]
 
 jobs:
   update-activity:
