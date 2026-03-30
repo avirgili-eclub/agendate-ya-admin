@@ -241,19 +241,39 @@ export function ResourcesPage() {
                   ))}
                 </div>
 
-                <div className="mt-5 flex items-center justify-between">
-                  <Button variant="outline" size="sm" onClick={() => setEditingResource(resource)}>
+                <div className="mt-5 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setEditingResource(resource)}
+                  >
                     Editar
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setTransferingResource(resource)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setTransferingResource(resource)}
+                  >
                     Transferir
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setManagingServicesResource(resource)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => setManagingServicesResource(resource)}
+                  >
                     Servicios
                   </Button>
                   <Button
-                    variant={resource.active ? "outline" : "secondary"}
+                    variant="outline"
                     size="sm"
+                    className={
+                      resource.active
+                        ? "w-full border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
+                        : "w-full border-emerald-300 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
+                    }
                     onClick={() => updateResourceMutation.mutate({ id: resource.id, active: !resource.active })}
                     disabled={updateResourceMutation.isPending}
                   >
