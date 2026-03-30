@@ -96,13 +96,21 @@ type BookingCardProps = {
 
 function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
   const [showActions, setShowActions] = useState(false);
-  const validTransitions = getValidStatusTransitions(booking.status);
+  const validTransitions = getValidStatusTransitions(booking.status).filter(
+    (status) => status !== "CANCELLED",
+  );
   const tone = getStatusTone(booking.status);
   const accentByTone: Record<typeof tone, string> = {
     success: "border-l-4 border-l-green-500",
     warning: "border-l-4 border-l-amber-500",
     neutral: "border-l-4 border-l-slate-400",
     danger: "border-l-4 border-l-red-500",
+  };
+  const dotByTone: Record<typeof tone, string> = {
+    success: "bg-green-600",
+    warning: "bg-amber-500",
+    neutral: "bg-slate-500",
+    danger: "bg-red-600",
   };
 
   return (
@@ -111,14 +119,15 @@ function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
       onClick={() => setShowActions(!showActions)}
     >
       <div className="min-w-0 space-y-1">
-        <p className="text-xs font-semibold text-primary">
-          {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
-        </p>
-        <StatusChip
-          label={getStatusLabel(booking.status)}
-          tone={getStatusTone(booking.status)}
-          className="w-fit max-w-full whitespace-nowrap px-2 py-0.5 text-[10px] normal-case tracking-normal"
-        />
+        <div className="flex items-center justify-between gap-2">
+          <p className="truncate text-xs font-semibold text-primary">
+            {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
+          </p>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-neutral px-1.5 py-0.5 text-[10px] font-medium text-primary-light">
+            <span className={`size-1.5 rounded-full ${dotByTone[tone]}`} aria-hidden="true" />
+            {getStatusLabel(booking.status)}
+          </span>
+        </div>
         <p className="truncate text-xs font-medium text-primary" title={booking.clientName}>
           {booking.clientName}
         </p>
@@ -147,7 +156,7 @@ function BookingCard({ booking, onStatusChange, onDelete }: BookingCardProps) {
               }}
               className="block w-full rounded px-2 py-1 text-left text-xs text-primary-light hover:bg-neutral"
             >
-              Cambiar a: {getStatusLabel(status)}
+              {getStatusLabel(status)}
             </button>
           ))}
           <button
