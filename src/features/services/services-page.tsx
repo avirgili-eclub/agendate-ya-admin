@@ -22,6 +22,7 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 type SupportedCurrency = "PYG" | "ARS" | "USD" | "EUR";
 
@@ -360,6 +361,7 @@ export function ServicesPage() {
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
+  const [servicePendingDelete, setServicePendingDelete] = useState<ServiceItem | null>(null);
 
   const locationsQuery = useQuery({
     queryKey: ["services", "locations"],
@@ -428,18 +430,18 @@ export function ServicesPage() {
     mutationFn: deleteService,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Servicio eliminado correctamente." });
+      setServicePendingDelete(null);
       void queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
       setFeedback({ tone: "error", message: toServicesFriendlyMessage(appError) });
+      setServicePendingDelete(null);
     },
   });
 
   function handleDelete(service: ServiceItem) {
-    if (window.confirm(`¿Eliminar el servicio "${service.name}"? Esta acción no se puede deshacer.`)) {
-      deleteServiceMutation.mutate(service.id);
-    }
+    setServicePendingDelete(service);
   }
 
   return (
@@ -601,6 +603,29 @@ export function ServicesPage() {
           />
         </SidePanel>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(servicePendingDelete)}
+        title="Confirmar eliminación"
+        message={
+          <>
+            Vas a eliminar el servicio <strong className="text-primary">{servicePendingDelete?.name ?? ""}</strong>.
+          </>
+        }
+        isPending={deleteServiceMutation.isPending}
+        pendingLabel="Eliminando..."
+        confirmLabel="Eliminar servicio"
+        tone="danger"
+        onClose={() => setServicePendingDelete(null)}
+        onConfirm={() => {
+          if (!servicePendingDelete) {
+            return;
+          }
+          deleteServiceMutation.mutate(servicePendingDelete.id);
+        }}
+      >
+        <p>Esta acción no se puede deshacer.</p>
+      </ConfirmDialog>
     </div>
   );
 }

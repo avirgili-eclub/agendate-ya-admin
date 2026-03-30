@@ -13,13 +13,13 @@ import { LoginPage } from "@/features/auth/login-page";
 import { RegisterPage } from "@/features/auth/register-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { HealthPage } from "@/features/health/health-page";
-import { ModulePlaceholderPage } from "@/features/placeholders/module-placeholder-page";
 import { ResourcesPage } from "@/features/resources/resources-page";
 import { AgendaPage } from "@/features/agenda/agenda-page";
 import { BookingsPage } from "@/features/bookings/bookings-page";
 import { ServicesPage } from "@/features/services/services-page";
 import { AvailabilityPage } from "@/features/availability/availability-page";
 import { ClientsPage } from "@/features/clients/clients-page";
+import { LocationsPage } from "@/features/locations/locations-page";
 import { UsersPage } from "@/features/users/users-page";
 import { TenantSettingsPage } from "@/features/tenant/tenant-settings-page";
 
@@ -112,7 +112,7 @@ const clientsRoute = createRoute({
 const locationsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/locales",
-  component: () => <ModulePlaceholderPage moduleName="Locales" routePath="/locales" />,
+  component: LocationsPage,
 });
 
 const resourcesRoute = createRoute({
