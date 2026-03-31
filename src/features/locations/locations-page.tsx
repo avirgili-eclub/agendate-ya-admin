@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Building2, Search, MapPin, Phone, Calendar, ImageIcon } from "lucide-react";
+import { Building2, Search, MapPin, Phone, Calendar, ImageIcon, Clock3 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -30,6 +30,54 @@ function toShortDate(dateTime: string) {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(dateTime));
+}
+
+function getLocationBusinessHours(location: LocationItem): string {
+  if (location.businessHoursSummary && location.businessHoursSummary.trim()) {
+    return location.businessHoursSummary;
+  }
+
+  const metadata = location.metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return "Horario no informado";
+  }
+
+  const meta = metadata as Record<string, unknown>;
+  const directKeys = [
+    "businessHoursSummary",
+    "operatingHours",
+    "openingHours",
+    "hoursSummary",
+    "scheduleSummary",
+    "workingHours",
+    "availabilitySummary",
+    "horarioAtencion",
+  ];
+
+  for (const key of directKeys) {
+    const value = meta[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  const nestedKeys = ["businessHours", "hours", "schedule", "availability", "horarios"];
+  for (const key of nestedKeys) {
+    const value = meta[key];
+    if (!value || typeof value !== "object") {
+      continue;
+    }
+
+    const nested = value as Record<string, unknown>;
+    for (const summaryKey of ["summary", "text", "label"]) {
+      const summary = nested[summaryKey];
+      if (typeof summary === "string" && summary.trim()) {
+        return summary.trim();
+      }
+    }
+  }
+
+  return "Horario no informado";
 }
 
 export function LocationsPage() {
@@ -181,6 +229,10 @@ export function LocationsPage() {
                   <Calendar className="mr-2 inline size-4" />
                   Creada: {toShortDate(location.createdAt)}
                 </p>
+                <p className="truncate" title={getLocationBusinessHours(location)}>
+                  <Clock3 className="mr-2 inline size-4" />
+                  Horario: {getLocationBusinessHours(location)}
+                </p>
               </div>
 
               <div className="mt-5 flex flex-wrap gap-2">
@@ -282,6 +334,11 @@ export function LocationsPage() {
                   label={selectedLocation.active ? "Activa" : "Inactiva"}
                 />
               </div>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-primary-light">Horario de atención</p>
+              <p className="text-sm text-primary">{getLocationBusinessHours(selectedLocation)}</p>
             </div>
 
             <div>

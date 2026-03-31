@@ -11,6 +11,17 @@ export type LocationItem = {
   phone?: string;
   imageUrl?: string;
   metadata?: Record<string, unknown>;
+  businessHoursSummary: string | null;
+  businessHours?: {
+    timezone: string;
+    weekly: Array<{
+      dayOfWeek: number;
+      intervals: Array<{
+        startTime: string;
+        endTime: string;
+      }>;
+    }>;
+  };
   active: boolean;
   createdAt: string;
   updatedAt: string;
@@ -33,10 +44,62 @@ type ApiLocation = {
   phone?: string | null;
   imageUrl?: string | null;
   metadata?: Record<string, unknown> | null;
+  businessHoursSummary?: string | null;
+  businessHours?: {
+    timezone?: string | null;
+    weekly?: Array<{
+      dayOfWeek: number;
+      intervals?: Array<{
+        startTime: string;
+        endTime: string;
+      }> | null;
+    }> | null;
+  } | null;
   active: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+function mapApiBusinessHours(
+  api:
+    | {
+        timezone?: string | null;
+        weekly?: Array<{
+          dayOfWeek: number;
+          intervals?: Array<{
+            startTime: string;
+            endTime: string;
+          }> | null;
+        }> | null;
+      }
+    | null
+    | undefined,
+): LocationItem["businessHours"] | undefined {
+  if (!api || typeof api !== "object") {
+    return undefined;
+  }
+
+  const timezone = typeof api.timezone === "string" && api.timezone.trim()
+    ? api.timezone
+    : "America/Asuncion";
+
+  const weekly = Array.isArray(api.weekly)
+    ? api.weekly.map((day) => ({
+        dayOfWeek: day.dayOfWeek,
+        intervals: Array.isArray(day.intervals)
+          ? day.intervals.filter(
+              (interval): interval is { startTime: string; endTime: string } =>
+                typeof interval?.startTime === "string" && typeof interval?.endTime === "string",
+            )
+          : [],
+      }))
+    : [];
+
+  return {
+    timezone,
+    weekly,
+  };
+}
 
 function mapApiLocationToItem(api: ApiLocation): LocationItem {
   return {
@@ -47,6 +110,11 @@ function mapApiLocationToItem(api: ApiLocation): LocationItem {
     phone: api.phone ?? undefined,
     imageUrl: api.imageUrl ?? undefined,
     metadata: api.metadata ?? undefined,
+    businessHoursSummary:
+      typeof api.businessHoursSummary === "string" && api.businessHoursSummary.trim()
+        ? api.businessHoursSummary
+        : null,
+    businessHours: mapApiBusinessHours(api.businessHours),
     active: api.active,
     createdAt: api.createdAt,
     updatedAt: api.updatedAt,
