@@ -781,7 +781,7 @@ export function AgendaPage() {
           <PageCard>
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
               <Users className="size-4" />
-              Recursos
+              Equipo
             </h3>
             {isResourcesLoading && selectedLocations.length > 0 && <LoadingState message="Cargando recursos..." />}
             {hasResourcesError && (
@@ -793,11 +793,11 @@ export function AgendaPage() {
             {resources.length === 0 && !isResourcesLoading && !hasResourcesError && (
               <EmptyState
                 icon={Users}
-                title="Sin recursos"
+                title="Sin equipo"
                 description={
                   selectedLocations.length === 0
-                    ? "Seleccioná un local para ver recursos."
-                    : "No hay recursos activos en la selección actual."
+                    ? "Seleccioná un local para ver a los profesionales."
+                    : "No hay profesionales activos en la selección actual."
                 }
               />
             )}
