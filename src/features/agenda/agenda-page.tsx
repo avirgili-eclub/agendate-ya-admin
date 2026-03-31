@@ -645,24 +645,31 @@ export function AgendaPage() {
     );
   };
 
-  const bookingsByDay = useMemo(() => {
-    const map: Record<string, BookingCardItem[]> = {};
+  const bookingsByDayAndResource = useMemo(() => {
+    const map: Record<string, Record<string, BookingCardItem[]>> = {};
     weekDays.forEach((day) => {
       const key = formatDateParam(day.date);
-      map[key] = [];
+      map[key] = {};
     });
 
     bookings.forEach((booking) => {
       const bookingDate = new Date(booking.startTime);
       const key = formatDateParam(bookingDate);
       if (map[key]) {
-        map[key].push(booking);
+        if (!map[key][booking.resourceId]) {
+          map[key][booking.resourceId] = [];
+        }
+        map[key][booking.resourceId].push(booking);
       }
     });
 
-    // Sort bookings by start time
-    Object.keys(map).forEach((key) => {
-      map[key].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+    // Sort bookings by start time in each resource lane
+    Object.values(map).forEach((resourceMap) => {
+      Object.values(resourceMap).forEach((resourceBookings) => {
+        resourceBookings.sort(
+          (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+        );
+      });
     });
 
     return map;
@@ -867,7 +874,12 @@ export function AgendaPage() {
                 <div className="grid grid-cols-7 gap-2">
                   {weekDays.map((day) => {
                     const dayKey = formatDateParam(day.date);
-                    const dayBookings = bookingsByDay[dayKey] ?? [];
+                    const dayBookingsByResource = bookingsByDayAndResource[dayKey] ?? {};
+                    const resourceSections = Object.values(dayBookingsByResource).sort((a, b) => {
+                      const aName = a[0]?.resourceName ?? "";
+                      const bName = b[0]?.resourceName ?? "";
+                      return aName.localeCompare(bName, "es");
+                    });
 
                     return (
                       <div
@@ -889,21 +901,44 @@ export function AgendaPage() {
                           </p>
                         </div>
                         <div className="p-2 min-h-[400px]">
-                          {dayBookings.length === 0 ? (
+                          {resourceSections.length === 0 ? (
                             <p className="text-center text-xs text-primary-light">Sin turnos</p>
                           ) : (
-                            dayBookings.map((booking) => (
-                              <BookingCard
-                                key={booking.id}
-                                booking={booking}
-                                businessName={businessName}
-                                timezone={tenantTimezone}
-                                onStatusChange={(id, status) =>
-                                  updateStatusMutation.mutate({ id, status })
-                                }
-                                onDelete={(id) => deleteMutation.mutate(id)}
-                              />
-                            ))
+                            <div className="space-y-3">
+                              {resourceSections.map((resourceBookings) => {
+                                const resourceName = resourceBookings[0]?.resourceName ?? "Recurso";
+
+                                return (
+                                  <section
+                                    key={`${dayKey}-${resourceBookings[0]?.resourceId ?? resourceName}`}
+                                    className="rounded-md border border-neutral-dark bg-neutral/30"
+                                  >
+                                    <header className="flex items-center justify-between border-b border-neutral-dark px-2 py-1.5">
+                                      <p className="truncate text-[11px] font-semibold text-primary" title={resourceName}>
+                                        {resourceName}
+                                      </p>
+                                      <span className="rounded-full bg-white px-1.5 py-0.5 text-[10px] text-primary-light">
+                                        {resourceBookings.length}
+                                      </span>
+                                    </header>
+                                    <div className="p-1.5">
+                                      {resourceBookings.map((booking) => (
+                                        <BookingCard
+                                          key={booking.id}
+                                          booking={booking}
+                                          businessName={businessName}
+                                          timezone={tenantTimezone}
+                                          onStatusChange={(id, status) =>
+                                            updateStatusMutation.mutate({ id, status })
+                                          }
+                                          onDelete={(id) => deleteMutation.mutate(id)}
+                                        />
+                                      ))}
+                                    </div>
+                                  </section>
+                                );
+                              })}
+                            </div>
                           )}
                         </div>
                       </div>
