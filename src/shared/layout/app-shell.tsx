@@ -21,7 +21,7 @@ export function AppShell() {
   return (
     <div className="min-h-screen bg-neutral font-sans text-primary-dark">
       <header className="sticky top-0 z-20 border-b border-neutral-dark bg-neutral-light/95 backdrop-blur" role="banner">
-        <div className="mx-auto flex h-16 max-w-[1400px] items-center gap-4 px-4 lg:px-6">
+        <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
           <div className="text-lg font-bold text-primary">AgendateYA</div>
           <div className="relative ml-2 hidden flex-1 md:block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
@@ -43,7 +43,7 @@ export function AppShell() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
         <aside className="rounded-xl border border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm lg:sticky lg:top-20 lg:h-fit" role="navigation" aria-label="Menu principal">
           <div className="mb-4 border-b border-white/20 px-3 pb-3">
             <p className="text-sm font-semibold">Admin Console</p>
