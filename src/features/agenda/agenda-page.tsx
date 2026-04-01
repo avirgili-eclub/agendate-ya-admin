@@ -45,6 +45,14 @@ type WeekDay = {
   isToday: boolean;
 };
 
+const STATUS_FILTER_OPTIONS: BookingStatus[] = [
+  "PENDING",
+  "CONFIRMED",
+  "COMPLETED",
+  "NO_SHOW",
+  "CANCELLED",
+];
+
 function getWeekDays(baseDate: Date): WeekDay[] {
   const days: WeekDay[] = [];
   const startOfWeek = new Date(baseDate);
@@ -524,6 +532,10 @@ export function AgendaPage() {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<BookingStatus[]>([
+    "PENDING",
+    "CONFIRMED",
+  ]);
   const [showNewBookingPanel, setShowNewBookingPanel] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
@@ -578,15 +590,15 @@ export function AgendaPage() {
     return { startDate, endDate };
   }, [weekDays]);
 
-  // Query de calendario: solo se ejecuta si hay recursos seleccionados
+  // Query de calendario: solo se ejecuta si hay recursos y estados seleccionados
   const calendarBookingsQuery = useCalendarBookingsQuery({
     resourceIds: selectedResources,
     startDate: calendarDateRange.startDate,
     endDate: calendarDateRange.endDate,
-    statuses: ["PENDING", "CONFIRMED"],
+    statuses: selectedStatuses,
   });
 
-  const bookings = calendarBookingsQuery.data ?? [];
+  const bookings = selectedStatuses.length === 0 ? [] : (calendarBookingsQuery.data ?? []);
 
   // Limpiar recursos seleccionados cuando cambian las locaciones
   useEffect(() => {
@@ -643,6 +655,16 @@ export function AgendaPage() {
     setSelectedResources((prev) =>
       prev.includes(resourceId) ? prev.filter((id) => id !== resourceId) : [...prev, resourceId]
     );
+  };
+
+  const handleStatusToggle = (status: BookingStatus) => {
+    setSelectedStatuses((prev) => {
+      const next = prev.includes(status)
+        ? prev.filter((item) => item !== status)
+        : [...prev, status];
+
+      return STATUS_FILTER_OPTIONS.filter((option) => next.includes(option));
+    });
   };
 
   const bookingsByDay = useMemo(() => {
@@ -819,23 +841,26 @@ export function AgendaPage() {
           {/* Status legend */}
           <PageCard>
             <h3 className="mb-3 text-sm font-semibold text-primary">Estados</h3>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <StatusChip tone="warning" label="Pendiente" />
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusChip tone="success" label="Confirmado" />
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusChip tone="success" label="Completado" />
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusChip tone="danger" label="No asistió" />
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusChip tone="neutral" label="Cancelado" />
-              </div>
+            <div className="flex flex-wrap gap-2">
+              {STATUS_FILTER_OPTIONS.map((status) => {
+                const isActive = selectedStatuses.includes(status);
+                return (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => handleStatusToggle(status)}
+                    aria-pressed={isActive}
+                    className={`rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-light ${
+                      isActive ? "" : "opacity-45"
+                    }`}
+                    title={isActive ? "Quitar del filtro" : "Agregar al filtro"}
+                  >
+                    <StatusChip tone={getStatusTone(status)} label={getStatusLabel(status)} />
+                  </button>
+                );
+              })}
             </div>
+            <p className="mt-2 text-xs text-primary-light">Podés seleccionar múltiples estados.</p>
           </PageCard>
         </aside>
 
@@ -861,7 +886,15 @@ export function AgendaPage() {
             />
           )}
 
-          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && viewMode === "week" && (
+          {selectedResources.length > 0 && selectedStatuses.length === 0 && !calendarBookingsQuery.isLoading && (
+            <EmptyState
+              icon={CalendarDays}
+              title="Seleccioná al menos un estado"
+              description="Usá los chips de Estado para filtrar qué turnos querés ver en la agenda."
+            />
+          )}
+
+          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && selectedStatuses.length > 0 && viewMode === "week" && (
             <PageCard className="overflow-x-auto">
               <div className="min-w-[1120px]">
                 <div className="grid grid-cols-7 gap-2">
@@ -914,7 +947,7 @@ export function AgendaPage() {
             </PageCard>
           )}
 
-          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && (viewMode === "day" || viewMode === "month") && (
+          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && selectedStatuses.length > 0 && (viewMode === "day" || viewMode === "month") && (
             <EmptyState
               icon={CalendarDays}
               title="Vista en preparación"

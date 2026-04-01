@@ -20,7 +20,7 @@ export function useCalendarBookingsQuery(params: CalendarBookingsParams) {
   return useQuery({
     queryKey: ["bookings", "calendar", params],
     queryFn: () => fetchCalendarBookings(params),
-    enabled: params.resourceIds.length > 0,
+    enabled: params.resourceIds.length > 0 && (params.statuses?.length ?? 0) > 0,
     staleTime: 30_000,
   });
 }
