@@ -42,9 +42,11 @@ export type ClientBookingHistoryItem = {
 
 export type ChatMessage = {
   id: string;
-  role: "client" | "system" | "agent";
+  clientId: string;
+  sender: "CUSTOMER" | "AGENT";
   content: string;
-  timestamp: string;
+  messageType: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT" | "STICKER" | "UNKNOWN";
+  createdAt: string;
 };
 
 export type ChatHistoryResponse = {
@@ -103,6 +105,49 @@ type ApiClientBooking = {
   scheduledAt: string;
   createdAt: string;
 };
+
+type ApiChatMessage = {
+  id: string;
+  clientId: string;
+  sender: string;
+  content?: string | null;
+  messageType?: string | null;
+  createdAt: string;
+};
+
+type ApiChatHistoryResponse = {
+  data: ApiChatMessage[];
+  meta?: {
+    nextCursor?: string | null;
+    hasMore?: boolean;
+  };
+};
+
+function mapApiChatMessageToItem(api: ApiChatMessage): ChatMessage {
+  const sender = api.sender === "CUSTOMER" ? "CUSTOMER" : "AGENT";
+  const allowedMessageTypes: ChatMessage["messageType"][] = [
+    "TEXT",
+    "IMAGE",
+    "AUDIO",
+    "VIDEO",
+    "DOCUMENT",
+    "STICKER",
+    "UNKNOWN",
+  ];
+
+  const messageType = allowedMessageTypes.includes(api.messageType as ChatMessage["messageType"])
+    ? (api.messageType as ChatMessage["messageType"])
+    : "UNKNOWN";
+
+  return {
+    id: api.id,
+    clientId: api.clientId,
+    sender,
+    content: api.content ?? "",
+    messageType,
+    createdAt: api.createdAt,
+  };
+}
 
 // =====================
 // DTO Mapping Layer
@@ -246,23 +291,26 @@ export async function fetchClientBookingHistory(
 
 export async function fetchClientChatHistory(
   clientId: string,
-  params?: { cursor?: string; size?: number }
+  params?: { before?: string; size?: number }
 ): Promise<ChatHistoryResponse> {
-  // NOTE: Backend endpoint not available yet
-  // When available, implement as:
-  // const queryParams = new URLSearchParams();
-  // if (params?.cursor) queryParams.set("cursor", params.cursor);
-  // if (params?.size !== undefined) queryParams.set("size", String(params.size));
-  // const query = queryParams.toString();
-  // const response = await httpRequest<{ data: ChatMessage[]; hasMore: boolean; nextCursor?: string }>(
-  //   `/clients/${clientId}/chat-history${query ? `?${query}` : ""}`
-  // );
-  // return response;
+  const queryParams = new URLSearchParams();
+  if (params?.before) {
+    queryParams.set("before", params.before);
+  }
 
-  // Graceful mock mode for now
+  const requestedSize = params?.size ?? 12;
+  const normalizedSize = Math.min(Math.max(requestedSize, 1), 50);
+  queryParams.set("size", String(normalizedSize));
+
+  const query = queryParams.toString();
+  const response = await httpRequest<ApiChatHistoryResponse>(
+    `/clients/${clientId}/messages${query ? `?${query}` : ""}`,
+  );
+
   return {
-    messages: [],
-    hasMore: false,
+    messages: (response.data ?? []).map(mapApiChatMessageToItem),
+    hasMore: Boolean(response.meta?.hasMore),
+    nextCursor: response.meta?.nextCursor ?? undefined,
   };
 }
 
