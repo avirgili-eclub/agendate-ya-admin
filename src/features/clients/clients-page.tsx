@@ -16,6 +16,7 @@ import { PageCard } from "@/shared/ui/page-card";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ClientDetailPanel } from "@/features/clients/client-detail-panel";
 import { ClientFormModal } from "@/features/clients/client-form-modal";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 export function ClientsPage() {
   const queryClient = useQueryClient();
@@ -26,7 +27,7 @@ export function ClientsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("client");
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -56,10 +57,10 @@ export function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setFormMode(null);
-      setFeedback({ tone: "success", message: "Cliente creado correctamente." });
+      showFeedback("success", "Cliente creado correctamente.");
     },
     onError: (mutationError: AppError) => {
-      setFeedback({ tone: "error", message: toClientsFriendlyMessage(mutationError) });
+      showFeedback("error", toClientsFriendlyMessage(mutationError));
     },
   });
 
@@ -70,10 +71,10 @@ export function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ["client"] });
       setFormMode(null);
       setEditingClient(null);
-      setFeedback({ tone: "success", message: "Cliente actualizado correctamente." });
+      showFeedback("success", "Cliente actualizado correctamente.");
     },
     onError: (mutationError: AppError) => {
-      setFeedback({ tone: "error", message: toClientsFriendlyMessage(mutationError) });
+      showFeedback("error", toClientsFriendlyMessage(mutationError));
     },
   });
 
@@ -128,7 +129,7 @@ export function ClientsPage() {
         </Button>
       </header>
 
-      <TransientFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
+      <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {/* Search and Filter */}
       <PageCard>

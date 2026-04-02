@@ -1,17 +1,22 @@
 import { Bell, LogOut, MessageSquare, Search } from "lucide-react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
 
 import { APP_NAV_ITEMS, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
+import { useNotifications } from "@/shared/notifications/notification-store";
+import { NotificationPanel } from "@/shared/notifications/notification-panel";
 
 export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const pageMeta = getPageMeta(pathname);
   const session = getSessionState();
+  const { unreadCount } = useNotifications();
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
 
   async function handleLogout() {
     await logout();
@@ -31,8 +36,18 @@ export function AppShell() {
               aria-label="Busqueda global"
             />
           </div>
-          <button className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary" type="button" aria-label="Notificaciones">
+          <button
+            className="relative rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary"
+            type="button"
+            aria-label="Notificaciones"
+            onClick={() => setIsNotificationPanelOpen(true)}
+          >
             <Bell className="size-5" />
+            {unreadCount > 0 && (
+              <span className="absolute right-0 top-0 flex size-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
           </button>
           <button className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary" type="button" aria-label="Mensajes">
             <MessageSquare className="size-5" />
@@ -75,6 +90,11 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <NotificationPanel
+        isOpen={isNotificationPanelOpen}
+        onClose={() => setIsNotificationPanelOpen(false)}
+      />
     </div>
   );
 }

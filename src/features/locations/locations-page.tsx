@@ -21,8 +21,10 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { SidePanel } from "@/shared/ui/side-panel";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 function toShortDate(dateTime: string) {
   return new Intl.DateTimeFormat("es-PY", {
@@ -32,14 +34,105 @@ function toShortDate(dateTime: string) {
   }).format(new Date(dateTime));
 }
 
+const WEEK_DAY_LABELS = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+];
+
+const WEEK_DAY_SHORT_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function formatWeeklyIntervals(
+  weekly: NonNullable<LocationItem["businessHours"]>["weekly"] | undefined,
+): string[] {
+  if (!Array.isArray(weekly) || weekly.length === 0) {
+    return [];
+  }
+
+  return WEEK_DAY_LABELS.map((label, dayOfWeek) => {
+    const day = weekly.find((entry) => entry.dayOfWeek === dayOfWeek);
+    if (!day || day.intervals.length === 0) {
+      return `${label}: Cerrado`;
+    }
+
+    const ranges = day.intervals.map((interval) => `${interval.startTime} - ${interval.endTime}`);
+    return `${label}: ${ranges.join(", ")}`;
+  });
+}
+
+function toIntervalsCompactText(
+  intervals: Array<{ startTime: string; endTime: string }> | undefined,
+): string {
+  if (!Array.isArray(intervals) || intervals.length === 0) {
+    return "Cerrado";
+  }
+
+  return intervals.map((interval) => `${interval.startTime}-${interval.endTime}`).join(" / ");
+}
+
+function formatCompactWeeklySummary(location: LocationItem): string | null {
+  const weekly = location.businessHours?.weekly;
+  if (!Array.isArray(weekly) || weekly.length === 0) {
+    return null;
+  }
+
+  const byDay = Array.from({ length: 7 }, (_, dayOfWeek) => {
+    const day = weekly.find((entry) => entry.dayOfWeek === dayOfWeek);
+    return {
+      dayOfWeek,
+      value: toIntervalsCompactText(day?.intervals),
+    };
+  });
+
+  const segments: string[] = [];
+  let cursor = 0;
+
+  while (cursor < byDay.length) {
+    const current = byDay[cursor];
+    if (current.value === "Cerrado") {
+      cursor += 1;
+      continue;
+    }
+
+    let end = cursor;
+    while (end + 1 < byDay.length && byDay[end + 1].value === current.value) {
+      end += 1;
+    }
+
+    const dayLabel = cursor === end
+      ? WEEK_DAY_SHORT_LABELS[cursor]
+      : `${WEEK_DAY_SHORT_LABELS[cursor]}-${WEEK_DAY_SHORT_LABELS[end]}`;
+    segments.push(`${dayLabel} ${current.value}`);
+
+    cursor = end + 1;
+  }
+
+  return segments.length > 0 ? segments.join(", ") : null;
+}
+
 function getLocationBusinessHours(location: LocationItem): string {
   if (location.businessHoursSummary && location.businessHoursSummary.trim()) {
     return location.businessHoursSummary;
   }
 
+  const compactSummary = formatCompactWeeklySummary(location);
+  if (compactSummary) {
+    return compactSummary;
+  }
+
+  const weeklyLines = formatWeeklyIntervals(location.businessHours?.weekly);
+  const openDays = weeklyLines.filter((line) => !line.endsWith("Cerrado"));
+  if (openDays.length > 0) {
+    return openDays.slice(0, 2).join(" | ");
+  }
+
   const metadata = location.metadata;
   if (!metadata || typeof metadata !== "object") {
-    return "Horario no informado";
+    return "Sin horario configurado";
   }
 
   const meta = metadata as Record<string, unknown>;
@@ -77,7 +170,7 @@ function getLocationBusinessHours(location: LocationItem): string {
     }
   }
 
-  return "Horario no informado";
+  return "Sin horario configurado";
 }
 
 export function LocationsPage() {
@@ -86,7 +179,7 @@ export function LocationsPage() {
   const canManageLocations = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
 
   const [search, setSearch] = useState("");
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("resource");
   const [creating, setCreating] = useState(false);
   const [editingLocation, setEditingLocation] = useState<LocationItem | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
@@ -101,38 +194,38 @@ export function LocationsPage() {
   const createMutation = useMutation({
     mutationFn: createLocation,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Sede creada correctamente." });
+      showFeedback("success", "Sede creada correctamente.");
       setCreating(false);
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: LocationUpsertInput }) => updateLocation(id, input),
     onSuccess: (updated) => {
-      setFeedback({ tone: "success", message: "Sede actualizada correctamente." });
+      showFeedback("success", "Sede actualizada correctamente.");
       setEditingLocation(null);
       setSelectedLocation((previous) => (previous?.id === updated.id ? updated : previous));
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteLocation,
     onSuccess: (_, id) => {
-      setFeedback({ tone: "success", message: "Sede eliminada correctamente." });
+      showFeedback("success", "Sede eliminada correctamente.");
       setSelectedLocation((previous) => (previous?.id === id ? null : previous));
       setLocationPendingDelete(null);
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
       setLocationPendingDelete(null);
     },
   });
@@ -179,7 +272,7 @@ export function LocationsPage() {
         />
       )}
 
-      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+      <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {locationsQuery.isLoading && <LoadingState message="Cargando sedes..." />}
 
@@ -261,31 +354,43 @@ export function LocationsPage() {
         </div>
       )}
 
-      <LocationFormModal
-        mode="create"
+      <SidePanel
         isOpen={creating}
-        isLoading={createMutation.isPending}
-        error={(createMutation.error as AppError | null) ?? null}
         onClose={() => setCreating(false)}
-        onSubmit={async (input) => {
-          await createMutation.mutateAsync(input);
-        }}
-      />
+        title="Nueva Sede"
+      >
+        <LocationFormModal
+          mode="create"
+          isOpen={creating}
+          isLoading={createMutation.isPending}
+          error={(createMutation.error as AppError | null) ?? null}
+          onClose={() => setCreating(false)}
+          onSubmit={async (input) => {
+            await createMutation.mutateAsync(input);
+          }}
+        />
+      </SidePanel>
 
-      <LocationFormModal
-        mode="edit"
-        initialLocation={editingLocation ?? undefined}
+      <SidePanel
         isOpen={Boolean(editingLocation)}
-        isLoading={updateMutation.isPending}
-        error={(updateMutation.error as AppError | null) ?? null}
         onClose={() => setEditingLocation(null)}
-        onSubmit={async (input) => {
-          if (!editingLocation) {
-            return;
-          }
-          await updateMutation.mutateAsync({ id: editingLocation.id, input });
-        }}
-      />
+        title="Editar Sede"
+      >
+        <LocationFormModal
+          mode="edit"
+          initialLocation={editingLocation ?? undefined}
+          isOpen={Boolean(editingLocation)}
+          isLoading={updateMutation.isPending}
+          error={(updateMutation.error as AppError | null) ?? null}
+          onClose={() => setEditingLocation(null)}
+          onSubmit={async (input) => {
+            if (!editingLocation) {
+              return;
+            }
+            await updateMutation.mutateAsync({ id: editingLocation.id, input });
+          }}
+        />
+      </SidePanel>
 
       <SidePanel
         isOpen={Boolean(selectedLocation)}
@@ -338,7 +443,17 @@ export function LocationsPage() {
 
             <div>
               <p className="text-xs uppercase tracking-wide text-primary-light">Horario de atención</p>
-              <p className="text-sm text-primary">{getLocationBusinessHours(selectedLocation)}</p>
+              <p className="mb-2 text-sm text-primary">{getLocationBusinessHours(selectedLocation)}</p>
+              {selectedLocation.businessHours?.timezone && (
+                <p className="mb-2 text-xs text-primary-light">
+                  Zona horaria: {selectedLocation.businessHours.timezone}
+                </p>
+              )}
+              <ul className="space-y-1 text-xs text-primary-light">
+                {formatWeeklyIntervals(selectedLocation.businessHours?.weekly).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
 
             <div>
