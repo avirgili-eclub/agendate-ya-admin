@@ -44,6 +44,8 @@ const WEEK_DAY_LABELS = [
   "Domingo",
 ];
 
+const WEEK_DAY_SHORT_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
 function formatWeeklyIntervals(
   weekly: NonNullable<LocationItem["businessHours"]>["weekly"] | undefined,
 ): string[] {
@@ -62,9 +64,64 @@ function formatWeeklyIntervals(
   });
 }
 
+function toIntervalsCompactText(
+  intervals: Array<{ startTime: string; endTime: string }> | undefined,
+): string {
+  if (!Array.isArray(intervals) || intervals.length === 0) {
+    return "Cerrado";
+  }
+
+  return intervals.map((interval) => `${interval.startTime}-${interval.endTime}`).join(" / ");
+}
+
+function formatCompactWeeklySummary(location: LocationItem): string | null {
+  const weekly = location.businessHours?.weekly;
+  if (!Array.isArray(weekly) || weekly.length === 0) {
+    return null;
+  }
+
+  const byDay = Array.from({ length: 7 }, (_, dayOfWeek) => {
+    const day = weekly.find((entry) => entry.dayOfWeek === dayOfWeek);
+    return {
+      dayOfWeek,
+      value: toIntervalsCompactText(day?.intervals),
+    };
+  });
+
+  const segments: string[] = [];
+  let cursor = 0;
+
+  while (cursor < byDay.length) {
+    const current = byDay[cursor];
+    if (current.value === "Cerrado") {
+      cursor += 1;
+      continue;
+    }
+
+    let end = cursor;
+    while (end + 1 < byDay.length && byDay[end + 1].value === current.value) {
+      end += 1;
+    }
+
+    const dayLabel = cursor === end
+      ? WEEK_DAY_SHORT_LABELS[cursor]
+      : `${WEEK_DAY_SHORT_LABELS[cursor]}-${WEEK_DAY_SHORT_LABELS[end]}`;
+    segments.push(`${dayLabel} ${current.value}`);
+
+    cursor = end + 1;
+  }
+
+  return segments.length > 0 ? segments.join(", ") : null;
+}
+
 function getLocationBusinessHours(location: LocationItem): string {
   if (location.businessHoursSummary && location.businessHoursSummary.trim()) {
     return location.businessHoursSummary;
+  }
+
+  const compactSummary = formatCompactWeeklySummary(location);
+  if (compactSummary) {
+    return compactSummary;
   }
 
   const weeklyLines = formatWeeklyIntervals(location.businessHours?.weekly);

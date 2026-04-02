@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from "react";
+import { useEffect, type PropsWithChildren } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/shared/lib/cn";
 
@@ -10,6 +10,21 @@ type SidePanelProps = PropsWithChildren<{
 }>;
 
 export function SidePanel({ isOpen, onClose, title, children, className }: SidePanelProps) {
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) {
     return null;
   }

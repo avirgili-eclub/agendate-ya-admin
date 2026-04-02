@@ -9,6 +9,7 @@ import {
   type LocationUpsertInput,
 } from "@/features/locations/locations-service";
 import { Button } from "@/shared/ui/button";
+import { PhoneField } from "@/shared/ui/phone-field";
 
 const DAY_LABELS = [
   "Lunes",
@@ -20,17 +21,28 @@ const DAY_LABELS = [
   "Domingo",
 ];
 
+const TIMEZONE_OPTIONS = [
+  { value: "America/Asuncion", label: "America/Asuncion (UTC-3)" },
+  { value: "America/Argentina/Buenos_Aires", label: "America/Argentina/Buenos_Aires (UTC-3)" },
+  { value: "America/Sao_Paulo", label: "America/Sao_Paulo (UTC-3)" },
+  { value: "America/Santiago", label: "America/Santiago (UTC-4/-3)" },
+  { value: "America/Montevideo", label: "America/Montevideo (UTC-3)" },
+  { value: "UTC", label: "UTC (UTC+0)" },
+  { value: "Etc/GMT", label: "Etc/GMT (GMT+0)" },
+];
+
 type BusinessHoursDayState = {
   enabled: boolean;
-  startTime: string;
-  endTime: string;
+  intervals: Array<{
+    startTime: string;
+    endTime: string;
+  }>;
 };
 
 function getDefaultWeeklyState(): BusinessHoursDayState[] {
   return Array.from({ length: 7 }, () => ({
     enabled: false,
-    startTime: "09:00",
-    endTime: "18:00",
+    intervals: [{ startTime: "09:00", endTime: "18:00" }],
   }));
 }
 
@@ -47,15 +59,25 @@ function mapInitialBusinessHours(location?: LocationItem): {
       continue;
     }
 
-    const firstInterval = day.intervals?.[0];
-    if (!firstInterval) {
+    const normalizedIntervals = Array.isArray(day.intervals)
+      ? day.intervals
+          .filter(
+            (interval): interval is { startTime: string; endTime: string } =>
+              typeof interval?.startTime === "string" && typeof interval?.endTime === "string",
+          )
+          .map((interval) => ({
+            startTime: interval.startTime,
+            endTime: interval.endTime,
+          }))
+      : [];
+
+    if (normalizedIntervals.length === 0) {
       continue;
     }
 
     weekly[dayIndex] = {
       enabled: true,
-      startTime: firstInterval.startTime,
-      endTime: firstInterval.endTime,
+      intervals: normalizedIntervals,
     };
   }
 
@@ -70,9 +92,7 @@ function buildBusinessHoursPayload(
     timezone: timezone.trim() || "America/Asuncion",
     weekly: weekly.map((day, dayOfWeek) => ({
       dayOfWeek,
-      intervals: day.enabled
-        ? [{ startTime: day.startTime, endTime: day.endTime }]
-        : [],
+      intervals: day.enabled ? day.intervals : [],
     })),
   };
 }
@@ -98,7 +118,7 @@ export function LocationFormModal({
 }: LocationFormModalProps) {
   const [name, setName] = useState(initialLocation?.name ?? "");
   const [address, setAddress] = useState(initialLocation?.address ?? "");
-  const [phone, setPhone] = useState(initialLocation?.phone ?? "");
+  const [phone, setPhone] = useState(initialLocation?.phone ?? "+595");
   const [imageUrl, setImageUrl] = useState(initialLocation?.imageUrl ?? "");
   const [timezone, setTimezone] = useState(initialLocation?.businessHours?.timezone ?? "America/Asuncion");
   const [weeklyBusinessHours, setWeeklyBusinessHours] = useState<BusinessHoursDayState[]>(
@@ -107,6 +127,29 @@ export function LocationFormModal({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
+  const copyToWeekdays = () => {
+    setWeeklyBusinessHours((prev) => {
+      const source = prev[0]?.enabled
+        ? prev[0]
+        : prev.slice(0, 5).find((day) => day.enabled) ?? {
+            enabled: true,
+            intervals: [{ startTime: "09:00", endTime: "18:00" }],
+          };
+
+      const clonedIntervals = source.intervals.map((interval) => ({ ...interval }));
+
+      return prev.map((day, index) => {
+        if (index < 5) {
+          return {
+            enabled: true,
+            intervals: clonedIntervals.map((interval) => ({ ...interval })),
+          };
+        }
+        return day;
+      });
+    });
+  };
+
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -114,7 +157,7 @@ export function LocationFormModal({
 
     setName(initialLocation?.name ?? "");
     setAddress(initialLocation?.address ?? "");
-    setPhone(initialLocation?.phone ?? "");
+    setPhone(initialLocation?.phone ?? "+595");
     setImageUrl(initialLocation?.imageUrl ?? "");
     const initialHours = mapInitialBusinessHours(initialLocation);
     setTimezone(initialHours.timezone);
@@ -144,7 +187,32 @@ export function LocationFormModal({
       if (!day.enabled) {
         continue;
       }
-      if (!day.startTime || !day.endTime || day.startTime >= day.endTime) {
+
+      if (!Array.isArray(day.intervals) || day.intervals.length === 0) {
+        setFieldErrors({ [`businessHours.${index}`]: "Debes agregar al menos un intervalo para este día." });
+        setFormError("Revisa el horario de atención. Hay días habilitados sin intervalos.");
+        return;
+      }
+
+      const sortedIntervals = [...day.intervals].sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+      for (let intervalIndex = 0; intervalIndex < sortedIntervals.length; intervalIndex += 1) {
+        const interval = sortedIntervals[intervalIndex];
+        if (!interval.startTime || !interval.endTime || interval.startTime >= interval.endTime) {
+          setFieldErrors({ [`businessHours.${index}`]: "Horario inválido para este día." });
+          setFormError("Revisa el horario de atención. La hora de inicio debe ser menor a la hora de fin.");
+          return;
+        }
+
+        const next = sortedIntervals[intervalIndex + 1];
+        if (next && interval.endTime > next.startTime) {
+          setFieldErrors({ [`businessHours.${index}`]: "Los intervalos no pueden superponerse." });
+          setFormError("Revisa el horario de atención. Hay intervalos superpuestos.");
+          return;
+        }
+      }
+
+      if (day.intervals.some((interval) => !interval.startTime || !interval.endTime || interval.startTime >= interval.endTime)) {
         setFieldErrors({ [`businessHours.${index}`]: "Horario inválido para este día." });
         setFormError("Revisa el horario de atención. La hora de inicio debe ser menor a la hora de fin.");
         return;
@@ -155,7 +223,7 @@ export function LocationFormModal({
       await onSubmit({
         name,
         address,
-        phone,
+        phone: phone === "+595" ? "" : phone,
         imageUrl,
         businessHours: buildBusinessHoursPayload(timezone, weeklyBusinessHours),
       });
@@ -208,14 +276,15 @@ export function LocationFormModal({
         <label htmlFor="location-phone" className="block text-sm font-medium text-primary">
           Teléfono
         </label>
-        <input
+        <PhoneField
           id="location-phone"
-          type="tel"
+          name="phone"
           value={phone}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
-          className="mt-1 h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="+595981123456"
+          onChange={setPhone}
+          error={fieldErrors.phone}
+          className="mt-1"
         />
+        {fieldErrors.phone && <p className="mt-1 text-xs text-red-700">{fieldErrors.phone}</p>}
       </div>
 
       <div>
@@ -241,18 +310,31 @@ export function LocationFormModal({
           Configura el horario semanal de esta sede.
         </p>
 
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={copyToWeekdays}>
+            Copiar a días hábiles
+          </Button>
+        </div>
+
         <div className="mt-3">
           <label htmlFor="location-timezone" className="block text-xs font-medium text-primary">
             Zona horaria
           </label>
-          <input
+          <select
             id="location-timezone"
-            type="text"
             value={timezone}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setTimezone(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => setTimezone(e.target.value)}
             className="mt-1 h-10 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="America/Asuncion"
-          />
+          >
+            {!TIMEZONE_OPTIONS.some((option) => option.value === timezone) && (
+              <option value={timezone}>{`${timezone} (actual)`}</option>
+            )}
+            {TIMEZONE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="mt-3 space-y-2">
@@ -268,7 +350,16 @@ export function LocationFormModal({
                       onChange={(e: ChangeEvent<HTMLInputElement>) => {
                         setWeeklyBusinessHours((prev) =>
                           prev.map((entry, dayIndex) =>
-                            dayIndex === index ? { ...entry, enabled: e.target.checked } : entry,
+                            dayIndex === index
+                              ? {
+                                  ...entry,
+                                  enabled: e.target.checked,
+                                  intervals:
+                                    entry.intervals.length > 0
+                                      ? entry.intervals
+                                      : [{ startTime: "09:00", endTime: "18:00" }],
+                                }
+                              : entry,
                           ),
                         );
                       }}
@@ -277,38 +368,107 @@ export function LocationFormModal({
                     {label}
                   </label>
 
-                  <input
-                    type="time"
-                    value={day.startTime}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
                     disabled={!day.enabled}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                      const nextValue = e.target.value;
+                    onClick={() => {
                       setWeeklyBusinessHours((prev) =>
                         prev.map((entry, dayIndex) =>
-                          dayIndex === index ? { ...entry, startTime: nextValue } : entry,
+                          dayIndex === index
+                            ? {
+                                ...entry,
+                                intervals: [...entry.intervals, { startTime: "09:00", endTime: "18:00" }],
+                              }
+                            : entry,
                         ),
                       );
                     }}
-                    className="h-9 rounded-md border border-neutral-dark px-2 text-sm disabled:cursor-not-allowed disabled:bg-neutral"
-                  />
-
-                  <span className="text-xs text-primary-light">a</span>
-
-                  <input
-                    type="time"
-                    value={day.endTime}
-                    disabled={!day.enabled}
-                    onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                      const nextValue = e.target.value;
-                      setWeeklyBusinessHours((prev) =>
-                        prev.map((entry, dayIndex) =>
-                          dayIndex === index ? { ...entry, endTime: nextValue } : entry,
-                        ),
-                      );
-                    }}
-                    className="h-9 rounded-md border border-neutral-dark px-2 text-sm disabled:cursor-not-allowed disabled:bg-neutral"
-                  />
+                  >
+                    + Intervalo
+                  </Button>
                 </div>
+
+                {day.enabled && (
+                  <div className="mt-2 space-y-2">
+                    {day.intervals.map((interval, intervalIndex) => (
+                      <div key={`${label}-${intervalIndex}`} className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="time"
+                          value={interval.startTime}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const nextValue = e.target.value;
+                            setWeeklyBusinessHours((prev) =>
+                              prev.map((entry, dayIndex) =>
+                                dayIndex === index
+                                  ? {
+                                      ...entry,
+                                      intervals: entry.intervals.map((entryInterval, entryIntervalIndex) =>
+                                        entryIntervalIndex === intervalIndex
+                                          ? { ...entryInterval, startTime: nextValue }
+                                          : entryInterval,
+                                      ),
+                                    }
+                                  : entry,
+                              ),
+                            );
+                          }}
+                          className="h-9 rounded-md border border-neutral-dark px-2 text-sm"
+                        />
+
+                        <span className="text-xs text-primary-light">a</span>
+
+                        <input
+                          type="time"
+                          value={interval.endTime}
+                          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                            const nextValue = e.target.value;
+                            setWeeklyBusinessHours((prev) =>
+                              prev.map((entry, dayIndex) =>
+                                dayIndex === index
+                                  ? {
+                                      ...entry,
+                                      intervals: entry.intervals.map((entryInterval, entryIntervalIndex) =>
+                                        entryIntervalIndex === intervalIndex
+                                          ? { ...entryInterval, endTime: nextValue }
+                                          : entryInterval,
+                                      ),
+                                    }
+                                  : entry,
+                              ),
+                            );
+                          }}
+                          className="h-9 rounded-md border border-neutral-dark px-2 text-sm"
+                        />
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={day.intervals.length === 1}
+                          onClick={() => {
+                            setWeeklyBusinessHours((prev) =>
+                              prev.map((entry, dayIndex) =>
+                                dayIndex === index
+                                  ? {
+                                      ...entry,
+                                      intervals:
+                                        entry.intervals.length === 1
+                                          ? entry.intervals
+                                          : entry.intervals.filter((_, idx) => idx !== intervalIndex),
+                                    }
+                                  : entry,
+                              ),
+                            );
+                          }}
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {fieldErrors[`businessHours.${index}`] && (
                   <p className="mt-1 text-xs text-red-700">{fieldErrors[`businessHours.${index}`]}</p>
                 )}
