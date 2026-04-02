@@ -21,8 +21,10 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { SidePanel } from "@/shared/ui/side-panel";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 function toShortDate(dateTime: string) {
   return new Intl.DateTimeFormat("es-PY", {
@@ -86,7 +88,7 @@ export function LocationsPage() {
   const canManageLocations = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
 
   const [search, setSearch] = useState("");
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("resource");
   const [creating, setCreating] = useState(false);
   const [editingLocation, setEditingLocation] = useState<LocationItem | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationItem | null>(null);
@@ -101,38 +103,38 @@ export function LocationsPage() {
   const createMutation = useMutation({
     mutationFn: createLocation,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Sede creada correctamente." });
+      showFeedback("success", "Sede creada correctamente.");
       setCreating(false);
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
     },
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: LocationUpsertInput }) => updateLocation(id, input),
     onSuccess: (updated) => {
-      setFeedback({ tone: "success", message: "Sede actualizada correctamente." });
+      showFeedback("success", "Sede actualizada correctamente.");
       setEditingLocation(null);
       setSelectedLocation((previous) => (previous?.id === updated.id ? updated : previous));
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteLocation,
     onSuccess: (_, id) => {
-      setFeedback({ tone: "success", message: "Sede eliminada correctamente." });
+      showFeedback("success", "Sede eliminada correctamente.");
       setSelectedLocation((previous) => (previous?.id === id ? null : previous));
       setLocationPendingDelete(null);
       void queryClient.invalidateQueries({ queryKey: ["locations"] });
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toLocationsFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toLocationsFriendlyMessage(error as unknown as AppError));
       setLocationPendingDelete(null);
     },
   });
@@ -179,7 +181,7 @@ export function LocationsPage() {
         />
       )}
 
-      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+      <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {locationsQuery.isLoading && <LoadingState message="Cargando sedes..." />}
 
