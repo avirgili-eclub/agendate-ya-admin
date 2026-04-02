@@ -34,14 +34,48 @@ function toShortDate(dateTime: string) {
   }).format(new Date(dateTime));
 }
 
+const WEEK_DAY_LABELS = [
+  "Lunes",
+  "Martes",
+  "Miércoles",
+  "Jueves",
+  "Viernes",
+  "Sábado",
+  "Domingo",
+];
+
+function formatWeeklyIntervals(
+  weekly: NonNullable<LocationItem["businessHours"]>["weekly"] | undefined,
+): string[] {
+  if (!Array.isArray(weekly) || weekly.length === 0) {
+    return [];
+  }
+
+  return WEEK_DAY_LABELS.map((label, dayOfWeek) => {
+    const day = weekly.find((entry) => entry.dayOfWeek === dayOfWeek);
+    if (!day || day.intervals.length === 0) {
+      return `${label}: Cerrado`;
+    }
+
+    const ranges = day.intervals.map((interval) => `${interval.startTime} - ${interval.endTime}`);
+    return `${label}: ${ranges.join(", ")}`;
+  });
+}
+
 function getLocationBusinessHours(location: LocationItem): string {
   if (location.businessHoursSummary && location.businessHoursSummary.trim()) {
     return location.businessHoursSummary;
   }
 
+  const weeklyLines = formatWeeklyIntervals(location.businessHours?.weekly);
+  const openDays = weeklyLines.filter((line) => !line.endsWith("Cerrado"));
+  if (openDays.length > 0) {
+    return openDays.slice(0, 2).join(" | ");
+  }
+
   const metadata = location.metadata;
   if (!metadata || typeof metadata !== "object") {
-    return "Horario no informado";
+    return "Sin horario configurado";
   }
 
   const meta = metadata as Record<string, unknown>;
@@ -79,7 +113,7 @@ function getLocationBusinessHours(location: LocationItem): string {
     }
   }
 
-  return "Horario no informado";
+  return "Sin horario configurado";
 }
 
 export function LocationsPage() {
@@ -263,31 +297,43 @@ export function LocationsPage() {
         </div>
       )}
 
-      <LocationFormModal
-        mode="create"
+      <SidePanel
         isOpen={creating}
-        isLoading={createMutation.isPending}
-        error={(createMutation.error as AppError | null) ?? null}
         onClose={() => setCreating(false)}
-        onSubmit={async (input) => {
-          await createMutation.mutateAsync(input);
-        }}
-      />
+        title="Nueva Sede"
+      >
+        <LocationFormModal
+          mode="create"
+          isOpen={creating}
+          isLoading={createMutation.isPending}
+          error={(createMutation.error as AppError | null) ?? null}
+          onClose={() => setCreating(false)}
+          onSubmit={async (input) => {
+            await createMutation.mutateAsync(input);
+          }}
+        />
+      </SidePanel>
 
-      <LocationFormModal
-        mode="edit"
-        initialLocation={editingLocation ?? undefined}
+      <SidePanel
         isOpen={Boolean(editingLocation)}
-        isLoading={updateMutation.isPending}
-        error={(updateMutation.error as AppError | null) ?? null}
         onClose={() => setEditingLocation(null)}
-        onSubmit={async (input) => {
-          if (!editingLocation) {
-            return;
-          }
-          await updateMutation.mutateAsync({ id: editingLocation.id, input });
-        }}
-      />
+        title="Editar Sede"
+      >
+        <LocationFormModal
+          mode="edit"
+          initialLocation={editingLocation ?? undefined}
+          isOpen={Boolean(editingLocation)}
+          isLoading={updateMutation.isPending}
+          error={(updateMutation.error as AppError | null) ?? null}
+          onClose={() => setEditingLocation(null)}
+          onSubmit={async (input) => {
+            if (!editingLocation) {
+              return;
+            }
+            await updateMutation.mutateAsync({ id: editingLocation.id, input });
+          }}
+        />
+      </SidePanel>
 
       <SidePanel
         isOpen={Boolean(selectedLocation)}
@@ -340,7 +386,17 @@ export function LocationsPage() {
 
             <div>
               <p className="text-xs uppercase tracking-wide text-primary-light">Horario de atención</p>
-              <p className="text-sm text-primary">{getLocationBusinessHours(selectedLocation)}</p>
+              <p className="mb-2 text-sm text-primary">{getLocationBusinessHours(selectedLocation)}</p>
+              {selectedLocation.businessHours?.timezone && (
+                <p className="mb-2 text-xs text-primary-light">
+                  Zona horaria: {selectedLocation.businessHours.timezone}
+                </p>
+              )}
+              <ul className="space-y-1 text-xs text-primary-light">
+                {formatWeeklyIntervals(selectedLocation.businessHours?.weekly).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
             </div>
 
             <div>

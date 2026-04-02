@@ -27,11 +27,27 @@ export type LocationItem = {
   updatedAt: string;
 };
 
+export type LocationBusinessHourIntervalInput = {
+  startTime: string;
+  endTime: string;
+};
+
+export type LocationBusinessHourDayInput = {
+  dayOfWeek: number;
+  intervals: LocationBusinessHourIntervalInput[];
+};
+
+export type LocationBusinessHoursInput = {
+  timezone: string;
+  weekly: LocationBusinessHourDayInput[];
+};
+
 export type LocationUpsertInput = {
   name: string;
   address?: string;
   phone?: string;
   imageUrl?: string;
+  businessHours?: LocationBusinessHoursInput;
 };
 
 type DataEnvelope<T> = { data: T };
@@ -126,6 +142,56 @@ function normalizeOptionalField(value: string | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizeBusinessHoursInput(
+  input: LocationBusinessHoursInput | undefined,
+): LocationBusinessHoursInput | undefined {
+  if (!input || typeof input !== "object") {
+    return undefined;
+  }
+
+  const timezone = typeof input.timezone === "string" && input.timezone.trim()
+    ? input.timezone.trim()
+    : "America/Asuncion";
+
+  const weeklyByDay = new Map<number, LocationBusinessHourDayInput>();
+
+  for (const day of input.weekly ?? []) {
+    if (!day || typeof day.dayOfWeek !== "number") {
+      continue;
+    }
+
+    const normalizedDay = Math.max(0, Math.min(6, day.dayOfWeek));
+    const intervals = Array.isArray(day.intervals)
+      ? day.intervals
+          .filter(
+            (interval): interval is LocationBusinessHourIntervalInput =>
+              typeof interval?.startTime === "string" &&
+              interval.startTime.length > 0 &&
+              typeof interval?.endTime === "string" &&
+              interval.endTime.length > 0,
+          )
+          .map((interval) => ({
+            startTime: interval.startTime,
+            endTime: interval.endTime,
+          }))
+      : [];
+
+    weeklyByDay.set(normalizedDay, {
+      dayOfWeek: normalizedDay,
+      intervals,
+    });
+  }
+
+  const weekly = Array.from({ length: 7 }, (_, dayOfWeek) => {
+    return weeklyByDay.get(dayOfWeek) ?? { dayOfWeek, intervals: [] };
+  });
+
+  return {
+    timezone,
+    weekly,
+  };
+}
+
 function assertLocationInput(input: LocationUpsertInput) {
   if (!input.name.trim()) {
     throw toAppError({
@@ -138,11 +204,14 @@ function assertLocationInput(input: LocationUpsertInput) {
 }
 
 function toUpsertPayload(input: LocationUpsertInput) {
+  const businessHours = normalizeBusinessHoursInput(input.businessHours);
+
   return {
     name: input.name.trim(),
     address: normalizeOptionalField(input.address),
     phone: normalizeOptionalField(input.phone),
     imageUrl: normalizeOptionalField(input.imageUrl),
+    businessHours,
   };
 }
 
