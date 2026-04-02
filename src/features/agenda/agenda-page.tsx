@@ -33,8 +33,10 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 type ViewMode = "week" | "day" | "month";
 
@@ -537,7 +539,7 @@ export function AgendaPage() {
     "CONFIRMED",
   ]);
   const [showNewBookingPanel, setShowNewBookingPanel] = useState(false);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
 
   const locationsQuery = useLocationsQuery();
   const tenantQuery = useQuery({
@@ -608,24 +610,24 @@ export function AgendaPage() {
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) => updateBookingStatus(id, status),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Estado del turno actualizado correctamente." });
+      showFeedback("success", "Estado del turno actualizado correctamente.");
       void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toAgendaFriendlyMessage(appError) });
+      showFeedback("error", toAgendaFriendlyMessage(appError));
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: deleteBooking,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Turno cancelado exitosamente." });
+      showFeedback("success", "Turno cancelado exitosamente.");
       void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toAgendaFriendlyMessage(appError) });
+      showFeedback("error", toAgendaFriendlyMessage(appError));
     },
   });
 
@@ -866,7 +868,7 @@ export function AgendaPage() {
 
         {/* Main calendar board */}
         <div>
-          {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+          <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
           {errorMessage && (
             <ErrorState
@@ -967,7 +969,7 @@ export function AgendaPage() {
           initialLocationId={selectedLocations.length === 1 ? selectedLocations[0] : undefined}
           onClose={() => setShowNewBookingPanel(false)}
           onCreated={() => {
-            setFeedback({ tone: "success", message: "Turno creado correctamente." });
+            showFeedback("success", "Turno creado correctamente.");
           }}
         />
       </SidePanel>
