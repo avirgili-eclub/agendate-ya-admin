@@ -34,7 +34,9 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 function formatDateTime(isoString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -375,11 +377,11 @@ type BookingDetailPanelProps = {
   bookingSummary?: BookingListItem;
   onClose: () => void;
   onRefresh: () => void;
-  onFeedback: (feedback: { tone: "success" | "error"; message: string }) => void;
 };
 
-function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh, onFeedback }: BookingDetailPanelProps) {
+function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: BookingDetailPanelProps) {
   const queryClient = useQueryClient();
+  const { showFeedback } = useFeedback("booking");
   const detailQuery = useBookingDetailQuery(bookingId);
   const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
 
@@ -408,11 +410,11 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh, onF
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
       onRefresh();
-      onFeedback({ tone: "success", message: "Estado del turno actualizado correctamente." });
+      showFeedback("success", "Estado del turno actualizado correctamente.");
       setConfirmingAction(null);
     },
     onError: (error: AppError) => {
-      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
     },
   });
 
@@ -421,11 +423,11 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh, onF
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       onRefresh();
-      onFeedback({ tone: "success", message: "Turno cancelado correctamente." });
+      showFeedback("success", "Turno cancelado correctamente.");
       onClose();
     },
     onError: (error: AppError) => {
-      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
     },
   });
 
@@ -636,7 +638,7 @@ export function BookingsPage() {
   const [pageSize] = useState(20);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
   const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
@@ -646,11 +648,11 @@ export function BookingsPage() {
     mutationFn: (id: string) => deleteBooking(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      setFeedback({ tone: "success", message: "Turno cancelado correctamente." });
+      showFeedback("success", "Turno cancelado correctamente.");
       setBookingPendingCancel(null);
     },
     onError: (error: AppError) => {
-      setFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
       setBookingPendingCancel(null);
     },
   });
@@ -682,7 +684,7 @@ export function BookingsPage() {
         </Button>
       </header>
 
-      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+      {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
       <PageCard>
         {bookingsQuery.isLoading && <LoadingState message="Cargando turnos..." />}
@@ -793,7 +795,7 @@ export function BookingsPage() {
         <CreateBookingForm
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["bookings"] });
+            showFeedback("success", "Turno creado correctamente.");
           }}
         />
       </SidePanel>
@@ -812,7 +814,6 @@ export function BookingsPage() {
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["bookings"] });
             }}
-            onFeedback={setFeedback}
           />
         )}
       </SidePanel>

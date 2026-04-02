@@ -21,8 +21,9 @@ import { StatusChip } from "@/shared/ui/status-chip";
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 type SupportedCurrency = "PYG" | "ARS" | "USD" | "EUR";
 
@@ -358,7 +359,7 @@ export function ServicesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("Todas las ubicaciones");
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("service");
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
   const [servicePendingDelete, setServicePendingDelete] = useState<ServiceItem | null>(null);
@@ -403,39 +404,39 @@ export function ServicesPage() {
   const createServiceMutation = useMutation({
     mutationFn: createService,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Servicio creado correctamente." });
+      showFeedback("success", "Servicio creado correctamente.");
       setShowCreatePanel(false);
       void queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toServicesFriendlyMessage(appError) });
+      showFeedback("error", toServicesFriendlyMessage(appError));
     },
   });
 
   const updateServiceMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: ServiceUpsertInput }) => updateService(id, input),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Servicio actualizado correctamente." });
+      showFeedback("success", "Servicio actualizado correctamente.");
       setEditingService(null);
       void queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toServicesFriendlyMessage(appError) });
+      showFeedback("error", toServicesFriendlyMessage(appError));
     },
   });
 
   const deleteServiceMutation = useMutation({
     mutationFn: deleteService,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Servicio eliminado correctamente." });
+      showFeedback("success", "Servicio eliminado correctamente.");
       setServicePendingDelete(null);
       void queryClient.invalidateQueries({ queryKey: ["services"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toServicesFriendlyMessage(appError) });
+      showFeedback("error", toServicesFriendlyMessage(appError));
       setServicePendingDelete(null);
     },
   });
@@ -458,7 +459,7 @@ export function ServicesPage() {
           </Button>
         </div>
 
-        {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+        <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
