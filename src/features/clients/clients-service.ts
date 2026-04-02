@@ -24,8 +24,7 @@ export type ClientItem = {
  * Form input model: Data structure for create/update forms.
  */
 export type ClientUpsertInput = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string;
   notes?: string;
@@ -107,8 +106,7 @@ function splitFullName(fullName: string): { firstName: string; lastName: string 
  * Explicit contract reduces drift risk between form and API.
  */
 type ApiClientRequest = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string;
   notes?: string;
@@ -201,8 +199,7 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
  */
 function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
   return {
-    firstName: input.firstName.trim(),
-    lastName: input.lastName.trim(),
+    fullName: input.fullName.trim(),
     phone: input.phone.trim(),
     email: input.email?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
@@ -211,11 +208,8 @@ function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
 
 function assertClientInput(input: ClientUpsertInput) {
   const details: Array<{ field: string; message: string }> = [];
-  if (!input.firstName.trim()) {
-    details.push({ field: "firstName", message: "El nombre es obligatorio." });
-  }
-  if (!input.lastName.trim()) {
-    details.push({ field: "lastName", message: "El apellido es obligatorio." });
+  if (!input.fullName.trim()) {
+    details.push({ field: "fullName", message: "El nombre completo es obligatorio." });
   }
   if (!input.phone.trim()) {
     details.push({ field: "phone", message: "El teléfono es obligatorio." });

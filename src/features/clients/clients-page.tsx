@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { Search, User, Phone, Mail, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, User, Phone, Mail, Calendar, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -13,6 +13,7 @@ import {
 } from "@/features/clients/clients-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ClientDetailPanel } from "@/features/clients/client-detail-panel";
 import { ClientFormModal } from "@/features/clients/client-form-modal";
 
@@ -25,6 +26,7 @@ export function ClientsPage() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -54,6 +56,10 @@ export function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       setFormMode(null);
+      setFeedback({ tone: "success", message: "Cliente creado correctamente." });
+    },
+    onError: (mutationError: AppError) => {
+      setFeedback({ tone: "error", message: toClientsFriendlyMessage(mutationError) });
     },
   });
 
@@ -64,6 +70,10 @@ export function ClientsPage() {
       queryClient.invalidateQueries({ queryKey: ["client"] });
       setFormMode(null);
       setEditingClient(null);
+      setFeedback({ tone: "success", message: "Cliente actualizado correctamente." });
+    },
+    onError: (mutationError: AppError) => {
+      setFeedback({ tone: "error", message: toClientsFriendlyMessage(mutationError) });
     },
   });
 
@@ -110,13 +120,15 @@ export function ClientsPage() {
           </p>
         </div>
         <Button
-          variant="outline"
           className="flex items-center gap-2"
           onClick={() => setFormMode("create")}
         >
-          Alta de cliente
+          <Plus className="size-4" />
+          Nuevo Cliente
         </Button>
       </header>
+
+      <TransientFeedback feedback={feedback} onDismiss={() => setFeedback(null)} />
 
       {/* Search and Filter */}
       <PageCard>
