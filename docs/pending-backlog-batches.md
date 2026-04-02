@@ -28,8 +28,8 @@ Objetivo: cerrar end-to-end la creacion de turnos desde Agenda y reflejarlo corr
 - [x] Soportar filtro por localidad y recurso con seleccion multiple.
 - [x] Al seleccionar localidad(es), cargar recursos correspondientes para seleccionar uno o mas.
 - [x] Al seleccionar recurso(s), traer agendamientos de esos recursos y renderizarlos en el calendario.
-- [ ] Resolver superposicion por fecha/hora entre recursos distintos sin perder legibilidad.
-- [ ] Mantener claridad de lectura cuando dos o mas profesionales tienen turnos en mismo rango horario.
+- [x] Resolver superposicion por fecha/hora entre recursos distintos sin perder legibilidad.
+- [x] Mantener claridad de lectura cuando dos o mas profesionales tienen turnos en mismo rango horario.
 
 ### Integracion endpoint calendario (nuevo contrato backend)
 
@@ -71,17 +71,19 @@ Objetivo: agregar la pagina de Locales con obtener, ver, crear, editar y accione
 
 ### Alcance
 
-- [ ] Crear ruta y pagina de Locales en navegacion principal.
-- [ ] Implementar listado con estados loading/empty/error.
-- [ ] Implementar crear local (form + validaciones + alta backend).
-- [ ] Implementar editar local (form + validaciones + actualizacion backend).
-- [ ] Implementar ver detalle basico y acciones disponibles segun rol.
-- [ ] Implementar eliminacion o desactivacion segun contrato backend vigente.
+- [x] Crear ruta y pagina de Locales en navegacion principal.
+- [x] Implementar listado con estados loading/empty/error.
+- [x] Implementar crear local (form + validaciones + alta backend).
+- [x] Implementar editar local (form + validaciones + actualizacion backend).
+- [x] Implementar ver detalle basico y acciones disponibles segun rol.
+- [x] Implementar eliminacion o desactivacion segun contrato backend vigente.
+
+Nota: según OpenAPI actual, para Locales existe eliminación (`DELETE /locations/{id}`) y no endpoint explícito de desactivación. Se implementó eliminación con validación de dependencias.
 
 ### Definition of Done
 
-- [ ] CRUD operativo segun endpoint disponible.
-- [ ] Manejo de errores consistente con el resto del admin.
+- [x] CRUD operativo segun endpoint disponible.
+- [x] Manejo de errores consistente con el resto del admin.
 - [ ] QA responsive y accesibilidad basica del modulo.
 
 ## Batch C - Fix visual Recursos + micro-UX
@@ -90,14 +92,14 @@ Objetivo: corregir desborde del boton Desactivar en card de recursos y evitar re
 
 ### Alcance
 
-- [ ] Corregir layout de acciones en card de recurso para que el cuarto boton quede contenido.
-- [ ] Revisar variantes de ancho (desktop/tablet/mobile) y textos largos.
-- [ ] Ajustar espaciado/alineacion para mantener consistencia con el design system actual.
+- [x] Corregir layout de acciones en card de recurso para que el cuarto boton quede contenido.
+- [x] Revisar variantes de ancho (desktop/tablet/mobile) y textos largos.
+- [x] Ajustar espaciado/alineacion para mantener consistencia con el design system actual.
 
 ### Definition of Done
 
-- [ ] No hay overflow horizontal en acciones de card.
-- [ ] Botones alineados y accesibles en breakpoints principales.
+- [x] No hay overflow horizontal en acciones de card.
+- [x] Botones alineados y accesibles en breakpoints principales.
 
 ## Batch D - Hardening funcional y QA transversal
 
@@ -136,7 +138,7 @@ Estado actual: parcial (Batch A en progreso)
 - [x] A-04 Refresco de calendario al crear turno
 - [x] A-05 Filtro multi-localidad y multi-recurso
 - [x] A-06 Carga de agendamientos por recursos seleccionados
-- [ ] A-07 Render superposicion horaria multi-recurso
+- [x] A-07 Render superposicion horaria multi-recurso
 - [x] A-08 Card con hora cliente servicio nota opcional
 - [x] A-09 Mapeo visual de estados en cards de calendario
 - [x] A-10 Reuso mask/placeholder de telefono de registro
@@ -150,17 +152,17 @@ Estado actual: parcial (Batch A en progreso)
 
 ### Batch B (Locales)
 
-- B-01 Ruta y pagina de Locales
-- B-02 Listado con loading empty error
-- B-03 Crear local con validaciones
-- B-04 Editar local con validaciones
-- B-05 Acciones por rol (ver/editar/desactivar/eliminar segun contrato)
+- [x] B-01 Ruta y pagina de Locales
+- [x] B-02 Listado con loading empty error
+- [x] B-03 Crear local con validaciones
+- [x] B-04 Editar local con validaciones
+- [x] B-05 Acciones por rol (ver/editar/desactivar/eliminar segun contrato)
 
 ### Batch C (Recursos)
 
-- C-01 Fix overflow del boton Desactivar en card
-- C-02 Ajustes responsive de acciones en card
-- C-03 Consistencia visual final de la card
+- [x] C-01 Fix overflow del boton Desactivar en card
+- [x] C-02 Ajustes responsive de acciones en card
+- [x] C-03 Consistencia visual final de la card
 
 ### Batch D (Hardening)
 

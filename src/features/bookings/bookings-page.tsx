@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PhoneInput } from "react-international-phone";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 import type { AppError } from "@/core/errors/app-error";
 import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
@@ -55,7 +57,7 @@ function formatTime(isoString: string): string {
 
 type BookingRowProps = {
   booking: BookingListItem;
-  onViewDetail: (id: string) => void;
+  onViewDetail: (booking: BookingListItem) => void;
   onCancel: (booking: BookingListItem) => void;
 };
 
@@ -78,7 +80,7 @@ function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onViewDetail(booking.id)}
+            onClick={() => onViewDetail(booking)}
             className="rounded-md p-1.5 text-primary-light hover:bg-neutral-dark hover:text-primary transition-colors"
             aria-label="Ver detalle"
           >
@@ -111,7 +113,7 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
   const [resourceId, setResourceId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState("+595");
   const [clientEmail, setClientEmail] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -157,6 +159,19 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
     setFormError(null);
     setFieldErrors({});
 
+    const validationErrors: Record<string, string> = {};
+    if (!locationId) {
+      validationErrors.locationId = "Debes seleccionar un local.";
+    }
+    if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
+      validationErrors.clientPhone = "Ingresa un telefono valido.";
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      return;
+    }
+
     createMutation.mutate({
       resourceId,
       serviceId,
@@ -176,9 +191,7 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
   return (
     <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
       {formError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {formError}
-        </div>
+        <FeedbackBanner tone="error" message={formError} />
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -198,13 +211,35 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-primary-dark">Teléfono *</span>
-          <input
-            type="tel"
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="+54 9 11 1234-5678"
-          />
+          <div className={`register-phone-wrapper ${fieldErrors.clientPhone ? "!border-red-500" : ""}`}>
+            <PhoneInput
+              defaultCountry="py"
+              preferredCountries={["py", "ar", "br", "cl", "uy"]}
+              disableDialCodeAndPrefix
+              showDisabledDialCodeAndPrefix
+              defaultMask="(...) ... - ..."
+              placeholder="(981) 123 - 456"
+              value={clientPhone}
+              onChange={(phone) => setClientPhone(phone)}
+              className="register-phone-root"
+              inputClassName="register-phone-input"
+              inputProps={{
+                name: "clientPhone",
+                autoComplete: "tel",
+              }}
+              countrySelectorStyleProps={{
+                buttonClassName: "register-phone-country-button",
+                flagClassName: "register-phone-flag",
+                dropdownArrowClassName: "register-phone-country-arrow",
+                dropdownStyleProps: {
+                  className: "register-phone-country-dropdown",
+                  listItemClassName: "register-phone-country-item",
+                  listItemSelectedClassName: "register-phone-country-item-selected",
+                  listItemFocusedClassName: "register-phone-country-item-focused",
+                },
+              }}
+            />
+          </div>
           {fieldErrors.clientPhone && (
             <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
           )}
@@ -240,8 +275,8 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
               ))}
             </SelectContent>
           </Select>
-          {fieldErrors.resourceId && !locationId && (
-            <span className="mt-1 block text-xs text-red-700">Selecciona un local primero</span>
+          {fieldErrors.locationId && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.locationId}</span>
           )}
         </label>
 
@@ -337,15 +372,34 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
 type BookingDetailPanelProps = {
   bookingId: string;
+  bookingSummary?: BookingListItem;
   onClose: () => void;
   onRefresh: () => void;
   onFeedback: (feedback: { tone: "success" | "error"; message: string }) => void;
 };
 
-function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: BookingDetailPanelProps) {
+function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh, onFeedback }: BookingDetailPanelProps) {
   const queryClient = useQueryClient();
   const detailQuery = useBookingDetailQuery(bookingId);
   const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
+
+  const pickPreferredText = (
+    primary: string | undefined,
+    secondary: string | undefined,
+    placeholder?: string,
+  ) => {
+    const primaryTrimmed = primary?.trim();
+    if (primaryTrimmed && (!placeholder || primaryTrimmed !== placeholder)) {
+      return primaryTrimmed;
+    }
+
+    const secondaryTrimmed = secondary?.trim();
+    if (secondaryTrimmed && (!placeholder || secondaryTrimmed !== placeholder)) {
+      return secondaryTrimmed;
+    }
+
+    return primaryTrimmed || secondaryTrimmed || placeholder || "";
+  };
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) =>
@@ -375,7 +429,7 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     },
   });
 
-  if (detailQuery.isLoading) {
+  if (detailQuery.isLoading && !bookingSummary) {
     return (
       <div className="px-6 py-8 text-center text-sm text-primary-light">
         Cargando detalles del turno...
@@ -383,7 +437,9 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     );
   }
 
-  if (detailQuery.isError || !detailQuery.data) {
+  const booking = detailQuery.data ?? bookingSummary;
+
+  if (!booking) {
     return (
       <div className="px-6 py-8 text-center text-sm text-red-600">
         Error al cargar el turno. Intenta nuevamente.
@@ -391,7 +447,23 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     );
   }
 
-  const booking = detailQuery.data;
+  const clientName = pickPreferredText(
+    detailQuery.data?.clientName,
+    bookingSummary?.clientName,
+    "Cliente",
+  );
+  const clientPhone = pickPreferredText(detailQuery.data?.clientPhone, bookingSummary?.clientPhone);
+  const serviceName = pickPreferredText(
+    detailQuery.data?.serviceName,
+    bookingSummary?.serviceName,
+    "Servicio",
+  );
+  const resourceName = pickPreferredText(
+    detailQuery.data?.resourceName,
+    bookingSummary?.resourceName,
+    "Sin asignar",
+  );
+  const notes = detailQuery.data?.notes ?? bookingSummary?.notes;
   const validTransitions = getValidStatusTransitions(booking.status);
 
   function handleStatusChange(newStatus: BookingStatus) {
@@ -414,6 +486,12 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
 
   return (
     <div className="px-6 py-4">
+      {detailQuery.isError && bookingSummary && (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          No se pudieron cargar todos los detalles del turno. Mostrando datos disponibles del listado.
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Client Info */}
         <section>
@@ -421,11 +499,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
           <div className="space-y-2 rounded-md bg-neutral p-4">
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Nombre:</span>
-              <span className="text-sm font-medium text-primary">{booking.clientName}</span>
+              <span className="text-sm font-medium text-primary">{clientName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Teléfono:</span>
-              <span className="text-sm font-medium text-primary">{booking.clientPhone}</span>
+              <span className="text-sm font-medium text-primary">{clientPhone}</span>
             </div>
           </div>
         </section>
@@ -436,11 +514,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
           <div className="space-y-2 rounded-md bg-neutral p-4">
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Servicio:</span>
-              <span className="text-sm font-medium text-primary">{booking.serviceName}</span>
+              <span className="text-sm font-medium text-primary">{serviceName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Recurso:</span>
-              <span className="text-sm font-medium text-primary">{booking.resourceName}</span>
+              <span className="text-sm font-medium text-primary">{resourceName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Inicio:</span>
@@ -467,10 +545,10 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
                 {getSourceChannelLabel(booking.sourceChannel)}
               </span>
             </div>
-            {booking.notes && (
+            {notes && (
               <div className="pt-2 border-t border-neutral-dark">
                 <span className="text-sm text-primary-light block mb-1">Notas:</span>
-                <p className="text-sm text-primary">{booking.notes}</p>
+                <p className="text-sm text-primary">{notes}</p>
               </div>
             )}
           </div>
@@ -515,7 +593,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
         <section className="border-t border-neutral-dark pt-4">
           <div className="space-y-1 text-xs text-primary-light">
             <p>Creado: {formatDateTime(booking.createdAt)}</p>
-            <p>Actualizado: {formatDateTime(booking.updatedAt)}</p>
+            {"updatedAt" in booking && typeof booking.updatedAt === "string" ? (
+              <p>Actualizado: {formatDateTime(booking.updatedAt)}</p>
+            ) : (
+              <p>Actualizado: -</p>
+            )}
           </div>
         </section>
       </div>
@@ -553,7 +635,7 @@ export function BookingsPage() {
   const [page, setPage] = useState(0);
   const [pageSize] = useState(20);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
 
@@ -579,6 +661,10 @@ export function BookingsPage() {
 
   function handleCancelBooking(booking: BookingListItem) {
     setBookingPendingCancel(booking);
+  }
+
+  function handleOpenDetail(booking: BookingListItem) {
+    setSelectedBooking(booking);
   }
 
   return (
@@ -654,7 +740,7 @@ export function BookingsPage() {
                         <BookingRow
                           key={booking.id}
                           booking={booking}
-                          onViewDetail={setSelectedBookingId}
+                          onViewDetail={handleOpenDetail}
                           onCancel={handleCancelBooking}
                         />
                       ))}
@@ -714,14 +800,15 @@ export function BookingsPage() {
 
       {/* Detail Side Panel */}
       <SidePanel
-        isOpen={!!selectedBookingId}
-        onClose={() => setSelectedBookingId(null)}
+        isOpen={!!selectedBooking}
+        onClose={() => setSelectedBooking(null)}
         title="Detalle del Turno"
       >
-        {selectedBookingId && (
+        {selectedBooking && (
           <BookingDetailPanel
-            bookingId={selectedBookingId}
-            onClose={() => setSelectedBookingId(null)}
+            bookingId={selectedBooking.id}
+            bookingSummary={selectedBooking}
+            onClose={() => setSelectedBooking(null)}
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["bookings"] });
             }}

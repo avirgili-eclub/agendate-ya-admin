@@ -1,6 +1,6 @@
-import { useState, type ChangeEvent } from "react";
-import { Search, User, Phone, Mail, Calendar } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState, type ChangeEvent } from "react";
+import { Search, User, Phone, Mail, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
 import {
@@ -20,13 +20,33 @@ export function ClientsPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(20);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
 
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchTerm]);
+
+  const isShortSearch = debouncedSearch.length > 0 && debouncedSearch.length < 3;
+  const shouldUseServerSearch = debouncedSearch.length >= 3;
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["clients", { search: debouncedSearch }],
-    queryFn: () => fetchClients({ search: debouncedSearch }),
+    queryKey: ["clients", { page, size: pageSize, search: shouldUseServerSearch ? debouncedSearch : "" }],
+    queryFn: () =>
+      fetchClients({
+        page,
+        size: pageSize,
+        ...(shouldUseServerSearch ? { search: debouncedSearch } : {}),
+      }),
+    enabled: !isShortSearch,
+    placeholderData: keepPreviousData,
   });
 
   const createMutation = useMutation({
@@ -50,7 +70,7 @@ export function ClientsPage() {
   const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
-    setDebouncedSearch(value);
+    setPage(0);
   };
 
   const handleOpenEdit = (client: ClientItem) => {
@@ -73,7 +93,9 @@ export function ClientsPage() {
     updateMutation.reset();
   };
 
-  const clients = data?.clients ?? [];
+  const clients = isShortSearch ? [] : (data?.clients ?? []);
+  const total = isShortSearch ? 0 : (data?.total ?? 0);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const formError = formMode === "create" ? createMutation.error : updateMutation.error;
   const isFormLoading = formMode === "create" ? createMutation.isPending : updateMutation.isPending;
 
@@ -108,6 +130,11 @@ export function ClientsPage() {
               onChange={handleSearchChange}
               className="w-full rounded-md border border-neutral-dark bg-white py-2 pl-10 pr-4 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light"
             />
+            {searchTerm.trim().length > 0 && searchTerm.trim().length < 3 && (
+              <p className="mt-2 text-xs text-primary-light">
+                Escribe al menos 3 caracteres para buscar.
+              </p>
+            )}
           </div>
         </div>
       </PageCard>
@@ -135,7 +162,7 @@ export function ClientsPage() {
             <User className="mx-auto size-12 text-neutral-dark" />
             <h3 className="mt-4 text-base font-semibold text-primary">No hay clientes</h3>
             <p className="mt-2 text-sm text-primary-light">
-              {debouncedSearch
+              {shouldUseServerSearch
                 ? "No se encontraron clientes con los criterios especificados."
                 : "Aún no hay clientes registrados en el tenant."}
             </p>
@@ -157,7 +184,7 @@ export function ClientsPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-semibold text-primary">
-                      {client.firstName} {client.lastName}
+                      {client.fullName}
                     </h3>
                     <div className="mt-1 flex items-center gap-1 text-xs text-primary-light">
                       <Phone className="size-3" />
@@ -173,7 +200,7 @@ export function ClientsPage() {
                 </div>
                 <div className="flex items-center gap-2 border-t border-neutral-dark pt-3 text-xs text-primary-light">
                   <Calendar className="size-3" />
-                  <span>{client.totalBookings} turnos totales</span>
+                  <span>{client.totalBookings} turnos completados</span>
                   {client.lastBookingDate && (
                     <span className="ml-auto">
                       Último: {new Date(client.lastBookingDate).toLocaleDateString("es-PY")}
@@ -185,6 +212,37 @@ export function ClientsPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {!isLoading && !error && total > 0 && (
+        <PageCard>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-primary-light">
+              Mostrando {page * pageSize + 1} a {Math.min((page + 1) * pageSize, total)} de {total} clientes
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <span className="text-sm text-primary" aria-current="page">
+                Página {page + 1} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
+        </PageCard>
       )}
 
       {/* Client Detail Panel */}

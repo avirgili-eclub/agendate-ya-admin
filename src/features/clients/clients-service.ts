@@ -8,6 +8,7 @@ import { createErrorMapper } from "@/shared/utils/api-error-mapper";
  */
 export type ClientItem = {
   id: string;
+  fullName: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -71,18 +72,35 @@ type PagedEnvelope<T> = {
 type ApiClient = {
   id: string;
   tenantId: string;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string | null;
   notes?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  completedBookingsCount?: number;
   metadata?: {
     lastBookingDate?: string;
     totalBookings?: number;
   };
 };
+
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const normalized = fullName.trim();
+  if (!normalized) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const parts = normalized.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
 
 /**
  * API request schema: Client for backend POST/PUT endpoints.
@@ -159,17 +177,20 @@ function mapApiChatMessageToItem(api: ApiChatMessage): ChatMessage {
  * Handles null -> undefined conversion and nested metadata extraction.
  */
 function mapApiClientToItem(api: ApiClient): ClientItem {
+  const { firstName, lastName } = splitFullName(api.fullName ?? "");
+
   return {
     id: api.id,
-    firstName: api.firstName,
-    lastName: api.lastName,
+    fullName: api.fullName,
+    firstName,
+    lastName,
     phone: api.phone,
     email: api.email ?? undefined,
     notes: api.notes ?? undefined,
     createdAt: api.createdAt,
-    updatedAt: api.updatedAt,
+    updatedAt: api.updatedAt ?? api.createdAt,
     lastBookingDate: api.metadata?.lastBookingDate,
-    totalBookings: api.metadata?.totalBookings ?? 0,
+    totalBookings: api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
   };
 }
 
