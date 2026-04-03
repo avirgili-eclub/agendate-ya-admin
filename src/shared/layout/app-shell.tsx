@@ -36,7 +36,7 @@ export function AppShell() {
           <button
             className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
             type="button"
-            aria-label={isMobileMenuOpen ? "Cerrar menu principal" : "Abrir menu principal"}
+            aria-label={isMobileMenuOpen ? "Cerrar menú principal" : "Abrir menú principal"}
             aria-expanded={isMobileMenuOpen}
             aria-controls="main-navigation"
             onClick={() => setIsMobileMenuOpen((value) => !value)}
@@ -77,7 +77,7 @@ export function AppShell() {
         <button
           type="button"
           className="fixed inset-0 z-20 bg-primary-dark/30 lg:hidden"
-          aria-label="Cerrar menu principal"
+          aria-label="Cerrar menú principal"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -87,7 +87,7 @@ export function AppShell() {
           id="main-navigation"
           className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
           role="navigation"
-          aria-label="Menu principal"
+          aria-label="Menú principal"
         >
           <div className="mb-4 border-b border-white/20 px-3 pb-3">
             <p className="text-sm font-semibold">Admin Console</p>
