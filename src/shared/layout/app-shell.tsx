@@ -1,6 +1,6 @@
-import { Bell, LogOut, MessageSquare, Search } from "lucide-react";
+import { Bell, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { APP_NAV_ITEMS, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
@@ -17,6 +17,11 @@ export function AppShell() {
   const session = getSessionState();
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   async function handleLogout() {
     await logout();
@@ -28,6 +33,16 @@ export function AppShell() {
       <header className="sticky top-0 z-20 border-b border-neutral-dark bg-neutral-light/95 backdrop-blur" role="banner">
         <div className="flex h-16 items-center gap-4 px-4 lg:px-6">
           <div className="text-lg font-bold text-primary">AgendateYA</div>
+          <button
+            className="rounded-md p-2 text-primary-light hover:bg-neutral focus-visible:ring-2 focus-visible:ring-primary lg:hidden"
+            type="button"
+            aria-label={isMobileMenuOpen ? "Cerrar menu principal" : "Abrir menu principal"}
+            aria-expanded={isMobileMenuOpen}
+            aria-controls="main-navigation"
+            onClick={() => setIsMobileMenuOpen((value) => !value)}
+          >
+            {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+          </button>
           <div className="relative ml-2 hidden flex-1 md:block">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
             <input
@@ -58,8 +73,22 @@ export function AppShell() {
         </div>
       </header>
 
+      {isMobileMenuOpen && (
+        <button
+          type="button"
+          className="fixed inset-0 z-20 bg-primary-dark/30 lg:hidden"
+          aria-label="Cerrar menu principal"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
-        <aside className="rounded-xl border border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm lg:sticky lg:top-20 lg:h-fit" role="navigation" aria-label="Menu principal">
+        <aside
+          id="main-navigation"
+          className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+          role="navigation"
+          aria-label="Menu principal"
+        >
           <div className="mb-4 border-b border-white/20 px-3 pb-3">
             <p className="text-sm font-semibold">Admin Console</p>
             <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
@@ -72,6 +101,7 @@ export function AppShell() {
                 to={item.to}
                 className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 activeProps={{ className: "bg-white/15 text-white" }}
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 <item.icon className="size-4" aria-hidden="true" />
                 <span>{item.label}</span>
