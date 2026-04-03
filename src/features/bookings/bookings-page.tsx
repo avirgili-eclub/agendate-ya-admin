@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -20,6 +20,7 @@ import {
   type BookingListItem,
   type BookingStatus,
   type CreateBookingInput,
+  type SourceChannel,
 } from "@/features/bookings/bookings-service";
 import {
   fetchLocations,
@@ -37,6 +38,7 @@ import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { useFeedback } from "@/shared/notifications/use-feedback";
+import { DataTable, DataTableSortButton, type DataTableColumn } from "@/shared/ui/data-table";
 
 function formatDateTime(isoString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -63,43 +65,80 @@ type BookingRowProps = {
   onCancel: (booking: BookingListItem) => void;
 };
 
-function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
+type BookingSortKey = "startTime" | "clientName" | "serviceName" | "resourceName" | "status" | "sourceChannel";
+type BookingSortDirection = "asc" | "desc";
+type BookingStatusFilter = "ALL" | BookingListItem["status"];
+type BookingChannelFilter = "ALL" | SourceChannel;
+
+const BOOKING_STATUS_OPTIONS: BookingStatusFilter[] = [
+  "ALL",
+  "PENDING",
+  "CONFIRMED",
+  "COMPLETED",
+  "NO_SHOW",
+  "CANCELLED",
+];
+
+const BOOKING_CHANNEL_OPTIONS: BookingChannelFilter[] = ["ALL", "WEB", "WHATSAPP", "API", "MCP", "ADMIN"];
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, "es", { sensitivity: "base" });
+}
+
+function BookingActions({ booking, onViewDetail, onCancel }: BookingRowProps) {
   return (
-    <tr className="border-b border-neutral-dark hover:bg-neutral transition-colors">
-      <td className="px-4 py-3 text-sm text-primary">{booking.clientName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.clientPhone}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.serviceName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.resourceName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">
-        {formatDateTime(booking.startTime)}
-      </td>
-      <td className="px-4 py-3">
-        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
-      </td>
-      <td className="px-4 py-3 text-sm text-primary-light">
-        {getSourceChannelLabel(booking.sourceChannel)}
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onViewDetail(booking)}
-            className="rounded-md p-1.5 text-primary-light hover:bg-neutral-dark hover:text-primary transition-colors"
-            aria-label="Ver detalle"
-          >
-            <Eye className="size-4" />
-          </button>
-          {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
-            <button
-              onClick={() => onCancel(booking)}
-              className="rounded-md p-1.5 text-red-600 hover:bg-red-50 transition-colors"
-              aria-label="Cancelar turno"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          )}
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onViewDetail(booking)}
+        className="rounded-md p-1.5 text-primary-light transition-colors hover:bg-neutral-dark hover:text-primary"
+        aria-label="Ver detalle"
+      >
+        <Eye className="size-4" />
+      </button>
+      {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+        <button
+          onClick={() => onCancel(booking)}
+          className="rounded-md p-1.5 text-red-600 transition-colors hover:bg-red-50"
+          aria-label="Cancelar turno"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps) {
+  return (
+    <div className="rounded-xl border border-neutral-dark bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary">{booking.clientName}</p>
+          <p className="mt-1 text-xs text-primary-light">{booking.clientPhone || "Sin teléfono"}</p>
         </div>
-      </td>
-    </tr>
+        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
+      </div>
+
+      <div className="mt-4 space-y-2 text-sm text-primary-light">
+        <p><span className="font-medium text-primary">Servicio:</span> {booking.serviceName}</p>
+        <p><span className="font-medium text-primary">Recurso:</span> {booking.resourceName}</p>
+        <p><span className="font-medium text-primary">Fecha:</span> {formatDateTime(booking.startTime)}</p>
+        <p><span className="font-medium text-primary">Canal:</span> {getSourceChannelLabel(booking.sourceChannel)}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2 border-t border-neutral-dark pt-3">
+        <Button variant="outline" size="sm" onClick={() => onViewDetail(booking)}>
+          <Eye className="mr-2 size-4" />
+          Ver detalle
+        </Button>
+        {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+          <Button variant="outline" size="sm" className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50" onClick={() => onCancel(booking)}>
+            <Trash2 className="mr-2 size-4" />
+            Cancelar
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -640,6 +679,11 @@ export function BookingsPage() {
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
   const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("ALL");
+  const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
+  const [sortKey, setSortKey] = useState<BookingSortKey>("startTime");
+  const [sortDirection, setSortDirection] = useState<BookingSortDirection>("desc");
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
   const queryClient = useQueryClient();
@@ -661,6 +705,67 @@ export function BookingsPage() {
   const total = bookingsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
+  const visibleBookings = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    const filtered = data.filter((booking) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        [
+          booking.clientName,
+          booking.clientPhone,
+          booking.serviceName,
+          booking.resourceName,
+          getSourceChannelLabel(booking.sourceChannel),
+          getStatusLabel(booking.status),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
+
+      const matchesStatus = statusFilter === "ALL" || booking.status === statusFilter;
+      const matchesChannel = channelFilter === "ALL" || booking.sourceChannel === channelFilter;
+
+      return matchesSearch && matchesStatus && matchesChannel;
+    });
+
+    const sorted = [...filtered].sort((left, right) => {
+      let comparison = 0;
+
+      switch (sortKey) {
+        case "startTime":
+          comparison = new Date(left.startTime).getTime() - new Date(right.startTime).getTime();
+          break;
+        case "clientName":
+          comparison = compareText(left.clientName, right.clientName);
+          break;
+        case "serviceName":
+          comparison = compareText(left.serviceName, right.serviceName);
+          break;
+        case "resourceName":
+          comparison = compareText(left.resourceName, right.resourceName);
+          break;
+        case "status":
+          comparison = compareText(getStatusLabel(left.status), getStatusLabel(right.status));
+          break;
+        case "sourceChannel":
+          comparison = compareText(
+            getSourceChannelLabel(left.sourceChannel),
+            getSourceChannelLabel(right.sourceChannel),
+          );
+          break;
+      }
+
+      return sortDirection === "asc" ? comparison : comparison * -1;
+    });
+
+    return sorted;
+  }, [channelFilter, data, searchTerm, sortDirection, sortKey, statusFilter]);
+
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 || statusFilter !== "ALL" || channelFilter !== "ALL";
+  const hasAdjustedView = hasActiveFilters || sortKey !== "startTime" || sortDirection !== "desc";
+
   function handleCancelBooking(booking: BookingListItem) {
     setBookingPendingCancel(booking);
   }
@@ -668,6 +773,105 @@ export function BookingsPage() {
   function handleOpenDetail(booking: BookingListItem) {
     setSelectedBooking(booking);
   }
+
+  function toggleSort(nextKey: BookingSortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "startTime" ? "desc" : "asc");
+  }
+
+  const columns: DataTableColumn<BookingListItem>[] = [
+    {
+      id: "client",
+      header: (
+        <DataTableSortButton
+          label="Cliente"
+          direction={sortKey === "clientName" ? sortDirection : null}
+          onClick={() => toggleSort("clientName")}
+        />
+      ),
+      cell: (booking) => <span className="font-medium text-primary">{booking.clientName}</span>,
+    },
+    {
+      id: "phone",
+      header: "Teléfono",
+      cell: (booking) => booking.clientPhone || "Sin teléfono",
+    },
+    {
+      id: "service",
+      header: (
+        <DataTableSortButton
+          label="Servicio"
+          direction={sortKey === "serviceName" ? sortDirection : null}
+          onClick={() => toggleSort("serviceName")}
+        />
+      ),
+      cell: (booking) => booking.serviceName,
+    },
+    {
+      id: "resource",
+      header: (
+        <DataTableSortButton
+          label="Recurso"
+          direction={sortKey === "resourceName" ? sortDirection : null}
+          onClick={() => toggleSort("resourceName")}
+        />
+      ),
+      cell: (booking) => booking.resourceName,
+    },
+    {
+      id: "date",
+      header: (
+        <DataTableSortButton
+          label="Fecha y Hora"
+          direction={sortKey === "startTime" ? sortDirection : null}
+          onClick={() => toggleSort("startTime")}
+        />
+      ),
+      cell: (booking) => formatDateTime(booking.startTime),
+    },
+    {
+      id: "status",
+      header: (
+        <DataTableSortButton
+          label="Estado"
+          direction={sortKey === "status" ? sortDirection : null}
+          onClick={() => toggleSort("status")}
+        />
+      ),
+      cell: (booking) => (
+        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
+      ),
+    },
+    {
+      id: "channel",
+      header: (
+        <DataTableSortButton
+          label="Canal"
+          direction={sortKey === "sourceChannel" ? sortDirection : null}
+          onClick={() => toggleSort("sourceChannel")}
+        />
+      ),
+      cell: (booking) => getSourceChannelLabel(booking.sourceChannel),
+    },
+    {
+      id: "actions",
+      header: "Acciones",
+      cell: (booking) => (
+        <BookingActions
+          booking={booking}
+          onViewDetail={handleOpenDetail}
+          onCancel={handleCancelBooking}
+        />
+      ),
+      className: "w-[120px]",
+      headerClassName: "w-[120px]",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -707,56 +911,84 @@ export function BookingsPage() {
               />
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b-2 border-neutral-dark bg-neutral">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Cliente
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Teléfono
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Servicio
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Recurso
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Fecha y Hora
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Estado
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Canal
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((booking) => (
-                        <BookingRow
-                          key={booking.id}
-                          booking={booking}
-                          onViewDetail={handleOpenDetail}
-                          onCancel={handleCancelBooking}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="relative w-full xl:max-w-sm">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Buscar cliente, servicio, recurso o teléfono..."
+                      className="h-11 w-full rounded-md border border-neutral-dark bg-white pl-10 pr-3 text-sm text-primary outline-none ring-primary-light focus:ring-2"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as BookingStatusFilter)}>
+                      <SelectTrigger className="min-w-[190px]">
+                        <SelectValue placeholder="Filtrar por estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOKING_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option === "ALL" ? "Todos los estados" : getStatusLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as BookingChannelFilter)}>
+                      <SelectTrigger className="min-w-[190px]">
+                        <SelectValue placeholder="Filtrar por canal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOKING_CHANNEL_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option === "ALL" ? "Todos los canales" : getSourceChannelLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+
+                <DataTable
+                  data={visibleBookings}
+                  columns={columns}
+                  rowKey={(booking) => booking.id}
+                  mobileRow={(booking) => (
+                    <BookingMobileCard
+                      booking={booking}
+                      onViewDetail={handleOpenDetail}
+                      onCancel={handleCancelBooking}
+                    />
+                  )}
+                  emptyState={
+                    <EmptyState
+                      icon={CalendarDays}
+                      title="Sin resultados en esta página"
+                      description={
+                        hasActiveFilters
+                          ? "No encontramos turnos que coincidan con los filtros aplicados en la página actual."
+                          : "No hay turnos para mostrar."
+                      }
+                    />
+                  }
+                />
 
                 {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="mt-4 flex flex-col gap-3 border-t border-neutral-dark pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-primary-light">
-                      Mostrando {page * pageSize + 1} a {Math.min((page + 1) * pageSize, total)} de{" "}
-                      {total} turnos
-                    </p>
+                    <div>
+                      <p className="text-sm text-primary-light">
+                        Mostrando {visibleBookings.length} de {data.length} de {total} total de turnos
+                      </p>
+                      {hasAdjustedView && (
+                        <p className="mt-1 text-xs text-primary-light">
+                          Vista ajustada sobre los {data.length} turnos cargados
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
