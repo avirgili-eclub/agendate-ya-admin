@@ -117,8 +117,16 @@ const locationsRoute = createRoute({
 
 const resourcesRoute = createRoute({
   getParentRoute: () => privateRoute,
-  path: "/recursos",
+  path: "/equipos",
   component: ResourcesPage,
+});
+
+const legacyResourcesRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/recursos",
+  beforeLoad: () => {
+    throw redirect({ to: "/equipos" });
+  },
 });
 
 const servicesRoute = createRoute({
@@ -167,6 +175,7 @@ const routeTree = rootRoute.addChildren([
     clientsRoute,
     locationsRoute,
     resourcesRoute,
+    legacyResourcesRoute,
     servicesRoute,
     availabilityRoute,
     teamRoute,

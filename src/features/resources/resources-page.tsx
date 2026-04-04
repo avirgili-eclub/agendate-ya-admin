@@ -76,7 +76,7 @@ export function ResourcesPage() {
   const updateResourceMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => updateResourceActiveStatus(id, active),
     onSuccess: () => {
-      showFeedback("success", "Estado del recurso actualizado.");
+      showFeedback("success", "Estado del equipo actualizado.");
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
     onError: (error) => {
@@ -88,7 +88,7 @@ export function ResourcesPage() {
   const createResourceMutation = useMutation({
     mutationFn: createResource,
     onSuccess: () => {
-      showFeedback("success", "Recurso creado correctamente.");
+      showFeedback("success", "Equipo creado correctamente.");
       setCreating(false);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
@@ -102,7 +102,7 @@ export function ResourcesPage() {
     mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateResourceDetails>[1] }) =>
       updateResourceDetails(id, payload),
     onSuccess: () => {
-      showFeedback("success", "Recurso actualizado correctamente.");
+      showFeedback("success", "Equipo actualizado correctamente.");
       setEditingResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
@@ -116,7 +116,7 @@ export function ResourcesPage() {
     mutationFn: ({ id, locationName, clearSchedule }: { id: string; locationName: string; clearSchedule: boolean }) =>
       transferResource(id, { locationName, clearSchedule }),
     onSuccess: () => {
-      showFeedback("success", "Recurso transferido correctamente.");
+      showFeedback("success", "Equipo transferido correctamente.");
       setTransferingResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
@@ -130,7 +130,7 @@ export function ResourcesPage() {
     mutationFn: ({ id, serviceIds }: { id: string; serviceIds: string[] }) =>
       assignServicesToResource(id, serviceIds),
     onSuccess: () => {
-      showFeedback("success", "Servicios del recurso actualizados.");
+      showFeedback("success", "Servicios del equipo actualizados.");
       setManagingServicesResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
@@ -190,7 +190,7 @@ export function ResourcesPage() {
             onClick={() => setCreating(true)}
             disabled={locationsQuery.isLoading || supportDataError}
           >
-            + Nuevo recurso
+            + Nuevo equipo
           </Button>
         </div>
       </PageCard>
@@ -205,7 +205,7 @@ export function ResourcesPage() {
 
       {supportDataError ? (
         <PageCard>
-          <p className="text-sm text-red-700">No pudimos cargar localidades o servicios para recursos.</p>
+          <p className="text-sm text-red-700">No pudimos cargar ubicaciones o servicios para equipos.</p>
         </PageCard>
       ) : null}
 
@@ -224,7 +224,7 @@ export function ResourcesPage() {
       {!resourcesQuery.isLoading && !errorMessage && cards.length === 0 ? (
         <PageCard>
           <h2 className="text-lg font-semibold text-primary">Sin resultados</h2>
-          <p className="mt-1 text-sm text-primary-light">No se encontraron recursos con los filtros actuales.</p>
+          <p className="mt-1 text-sm text-primary-light">No se encontraron equipos con los filtros actuales.</p>
         </PageCard>
       ) : null}
 
@@ -300,7 +300,7 @@ export function ResourcesPage() {
 
           <PageCard className="flex items-center justify-between gap-4">
             <p className="text-sm text-primary-light">
-              Mostrando {cards.length} de {total} recursos totales
+              Mostrando {cards.length} de {total} equipos totales
             </p>
             <div className="flex items-center gap-2">
               <Button

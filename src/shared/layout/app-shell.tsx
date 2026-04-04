@@ -47,7 +47,7 @@ export function AppShell() {
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
             <input
               className="h-10 w-full rounded-lg border border-neutral-dark bg-white pl-10 pr-3 text-sm outline-none ring-primary-light focus:ring-2 focus-visible:ring-2"
-              placeholder="Buscar recursos, clientes o turnos..."
+              placeholder="Buscar equipos, clientes o turnos..."
               aria-label="Busqueda global"
             />
           </div>
