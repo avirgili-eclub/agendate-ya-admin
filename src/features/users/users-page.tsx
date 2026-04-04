@@ -19,13 +19,14 @@ import { UserFormModal } from "@/features/users/user-form-modal";
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 export function UsersPage() {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState<UserItem | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("user");
 
   const { data: users = [], isLoading, error } = useQuery({
     queryKey: ["users"],
@@ -37,10 +38,10 @@ export function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setIsFormOpen(false);
-      setFeedback({ tone: "success", message: "Usuario creado correctamente." });
+      showFeedback("success", "Usuario creado correctamente.");
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toUsersFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toUsersFriendlyMessage(error as unknown as AppError));
     },
   });
 
@@ -49,10 +50,10 @@ export function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setConfirmDeactivate(null);
-      setFeedback({ tone: "success", message: "Usuario desactivado correctamente." });
+      showFeedback("success", "Usuario desactivado correctamente.");
     },
     onError: (error) => {
-      setFeedback({ tone: "error", message: toUsersFriendlyMessage(error as unknown as AppError) });
+      showFeedback("error", toUsersFriendlyMessage(error as unknown as AppError));
     },
   });
 
@@ -89,7 +90,7 @@ export function UsersPage() {
         </Button>
       </header>
 
-      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+      <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {/* Error State */}
       {error && (

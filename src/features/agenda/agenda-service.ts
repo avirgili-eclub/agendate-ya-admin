@@ -138,6 +138,27 @@ function mapApiResourceToItem(api: ApiResource): ResourceItem {
   };
 }
 
+function dedupeApiBookingsById(bookings: ApiBooking[]): ApiBooking[] {
+  const byId = new Map<string, ApiBooking>();
+
+  bookings.forEach((candidate) => {
+    const current = byId.get(candidate.id);
+    if (!current) {
+      byId.set(candidate.id, candidate);
+      return;
+    }
+
+    const currentUpdatedAt = new Date(current.updatedAt).getTime();
+    const candidateUpdatedAt = new Date(candidate.updatedAt).getTime();
+
+    if (!Number.isNaN(candidateUpdatedAt) && candidateUpdatedAt >= currentUpdatedAt) {
+      byId.set(candidate.id, candidate);
+    }
+  });
+
+  return Array.from(byId.values());
+}
+
 export async function fetchBookings(params: BookingListParams): Promise<BookingListResult> {
   const response = await httpRequest<PagedEnvelope<ApiBooking>>(
     `/bookings?page=${params.page}&size=${params.pageSize}`,
@@ -178,7 +199,8 @@ export async function fetchCalendarBookings(params: CalendarBookingsParams): Pro
     `/bookings/calendar?${searchParams.toString()}`,
   );
 
-  return unwrapData<ApiBooking[]>(response).map(mapApiBookingToCard);
+  const apiBookings = unwrapData<ApiBooking[]>(response);
+  return dedupeApiBookingsById(apiBookings).map(mapApiBookingToCard);
 }
 
 export async function fetchLocations(): Promise<LocationItem[]> {

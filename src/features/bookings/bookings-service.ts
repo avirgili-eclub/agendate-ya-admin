@@ -101,6 +101,17 @@ type ApiBooking = {
   serviceName?: string | null;
   clientName?: string | null;
   clientPhone?: string | null;
+  resource?: {
+    name?: string | null;
+  } | null;
+  service?: {
+    name?: string | null;
+  } | null;
+  client?: {
+    fullName?: string | null;
+    name?: string | null;
+    phone?: string | null;
+  } | null;
 };
 
 type ApiService = {
@@ -110,15 +121,30 @@ type ApiService = {
   active: boolean;
 };
 
+function pickFirstNonEmptyValue(values: Array<string | null | undefined>, fallback: string): string {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return fallback;
+}
+
 function mapApiBookingToListItem(api: ApiBooking): BookingListItem {
   return {
     id: api.id,
     resourceId: api.resourceId,
-    resourceName: api.resourceName ?? "Sin asignar",
+    resourceName: pickFirstNonEmptyValue([api.resourceName, api.resource?.name], "Sin asignar"),
     serviceId: api.serviceId,
-    serviceName: api.serviceName ?? "Servicio",
-    clientName: api.clientName ?? "Cliente",
-    clientPhone: api.clientPhone ?? "",
+    serviceName: pickFirstNonEmptyValue([api.serviceName, api.service?.name], "Servicio"),
+    clientName: pickFirstNonEmptyValue(
+      [api.clientName, api.client?.fullName, api.client?.name],
+      "Cliente",
+    ),
+    clientPhone: pickFirstNonEmptyValue([api.clientPhone, api.client?.phone], ""),
     locationId: api.locationId,
     startTime: api.startTime,
     endTime: api.endTime,

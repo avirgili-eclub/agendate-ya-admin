@@ -1,59 +1,129 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, AlertCircle } from "lucide-react";
+import { MessageSquare, Loader2 } from "lucide-react";
 
-import { fetchClientChatHistory, type ChatMessage } from "@/features/clients/clients-service";
+import type { AppError } from "@/core/errors/app-error";
+import {
+  fetchClientChatHistory,
+  toClientsFriendlyMessage,
+  type ChatMessage,
+} from "@/features/clients/clients-service";
 
 type ClientChatHistoryProps = {
   clientId: string;
 };
 
+const PAGE_SIZE = 12;
+
+function groupMessagesByDay(messages: ChatMessage[]) {
+  const groups: Array<{ date: string; messages: ChatMessage[] }> = [];
+  let currentDate = "";
+  let currentGroup: ChatMessage[] = [];
+
+  messages.forEach((message) => {
+    const messageDate = new Date(message.createdAt).toLocaleDateString("es-PY", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    if (messageDate !== currentDate) {
+      if (currentGroup.length > 0) {
+        groups.push({ date: currentDate, messages: currentGroup });
+      }
+      currentDate = messageDate;
+      currentGroup = [message];
+      return;
+    }
+
+    currentGroup.push(message);
+  });
+
+  if (currentGroup.length > 0) {
+    groups.push({ date: currentDate, messages: currentGroup });
+  }
+
+  return groups;
+}
+
+function mergeOlderMessages(olderMessages: ChatMessage[], currentMessages: ChatMessage[]) {
+  const knownIds = new Set(currentMessages.map((message) => message.id));
+  const uniqueOlder = olderMessages.filter((message) => !knownIds.has(message.id));
+  return [...uniqueOlder, ...currentMessages];
+}
+
+function getMessageTypeLabel(messageType: ChatMessage["messageType"]) {
+  const labels: Record<ChatMessage["messageType"], string> = {
+    TEXT: "",
+    IMAGE: "Imagen",
+    AUDIO: "Audio",
+    VIDEO: "Video",
+    DOCUMENT: "Documento",
+    STICKER: "Sticker",
+    UNKNOWN: "Mensaje",
+  };
+
+  return labels[messageType];
+}
+
 export function ClientChatHistory({ clientId }: ClientChatHistoryProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const prevScrollHeightRef = useRef(0);
+  const prevScrollTopRef = useRef(0);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["client-chat", clientId],
-    queryFn: () => fetchClientChatHistory(clientId, { size: 50 }),
+    queryFn: () => fetchClientChatHistory(clientId, { size: PAGE_SIZE }),
   });
 
   useEffect(() => {
     if (data) {
       setMessages(data.messages);
       setHasMore(data.hasMore);
-      setCursor(data.nextCursor);
+      setNextCursor(data.nextCursor);
 
-      // Scroll to bottom on initial load
-      if (scrollContainerRef.current && messages.length === 0) {
+      requestAnimationFrame(() => {
+        if (!scrollContainerRef.current) {
+          return;
+        }
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-      }
+      });
     }
-  }, [data]);
+  }, [data, clientId]);
 
   const loadOlderMessages = async () => {
-    if (!hasMore || isLoadingOlder || !cursor) return;
+    if (!hasMore || isLoadingOlder || !nextCursor) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
 
     setIsLoadingOlder(true);
-    prevScrollHeightRef.current = scrollContainerRef.current?.scrollHeight ?? 0;
+    prevScrollHeightRef.current = container?.scrollHeight ?? 0;
+    prevScrollTopRef.current = container?.scrollTop ?? 0;
 
     try {
-      const olderData = await fetchClientChatHistory(clientId, { cursor, size: 50 });
-      setMessages((prev) => [...olderData.messages, ...prev]);
-      setHasMore(olderData.hasMore);
-      setCursor(olderData.nextCursor);
+      const olderData = await fetchClientChatHistory(clientId, {
+        before: nextCursor,
+        size: PAGE_SIZE,
+      });
 
-      // Preserve scroll position after loading older messages
-      setTimeout(() => {
-        if (scrollContainerRef.current) {
-          const newScrollHeight = scrollContainerRef.current.scrollHeight;
-          const heightDiff = newScrollHeight - prevScrollHeightRef.current;
-          scrollContainerRef.current.scrollTop = heightDiff;
+      setMessages((previousMessages) => mergeOlderMessages(olderData.messages, previousMessages));
+      setHasMore(olderData.hasMore);
+      setNextCursor(olderData.nextCursor);
+
+      requestAnimationFrame(() => {
+        if (!scrollContainerRef.current) {
+          return;
         }
-      }, 0);
+        const newScrollHeight = scrollContainerRef.current.scrollHeight;
+        const heightDiff = newScrollHeight - prevScrollHeightRef.current;
+        scrollContainerRef.current.scrollTop = prevScrollTopRef.current + heightDiff;
+      });
     } catch (err) {
       console.error("Failed to load older messages:", err);
     } finally {
@@ -65,57 +135,21 @@ export function ClientChatHistory({ clientId }: ClientChatHistoryProps) {
     if (!scrollContainerRef.current) return;
 
     const { scrollTop } = scrollContainerRef.current;
-    
-    // Trigger load when scrolled near the top (within 100px)
+
     if (scrollTop < 100 && hasMore && !isLoadingOlder) {
-      loadOlderMessages();
+      void loadOlderMessages();
     }
   };
 
-  const groupMessagesByDay = (msgs: ChatMessage[]) => {
-    const groups: Array<{ date: string; messages: ChatMessage[] }> = [];
-    let currentDate = "";
-    let currentGroup: ChatMessage[] = [];
-
-    msgs.forEach((msg) => {
-      const msgDate = new Date(msg.timestamp).toLocaleDateString("es-PY", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-
-      if (msgDate !== currentDate) {
-        if (currentGroup.length > 0) {
-          groups.push({ date: currentDate, messages: currentGroup });
-        }
-        currentDate = msgDate;
-        currentGroup = [msg];
-      } else {
-        currentGroup.push(msg);
-      }
-    });
-
-    if (currentGroup.length > 0) {
-      groups.push({ date: currentDate, messages: currentGroup });
-    }
-
-    return groups;
-  };
-
-  const getBubbleStyle = (role: ChatMessage["role"]) => {
-    if (role === "client") {
-      return "ml-auto bg-primary text-white";
-    }
-    if (role === "agent") {
-      return "mr-auto bg-neutral-dark text-primary";
-    }
-    return "mx-auto bg-secondary/20 text-secondary-dark text-xs";
-  };
+  const groupedMessages = groupMessagesByDay(messages);
 
   if (isLoading) {
     return (
-      <div className="py-8 text-center text-sm text-primary-light">
-        Cargando historial de chat...
+      <div className="flex h-[620px] items-center justify-center rounded-xl border border-neutral-dark bg-white text-sm text-primary-light">
+        <span className="inline-flex items-center gap-2">
+          <Loader2 className="size-4 animate-spin" />
+          Cargando historial de chat...
+        </span>
       </div>
     );
   }
@@ -123,68 +157,73 @@ export function ClientChatHistory({ clientId }: ClientChatHistoryProps) {
   if (error) {
     return (
       <div className="rounded-md bg-red-50 p-4 text-sm text-red-600">
-        Error al cargar el historial de chat.
+        {toClientsFriendlyMessage(error as unknown as AppError)}
       </div>
     );
   }
-
-  // Backend not available mode
-  if (messages.length === 0 && !hasMore) {
-    return (
-      <div className="rounded-lg border border-neutral-dark bg-neutral p-8 text-center">
-        <AlertCircle className="mx-auto size-12 text-primary-light" />
-        <h3 className="mt-4 text-base font-semibold text-primary">
-          Historial de chat no disponible
-        </h3>
-        <p className="mt-2 text-sm text-primary-light">
-          El backend aún no implementa la persistencia de mensajes de WhatsApp.
-        </p>
-        <p className="mt-1 text-xs text-primary-light">
-          Esta vista está lista para conectarse cuando el endpoint esté disponible.
-        </p>
-      </div>
-    );
-  }
-
-  const groupedMessages = groupMessagesByDay(messages);
 
   return (
-    <div className="flex h-[600px] flex-col">
-      {/* Chat Container */}
+    <div className="flex h-[620px] flex-col">
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 space-y-4 overflow-y-auto rounded-lg border border-neutral-dark bg-neutral p-4"
+        className="flex-1 space-y-4 overflow-y-auto rounded-xl border border-neutral-dark p-4"
+        style={{
+          backgroundColor: "#efeae2",
+          backgroundImage: "radial-gradient(#d9dbd2 0.7px, transparent 0.7px)",
+          backgroundSize: "10px 10px",
+        }}
       >
-        {/* Loading Older Indicator */}
-        {isLoadingOlder && (
-          <div className="text-center text-xs text-primary-light">
-            Cargando mensajes anteriores...
+        {!hasMore && messages.length > 0 && (
+          <div className="mb-3 text-center">
+            <span className="rounded-full bg-black/10 px-3 py-1 text-[11px] text-primary-light">
+              Inicio de la conversación
+            </span>
           </div>
         )}
 
-        {/* Messages */}
+        {isLoadingOlder && (
+          <div className="text-center text-xs text-primary-light">
+            <span className="inline-flex items-center gap-1 rounded-full bg-black/10 px-2.5 py-1">
+              <Loader2 className="size-3 animate-spin" />
+              Cargando mensajes anteriores...
+            </span>
+          </div>
+        )}
+
         {groupedMessages.map((group, groupIdx) => (
           <div key={groupIdx}>
-            {/* Day Separator */}
             <div className="my-4 flex items-center justify-center">
-              <span className="rounded-full bg-neutral-dark px-3 py-1 text-xs font-medium text-primary-light">
+              <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-medium text-primary-light shadow-sm">
                 {group.date}
               </span>
             </div>
 
-            {/* Messages in this day */}
             <div className="space-y-2">
               {group.messages.map((msg) => (
-                <div key={msg.id} className="flex">
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.sender === "CUSTOMER" ? "justify-end" : "justify-start"}`}
+                >
                   <div
-                    className={`max-w-[75%] rounded-lg px-3 py-2 shadow-sm ${getBubbleStyle(
-                      msg.role
-                    )}`}
+                    className={`max-w-[80%] rounded-2xl px-3 py-2 shadow-sm ${
+                      msg.sender === "CUSTOMER"
+                        ? "rounded-br-sm bg-[#dcf8c6] text-primary"
+                        : "rounded-bl-sm bg-white text-primary"
+                    }`}
                   >
-                    <p className="text-sm">{msg.content}</p>
-                    <p className="mt-1 text-right text-xs opacity-70">
-                      {new Date(msg.timestamp).toLocaleTimeString("es-PY", {
+                    {msg.messageType !== "TEXT" && (
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-primary-light">
+                        {getMessageTypeLabel(msg.messageType)}
+                      </p>
+                    )}
+
+                    <p className="text-sm">
+                      {msg.content || "Mensaje sin contenido"}
+                    </p>
+
+                    <p className="mt-1 text-right text-[11px] text-primary-light/80">
+                      {new Date(msg.createdAt).toLocaleTimeString("es-PY", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -196,22 +235,14 @@ export function ClientChatHistory({ clientId }: ClientChatHistoryProps) {
           </div>
         ))}
 
-        {/* Empty State (when backend is connected but no messages) */}
         {messages.length === 0 && (
-          <div className="py-12 text-center">
-            <MessageSquare className="mx-auto size-12 text-neutral-dark" />
+          <div className="py-16 text-center">
+            <MessageSquare className="mx-auto size-12 text-primary-light/40" />
             <p className="mt-4 text-sm text-primary-light">
               No hay mensajes en el historial de este cliente.
             </p>
           </div>
         )}
-      </div>
-
-      {/* Info Footer */}
-      <div className="mt-4 rounded-lg bg-blue-50 p-3 text-xs text-blue-700">
-        <strong>Nota:</strong> Este historial refleja las conversaciones de WhatsApp Business API.
-        Los mensajes se cargan automáticamente al inicio, y puedes desplazarte hacia arriba para
-        ver mensajes más antiguos.
       </div>
     </div>
   );

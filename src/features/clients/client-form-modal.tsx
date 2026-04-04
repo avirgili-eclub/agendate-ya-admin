@@ -28,8 +28,7 @@ export function ClientFormModal({
   error,
   isLoading,
 }: ClientFormModalProps) {
-  const [firstName, setFirstName] = useState(initialClient?.firstName ?? "");
-  const [lastName, setLastName] = useState(initialClient?.lastName ?? "");
+  const [fullName, setFullName] = useState(initialClient?.fullName ?? "");
   const [phone, setPhone] = useState(initialClient?.phone ?? "+595");
   const [phoneCountryIso2, setPhoneCountryIso2] = useState("py");
   const [email, setEmail] = useState(initialClient?.email ?? "");
@@ -53,8 +52,7 @@ export function ClientFormModal({
     }
 
     const input: ClientUpsertInput = {
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      fullName: fullName.trim(),
       phone: phone.trim(),
       email: email.trim() || undefined,
       notes: notes.trim() || undefined,
@@ -112,43 +110,23 @@ export function ClientFormModal({
               </div>
             )}
 
-            {/* First Name */}
+            {/* Full Name */}
             <div>
-              <label htmlFor="firstName" className="block text-sm font-medium text-primary">
-                Nombre <span className="text-red-600">*</span>
+              <label htmlFor="fullName" className="block text-sm font-medium text-primary">
+                Nombre Completo <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
-                id="firstName"
-                value={firstName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFirstName(e.target.value)}
+                id="fullName"
+                value={fullName}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setFullName(e.target.value)}
                 className={`mt-1 w-full rounded-md border ${
-                  fieldErrors.firstName ? "border-red-500" : "border-neutral-dark"
+                  fieldErrors.fullName ? "border-red-500" : "border-neutral-dark"
                 } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
-                placeholder="Juan"
+                placeholder="Juan Pérez"
               />
-              {fieldErrors.firstName && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
-              )}
-            </div>
-
-            {/* Last Name */}
-            <div>
-              <label htmlFor="lastName" className="block text-sm font-medium text-primary">
-                Apellido <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="lastName"
-                value={lastName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
-                className={`mt-1 w-full rounded-md border ${
-                  fieldErrors.lastName ? "border-red-500" : "border-neutral-dark"
-                } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
-                placeholder="Pérez"
-              />
-              {fieldErrors.lastName && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
+              {fieldErrors.fullName && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.fullName}</p>
               )}
             </div>
 

@@ -1,6 +1,8 @@
-import { useState, type FormEvent } from "react";
-import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
+import { useMemo, useState, type FormEvent } from "react";
+import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { PhoneInput } from "react-international-phone";
+import { isValidPhoneNumber } from "libphonenumber-js";
 
 import type { AppError } from "@/core/errors/app-error";
 import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
@@ -18,6 +20,7 @@ import {
   type BookingListItem,
   type BookingStatus,
   type CreateBookingInput,
+  type SourceChannel,
 } from "@/features/bookings/bookings-service";
 import {
   fetchLocations,
@@ -32,7 +35,10 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
+import { useFeedback } from "@/shared/notifications/use-feedback";
+import { DataTable, DataTableSortButton, type DataTableColumn } from "@/shared/ui/data-table";
 
 function formatDateTime(isoString: string): string {
   return new Intl.DateTimeFormat("es-AR", {
@@ -55,47 +61,84 @@ function formatTime(isoString: string): string {
 
 type BookingRowProps = {
   booking: BookingListItem;
-  onViewDetail: (id: string) => void;
+  onViewDetail: (booking: BookingListItem) => void;
   onCancel: (booking: BookingListItem) => void;
 };
 
-function BookingRow({ booking, onViewDetail, onCancel }: BookingRowProps) {
+type BookingSortKey = "startTime" | "clientName" | "serviceName" | "resourceName" | "status" | "sourceChannel";
+type BookingSortDirection = "asc" | "desc";
+type BookingStatusFilter = "ALL" | BookingListItem["status"];
+type BookingChannelFilter = "ALL" | SourceChannel;
+
+const BOOKING_STATUS_OPTIONS: BookingStatusFilter[] = [
+  "ALL",
+  "PENDING",
+  "CONFIRMED",
+  "COMPLETED",
+  "NO_SHOW",
+  "CANCELLED",
+];
+
+const BOOKING_CHANNEL_OPTIONS: BookingChannelFilter[] = ["ALL", "WEB", "WHATSAPP", "API", "MCP", "ADMIN"];
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, "es", { sensitivity: "base" });
+}
+
+function BookingActions({ booking, onViewDetail, onCancel }: BookingRowProps) {
   return (
-    <tr className="border-b border-neutral-dark hover:bg-neutral transition-colors">
-      <td className="px-4 py-3 text-sm text-primary">{booking.clientName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.clientPhone}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.serviceName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">{booking.resourceName}</td>
-      <td className="px-4 py-3 text-sm text-primary-light">
-        {formatDateTime(booking.startTime)}
-      </td>
-      <td className="px-4 py-3">
-        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
-      </td>
-      <td className="px-4 py-3 text-sm text-primary-light">
-        {getSourceChannelLabel(booking.sourceChannel)}
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onViewDetail(booking.id)}
-            className="rounded-md p-1.5 text-primary-light hover:bg-neutral-dark hover:text-primary transition-colors"
-            aria-label="Ver detalle"
-          >
-            <Eye className="size-4" />
-          </button>
-          {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
-            <button
-              onClick={() => onCancel(booking)}
-              className="rounded-md p-1.5 text-red-600 hover:bg-red-50 transition-colors"
-              aria-label="Cancelar turno"
-            >
-              <Trash2 className="size-4" />
-            </button>
-          )}
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => onViewDetail(booking)}
+        className="rounded-md p-1.5 text-primary-light transition-colors hover:bg-neutral-dark hover:text-primary"
+        aria-label="Ver detalle"
+      >
+        <Eye className="size-4" />
+      </button>
+      {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+        <button
+          onClick={() => onCancel(booking)}
+          className="rounded-md p-1.5 text-red-600 transition-colors hover:bg-red-50"
+          aria-label="Cancelar turno"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps) {
+  return (
+    <div className="rounded-xl border border-neutral-dark bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-primary">{booking.clientName}</p>
+          <p className="mt-1 text-xs text-primary-light">{booking.clientPhone || "Sin teléfono"}</p>
         </div>
-      </td>
-    </tr>
+        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
+      </div>
+
+      <div className="mt-4 space-y-2 text-sm text-primary-light">
+        <p><span className="font-medium text-primary">Servicio:</span> {booking.serviceName}</p>
+        <p><span className="font-medium text-primary">Recurso:</span> {booking.resourceName}</p>
+        <p><span className="font-medium text-primary">Fecha:</span> {formatDateTime(booking.startTime)}</p>
+        <p><span className="font-medium text-primary">Canal:</span> {getSourceChannelLabel(booking.sourceChannel)}</p>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-2 border-t border-neutral-dark pt-3">
+        <Button variant="outline" size="sm" onClick={() => onViewDetail(booking)}>
+          <Eye className="mr-2 size-4" />
+          Ver detalle
+        </Button>
+        {booking.status !== "CANCELLED" && booking.status !== "COMPLETED" && (
+          <Button variant="outline" size="sm" className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50" onClick={() => onCancel(booking)}>
+            <Trash2 className="mr-2 size-4" />
+            Cancelar
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -111,7 +154,7 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
   const [resourceId, setResourceId] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientPhone, setClientPhone] = useState("+595");
   const [clientEmail, setClientEmail] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -157,6 +200,19 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
     setFormError(null);
     setFieldErrors({});
 
+    const validationErrors: Record<string, string> = {};
+    if (!locationId) {
+      validationErrors.locationId = "Debes seleccionar un local.";
+    }
+    if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
+      validationErrors.clientPhone = "Ingresa un telefono valido.";
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
+      return;
+    }
+
     createMutation.mutate({
       resourceId,
       serviceId,
@@ -176,9 +232,7 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
   return (
     <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
       {formError && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {formError}
-        </div>
+        <FeedbackBanner tone="error" message={formError} />
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -198,13 +252,35 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-primary-dark">Teléfono *</span>
-          <input
-            type="tel"
-            value={clientPhone}
-            onChange={(e) => setClientPhone(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="+54 9 11 1234-5678"
-          />
+          <div className={`register-phone-wrapper ${fieldErrors.clientPhone ? "!border-red-500" : ""}`}>
+            <PhoneInput
+              defaultCountry="py"
+              preferredCountries={["py", "ar", "br", "cl", "uy"]}
+              disableDialCodeAndPrefix
+              showDisabledDialCodeAndPrefix
+              defaultMask="(...) ... - ..."
+              placeholder="(981) 123 - 456"
+              value={clientPhone}
+              onChange={(phone) => setClientPhone(phone)}
+              className="register-phone-root"
+              inputClassName="register-phone-input"
+              inputProps={{
+                name: "clientPhone",
+                autoComplete: "tel",
+              }}
+              countrySelectorStyleProps={{
+                buttonClassName: "register-phone-country-button",
+                flagClassName: "register-phone-flag",
+                dropdownArrowClassName: "register-phone-country-arrow",
+                dropdownStyleProps: {
+                  className: "register-phone-country-dropdown",
+                  listItemClassName: "register-phone-country-item",
+                  listItemSelectedClassName: "register-phone-country-item-selected",
+                  listItemFocusedClassName: "register-phone-country-item-focused",
+                },
+              }}
+            />
+          </div>
           {fieldErrors.clientPhone && (
             <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
           )}
@@ -240,8 +316,8 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
               ))}
             </SelectContent>
           </Select>
-          {fieldErrors.resourceId && !locationId && (
-            <span className="mt-1 block text-xs text-red-700">Selecciona un local primero</span>
+          {fieldErrors.locationId && (
+            <span className="mt-1 block text-xs text-red-700">{fieldErrors.locationId}</span>
           )}
         </label>
 
@@ -337,15 +413,34 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
 type BookingDetailPanelProps = {
   bookingId: string;
+  bookingSummary?: BookingListItem;
   onClose: () => void;
   onRefresh: () => void;
-  onFeedback: (feedback: { tone: "success" | "error"; message: string }) => void;
 };
 
-function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: BookingDetailPanelProps) {
+function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: BookingDetailPanelProps) {
   const queryClient = useQueryClient();
+  const { showFeedback } = useFeedback("booking");
   const detailQuery = useBookingDetailQuery(bookingId);
   const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
+
+  const pickPreferredText = (
+    primary: string | undefined,
+    secondary: string | undefined,
+    placeholder?: string,
+  ) => {
+    const primaryTrimmed = primary?.trim();
+    if (primaryTrimmed && (!placeholder || primaryTrimmed !== placeholder)) {
+      return primaryTrimmed;
+    }
+
+    const secondaryTrimmed = secondary?.trim();
+    if (secondaryTrimmed && (!placeholder || secondaryTrimmed !== placeholder)) {
+      return secondaryTrimmed;
+    }
+
+    return primaryTrimmed || secondaryTrimmed || placeholder || "";
+  };
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) =>
@@ -354,11 +449,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["booking-detail", bookingId] });
       onRefresh();
-      onFeedback({ tone: "success", message: "Estado del turno actualizado correctamente." });
+      showFeedback("success", "Estado del turno actualizado correctamente.");
       setConfirmingAction(null);
     },
     onError: (error: AppError) => {
-      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
     },
   });
 
@@ -367,15 +462,15 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       onRefresh();
-      onFeedback({ tone: "success", message: "Turno cancelado correctamente." });
+      showFeedback("success", "Turno cancelado correctamente.");
       onClose();
     },
     onError: (error: AppError) => {
-      onFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
     },
   });
 
-  if (detailQuery.isLoading) {
+  if (detailQuery.isLoading && !bookingSummary) {
     return (
       <div className="px-6 py-8 text-center text-sm text-primary-light">
         Cargando detalles del turno...
@@ -383,7 +478,9 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     );
   }
 
-  if (detailQuery.isError || !detailQuery.data) {
+  const booking = detailQuery.data ?? bookingSummary;
+
+  if (!booking) {
     return (
       <div className="px-6 py-8 text-center text-sm text-red-600">
         Error al cargar el turno. Intenta nuevamente.
@@ -391,7 +488,23 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
     );
   }
 
-  const booking = detailQuery.data;
+  const clientName = pickPreferredText(
+    detailQuery.data?.clientName,
+    bookingSummary?.clientName,
+    "Cliente",
+  );
+  const clientPhone = pickPreferredText(detailQuery.data?.clientPhone, bookingSummary?.clientPhone);
+  const serviceName = pickPreferredText(
+    detailQuery.data?.serviceName,
+    bookingSummary?.serviceName,
+    "Servicio",
+  );
+  const resourceName = pickPreferredText(
+    detailQuery.data?.resourceName,
+    bookingSummary?.resourceName,
+    "Sin asignar",
+  );
+  const notes = detailQuery.data?.notes ?? bookingSummary?.notes;
   const validTransitions = getValidStatusTransitions(booking.status);
 
   function handleStatusChange(newStatus: BookingStatus) {
@@ -414,6 +527,12 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
 
   return (
     <div className="px-6 py-4">
+      {detailQuery.isError && bookingSummary && (
+        <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          No se pudieron cargar todos los detalles del turno. Mostrando datos disponibles del listado.
+        </div>
+      )}
+
       <div className="space-y-6">
         {/* Client Info */}
         <section>
@@ -421,11 +540,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
           <div className="space-y-2 rounded-md bg-neutral p-4">
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Nombre:</span>
-              <span className="text-sm font-medium text-primary">{booking.clientName}</span>
+              <span className="text-sm font-medium text-primary">{clientName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Teléfono:</span>
-              <span className="text-sm font-medium text-primary">{booking.clientPhone}</span>
+              <span className="text-sm font-medium text-primary">{clientPhone}</span>
             </div>
           </div>
         </section>
@@ -436,11 +555,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
           <div className="space-y-2 rounded-md bg-neutral p-4">
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Servicio:</span>
-              <span className="text-sm font-medium text-primary">{booking.serviceName}</span>
+              <span className="text-sm font-medium text-primary">{serviceName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Recurso:</span>
-              <span className="text-sm font-medium text-primary">{booking.resourceName}</span>
+              <span className="text-sm font-medium text-primary">{resourceName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Inicio:</span>
@@ -467,10 +586,10 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
                 {getSourceChannelLabel(booking.sourceChannel)}
               </span>
             </div>
-            {booking.notes && (
+            {notes && (
               <div className="pt-2 border-t border-neutral-dark">
                 <span className="text-sm text-primary-light block mb-1">Notas:</span>
-                <p className="text-sm text-primary">{booking.notes}</p>
+                <p className="text-sm text-primary">{notes}</p>
               </div>
             )}
           </div>
@@ -515,7 +634,11 @@ function BookingDetailPanel({ bookingId, onClose, onRefresh, onFeedback }: Booki
         <section className="border-t border-neutral-dark pt-4">
           <div className="space-y-1 text-xs text-primary-light">
             <p>Creado: {formatDateTime(booking.createdAt)}</p>
-            <p>Actualizado: {formatDateTime(booking.updatedAt)}</p>
+            {"updatedAt" in booking && typeof booking.updatedAt === "string" ? (
+              <p>Actualizado: {formatDateTime(booking.updatedAt)}</p>
+            ) : (
+              <p>Actualizado: -</p>
+            )}
           </div>
         </section>
       </div>
@@ -553,9 +676,14 @@ export function BookingsPage() {
   const [page, setPage] = useState(0);
   const [pageSize] = useState(20);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
   const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("ALL");
+  const [channelFilter, setChannelFilter] = useState<BookingChannelFilter>("ALL");
+  const [sortKey, setSortKey] = useState<BookingSortKey>("startTime");
+  const [sortDirection, setSortDirection] = useState<BookingSortDirection>("desc");
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
   const queryClient = useQueryClient();
@@ -564,11 +692,11 @@ export function BookingsPage() {
     mutationFn: (id: string) => deleteBooking(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      setFeedback({ tone: "success", message: "Turno cancelado correctamente." });
+      showFeedback("success", "Turno cancelado correctamente.");
       setBookingPendingCancel(null);
     },
     onError: (error: AppError) => {
-      setFeedback({ tone: "error", message: getBookingErrorMessage(error) });
+      showFeedback("error", getBookingErrorMessage(error));
       setBookingPendingCancel(null);
     },
   });
@@ -577,9 +705,173 @@ export function BookingsPage() {
   const total = bookingsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
+  const visibleBookings = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    const filtered = data.filter((booking) => {
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        [
+          booking.clientName,
+          booking.clientPhone,
+          booking.serviceName,
+          booking.resourceName,
+          getSourceChannelLabel(booking.sourceChannel),
+          getStatusLabel(booking.status),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedSearch);
+
+      const matchesStatus = statusFilter === "ALL" || booking.status === statusFilter;
+      const matchesChannel = channelFilter === "ALL" || booking.sourceChannel === channelFilter;
+
+      return matchesSearch && matchesStatus && matchesChannel;
+    });
+
+    const sorted = [...filtered].sort((left, right) => {
+      let comparison = 0;
+
+      switch (sortKey) {
+        case "startTime":
+          comparison = new Date(left.startTime).getTime() - new Date(right.startTime).getTime();
+          break;
+        case "clientName":
+          comparison = compareText(left.clientName, right.clientName);
+          break;
+        case "serviceName":
+          comparison = compareText(left.serviceName, right.serviceName);
+          break;
+        case "resourceName":
+          comparison = compareText(left.resourceName, right.resourceName);
+          break;
+        case "status":
+          comparison = compareText(getStatusLabel(left.status), getStatusLabel(right.status));
+          break;
+        case "sourceChannel":
+          comparison = compareText(
+            getSourceChannelLabel(left.sourceChannel),
+            getSourceChannelLabel(right.sourceChannel),
+          );
+          break;
+      }
+
+      return sortDirection === "asc" ? comparison : comparison * -1;
+    });
+
+    return sorted;
+  }, [channelFilter, data, searchTerm, sortDirection, sortKey, statusFilter]);
+
+  const hasActiveFilters =
+    searchTerm.trim().length > 0 || statusFilter !== "ALL" || channelFilter !== "ALL";
+  const hasAdjustedView = hasActiveFilters || sortKey !== "startTime" || sortDirection !== "desc";
+
   function handleCancelBooking(booking: BookingListItem) {
     setBookingPendingCancel(booking);
   }
+
+  function handleOpenDetail(booking: BookingListItem) {
+    setSelectedBooking(booking);
+  }
+
+  function toggleSort(nextKey: BookingSortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "startTime" ? "desc" : "asc");
+  }
+
+  const columns: DataTableColumn<BookingListItem>[] = [
+    {
+      id: "client",
+      header: (
+        <DataTableSortButton
+          label="Cliente"
+          direction={sortKey === "clientName" ? sortDirection : null}
+          onClick={() => toggleSort("clientName")}
+        />
+      ),
+      cell: (booking) => <span className="font-medium text-primary">{booking.clientName}</span>,
+    },
+    {
+      id: "phone",
+      header: "Teléfono",
+      cell: (booking) => booking.clientPhone || "Sin teléfono",
+    },
+    {
+      id: "service",
+      header: (
+        <DataTableSortButton
+          label="Servicio"
+          direction={sortKey === "serviceName" ? sortDirection : null}
+          onClick={() => toggleSort("serviceName")}
+        />
+      ),
+      cell: (booking) => booking.serviceName,
+    },
+    {
+      id: "resource",
+      header: (
+        <DataTableSortButton
+          label="Recurso"
+          direction={sortKey === "resourceName" ? sortDirection : null}
+          onClick={() => toggleSort("resourceName")}
+        />
+      ),
+      cell: (booking) => booking.resourceName,
+    },
+    {
+      id: "date",
+      header: (
+        <DataTableSortButton
+          label="Fecha y Hora"
+          direction={sortKey === "startTime" ? sortDirection : null}
+          onClick={() => toggleSort("startTime")}
+        />
+      ),
+      cell: (booking) => formatDateTime(booking.startTime),
+    },
+    {
+      id: "status",
+      header: (
+        <DataTableSortButton
+          label="Estado"
+          direction={sortKey === "status" ? sortDirection : null}
+          onClick={() => toggleSort("status")}
+        />
+      ),
+      cell: (booking) => (
+        <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
+      ),
+    },
+    {
+      id: "channel",
+      header: (
+        <DataTableSortButton
+          label="Canal"
+          direction={sortKey === "sourceChannel" ? sortDirection : null}
+          onClick={() => toggleSort("sourceChannel")}
+        />
+      ),
+      cell: (booking) => getSourceChannelLabel(booking.sourceChannel),
+    },
+    {
+      id: "actions",
+      header: "Acciones",
+      cell: (booking) => (
+        <BookingActions
+          booking={booking}
+          onViewDetail={handleOpenDetail}
+          onCancel={handleCancelBooking}
+        />
+      ),
+      className: "w-[120px]",
+      headerClassName: "w-[120px]",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -596,7 +888,7 @@ export function BookingsPage() {
         </Button>
       </header>
 
-      {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+      {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
       <PageCard>
         {bookingsQuery.isLoading && <LoadingState message="Cargando turnos..." />}
@@ -619,56 +911,84 @@ export function BookingsPage() {
               />
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="border-b-2 border-neutral-dark bg-neutral">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Cliente
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Teléfono
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Servicio
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Recurso
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Fecha y Hora
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Estado
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Canal
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm font-semibold text-primary">
-                          Acciones
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((booking) => (
-                        <BookingRow
-                          key={booking.id}
-                          booking={booking}
-                          onViewDetail={setSelectedBookingId}
-                          onCancel={handleCancelBooking}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="relative w-full xl:max-w-sm">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
+                    <input
+                      type="text"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Buscar cliente, servicio, recurso o teléfono..."
+                      className="h-11 w-full rounded-md border border-neutral-dark bg-white pl-10 pr-3 text-sm text-primary outline-none ring-primary-light focus:ring-2"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as BookingStatusFilter)}>
+                      <SelectTrigger className="min-w-[190px]">
+                        <SelectValue placeholder="Filtrar por estado" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOKING_STATUS_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option === "ALL" ? "Todos los estados" : getStatusLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as BookingChannelFilter)}>
+                      <SelectTrigger className="min-w-[190px]">
+                        <SelectValue placeholder="Filtrar por canal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOKING_CHANNEL_OPTIONS.map((option) => (
+                          <SelectItem key={option} value={option}>
+                            {option === "ALL" ? "Todos los canales" : getSourceChannelLabel(option)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+
+                <DataTable
+                  data={visibleBookings}
+                  columns={columns}
+                  rowKey={(booking) => booking.id}
+                  mobileRow={(booking) => (
+                    <BookingMobileCard
+                      booking={booking}
+                      onViewDetail={handleOpenDetail}
+                      onCancel={handleCancelBooking}
+                    />
+                  )}
+                  emptyState={
+                    <EmptyState
+                      icon={CalendarDays}
+                      title="Sin resultados en esta página"
+                      description={
+                        hasActiveFilters
+                          ? "No encontramos turnos que coincidan con los filtros aplicados en la página actual."
+                          : "No hay turnos para mostrar."
+                      }
+                    />
+                  }
+                />
 
                 {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="mt-4 flex flex-col gap-3 border-t border-neutral-dark pt-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-primary-light">
-                      Mostrando {page * pageSize + 1} a {Math.min((page + 1) * pageSize, total)} de{" "}
-                      {total} turnos
-                    </p>
+                    <div>
+                      <p className="text-sm text-primary-light">
+                        Mostrando {visibleBookings.length} de {data.length} de {total} total de turnos
+                      </p>
+                      {hasAdjustedView && (
+                        <p className="mt-1 text-xs text-primary-light">
+                          Vista ajustada sobre los {data.length} turnos cargados
+                        </p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
@@ -707,25 +1027,25 @@ export function BookingsPage() {
         <CreateBookingForm
           onClose={() => setShowCreateForm(false)}
           onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ["bookings"] });
+            showFeedback("success", "Turno creado correctamente.");
           }}
         />
       </SidePanel>
 
       {/* Detail Side Panel */}
       <SidePanel
-        isOpen={!!selectedBookingId}
-        onClose={() => setSelectedBookingId(null)}
+        isOpen={!!selectedBooking}
+        onClose={() => setSelectedBooking(null)}
         title="Detalle del Turno"
       >
-        {selectedBookingId && (
+        {selectedBooking && (
           <BookingDetailPanel
-            bookingId={selectedBookingId}
-            onClose={() => setSelectedBookingId(null)}
+            bookingId={selectedBooking.id}
+            bookingSummary={selectedBooking}
+            onClose={() => setSelectedBooking(null)}
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["bookings"] });
             }}
-            onFeedback={setFeedback}
           />
         )}
       </SidePanel>

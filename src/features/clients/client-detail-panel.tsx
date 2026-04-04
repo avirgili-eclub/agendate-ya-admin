@@ -112,7 +112,7 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
                       Nombre Completo
                     </label>
                     <p className="mt-1 text-sm font-semibold text-primary">
-                      {client.firstName} {client.lastName}
+                      {client.fullName}
                     </p>
                   </div>
                   <div>

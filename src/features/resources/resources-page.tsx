@@ -21,6 +21,8 @@ import { ManageServicesModal, ResourceUpsertModal, TransferResourceModal } from 
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 
 const PAGE_SIZE = 4;
 
@@ -42,7 +44,7 @@ export function ResourcesPage() {
   const [search, setSearch] = useState("");
   const [location, setLocation] = useState("Todas las ubicaciones");
   const [page, setPage] = useState(0);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("resource");
   const [creating, setCreating] = useState(false);
   const [editingResource, setEditingResource] = useState<ResourceCardItem | null>(null);
   const [transferingResource, setTransferingResource] = useState<ResourceCardItem | null>(null);
@@ -74,21 +76,25 @@ export function ResourcesPage() {
   const updateResourceMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => updateResourceActiveStatus(id, active),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Estado del recurso actualizado." });
+      showFeedback("success", "Estado del equipo actualizado.");
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toResourcesOperationError(appError) });
+      showFeedback("error", toResourcesOperationError(appError));
     },
   });
 
   const createResourceMutation = useMutation({
     mutationFn: createResource,
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Recurso creado correctamente." });
+      showFeedback("success", "Equipo creado correctamente.");
       setCreating(false);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      showFeedback("error", toResourcesOperationError(appError));
     },
   });
 
@@ -96,9 +102,13 @@ export function ResourcesPage() {
     mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof updateResourceDetails>[1] }) =>
       updateResourceDetails(id, payload),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Recurso actualizado correctamente." });
+      showFeedback("success", "Equipo actualizado correctamente.");
       setEditingResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      showFeedback("error", toResourcesOperationError(appError));
     },
   });
 
@@ -106,9 +116,13 @@ export function ResourcesPage() {
     mutationFn: ({ id, locationName, clearSchedule }: { id: string; locationName: string; clearSchedule: boolean }) =>
       transferResource(id, { locationName, clearSchedule }),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Recurso transferido correctamente." });
+      showFeedback("success", "Equipo transferido correctamente.");
       setTransferingResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      showFeedback("error", toResourcesOperationError(appError));
     },
   });
 
@@ -116,9 +130,13 @@ export function ResourcesPage() {
     mutationFn: ({ id, serviceIds }: { id: string; serviceIds: string[] }) =>
       assignServicesToResource(id, serviceIds),
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Servicios del recurso actualizados." });
+      showFeedback("success", "Servicios del equipo actualizados.");
       setManagingServicesResource(null);
       void queryClient.invalidateQueries({ queryKey: ["resources"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      showFeedback("error", toResourcesOperationError(appError));
     },
   });
 
@@ -172,16 +190,12 @@ export function ResourcesPage() {
             onClick={() => setCreating(true)}
             disabled={locationsQuery.isLoading || supportDataError}
           >
-            + Nuevo recurso
+            + Nuevo equipo
           </Button>
         </div>
       </PageCard>
 
-      {feedback ? (
-        <PageCard>
-          <p className={feedback.tone === "success" ? "text-sm text-success-dark" : "text-sm text-red-700"}>{feedback.message}</p>
-        </PageCard>
-      ) : null}
+      <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {errorMessage ? (
         <PageCard>
@@ -191,7 +205,7 @@ export function ResourcesPage() {
 
       {supportDataError ? (
         <PageCard>
-          <p className="text-sm text-red-700">No pudimos cargar localidades o servicios para recursos.</p>
+          <p className="text-sm text-red-700">No pudimos cargar ubicaciones o servicios para equipos.</p>
         </PageCard>
       ) : null}
 
@@ -210,7 +224,7 @@ export function ResourcesPage() {
       {!resourcesQuery.isLoading && !errorMessage && cards.length === 0 ? (
         <PageCard>
           <h2 className="text-lg font-semibold text-primary">Sin resultados</h2>
-          <p className="mt-1 text-sm text-primary-light">No se encontraron recursos con los filtros actuales.</p>
+          <p className="mt-1 text-sm text-primary-light">No se encontraron equipos con los filtros actuales.</p>
         </PageCard>
       ) : null}
 
@@ -286,7 +300,7 @@ export function ResourcesPage() {
 
           <PageCard className="flex items-center justify-between gap-4">
             <p className="text-sm text-primary-light">
-              Mostrando {cards.length} de {total} recursos totales
+              Mostrando {cards.length} de {total} equipos totales
             </p>
             <div className="flex items-center gap-2">
               <Button

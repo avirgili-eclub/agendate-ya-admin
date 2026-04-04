@@ -8,6 +8,7 @@ import { createErrorMapper } from "@/shared/utils/api-error-mapper";
  */
 export type ClientItem = {
   id: string;
+  fullName: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -23,8 +24,7 @@ export type ClientItem = {
  * Form input model: Data structure for create/update forms.
  */
 export type ClientUpsertInput = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string;
   notes?: string;
@@ -42,9 +42,11 @@ export type ClientBookingHistoryItem = {
 
 export type ChatMessage = {
   id: string;
-  role: "client" | "system" | "agent";
+  clientId: string;
+  sender: "CUSTOMER" | "AGENT";
   content: string;
-  timestamp: string;
+  messageType: "TEXT" | "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT" | "STICKER" | "UNKNOWN";
+  createdAt: string;
 };
 
 export type ChatHistoryResponse = {
@@ -69,26 +71,42 @@ type PagedEnvelope<T> = {
 type ApiClient = {
   id: string;
   tenantId: string;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string | null;
   notes?: string | null;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  completedBookingsCount?: number;
   metadata?: {
     lastBookingDate?: string;
     totalBookings?: number;
   };
 };
 
+function splitFullName(fullName: string): { firstName: string; lastName: string } {
+  const normalized = fullName.trim();
+  if (!normalized) {
+    return { firstName: "", lastName: "" };
+  }
+
+  const parts = normalized.split(/\s+/);
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: "" };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
 /**
  * API request schema: Client for backend POST/PUT endpoints.
  * Explicit contract reduces drift risk between form and API.
  */
 type ApiClientRequest = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email?: string;
   notes?: string;
@@ -104,6 +122,49 @@ type ApiClientBooking = {
   createdAt: string;
 };
 
+type ApiChatMessage = {
+  id: string;
+  clientId: string;
+  sender: string;
+  content?: string | null;
+  messageType?: string | null;
+  createdAt: string;
+};
+
+type ApiChatHistoryResponse = {
+  data: ApiChatMessage[];
+  meta?: {
+    nextCursor?: string | null;
+    hasMore?: boolean;
+  };
+};
+
+function mapApiChatMessageToItem(api: ApiChatMessage): ChatMessage {
+  const sender = api.sender === "CUSTOMER" ? "CUSTOMER" : "AGENT";
+  const allowedMessageTypes: ChatMessage["messageType"][] = [
+    "TEXT",
+    "IMAGE",
+    "AUDIO",
+    "VIDEO",
+    "DOCUMENT",
+    "STICKER",
+    "UNKNOWN",
+  ];
+
+  const messageType = allowedMessageTypes.includes(api.messageType as ChatMessage["messageType"])
+    ? (api.messageType as ChatMessage["messageType"])
+    : "UNKNOWN";
+
+  return {
+    id: api.id,
+    clientId: api.clientId,
+    sender,
+    content: api.content ?? "",
+    messageType,
+    createdAt: api.createdAt,
+  };
+}
+
 // =====================
 // DTO Mapping Layer
 // =====================
@@ -114,17 +175,20 @@ type ApiClientBooking = {
  * Handles null -> undefined conversion and nested metadata extraction.
  */
 function mapApiClientToItem(api: ApiClient): ClientItem {
+  const { firstName, lastName } = splitFullName(api.fullName ?? "");
+
   return {
     id: api.id,
-    firstName: api.firstName,
-    lastName: api.lastName,
+    fullName: api.fullName,
+    firstName,
+    lastName,
     phone: api.phone,
     email: api.email ?? undefined,
     notes: api.notes ?? undefined,
     createdAt: api.createdAt,
-    updatedAt: api.updatedAt,
+    updatedAt: api.updatedAt ?? api.createdAt,
     lastBookingDate: api.metadata?.lastBookingDate,
-    totalBookings: api.metadata?.totalBookings ?? 0,
+    totalBookings: api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
   };
 }
 
@@ -135,8 +199,7 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
  */
 function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
   return {
-    firstName: input.firstName.trim(),
-    lastName: input.lastName.trim(),
+    fullName: input.fullName.trim(),
     phone: input.phone.trim(),
     email: input.email?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
@@ -145,11 +208,8 @@ function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
 
 function assertClientInput(input: ClientUpsertInput) {
   const details: Array<{ field: string; message: string }> = [];
-  if (!input.firstName.trim()) {
-    details.push({ field: "firstName", message: "El nombre es obligatorio." });
-  }
-  if (!input.lastName.trim()) {
-    details.push({ field: "lastName", message: "El apellido es obligatorio." });
+  if (!input.fullName.trim()) {
+    details.push({ field: "fullName", message: "El nombre completo es obligatorio." });
   }
   if (!input.phone.trim()) {
     details.push({ field: "phone", message: "El teléfono es obligatorio." });
@@ -246,23 +306,26 @@ export async function fetchClientBookingHistory(
 
 export async function fetchClientChatHistory(
   clientId: string,
-  params?: { cursor?: string; size?: number }
+  params?: { before?: string; size?: number }
 ): Promise<ChatHistoryResponse> {
-  // NOTE: Backend endpoint not available yet
-  // When available, implement as:
-  // const queryParams = new URLSearchParams();
-  // if (params?.cursor) queryParams.set("cursor", params.cursor);
-  // if (params?.size !== undefined) queryParams.set("size", String(params.size));
-  // const query = queryParams.toString();
-  // const response = await httpRequest<{ data: ChatMessage[]; hasMore: boolean; nextCursor?: string }>(
-  //   `/clients/${clientId}/chat-history${query ? `?${query}` : ""}`
-  // );
-  // return response;
+  const queryParams = new URLSearchParams();
+  if (params?.before) {
+    queryParams.set("before", params.before);
+  }
 
-  // Graceful mock mode for now
+  const requestedSize = params?.size ?? 12;
+  const normalizedSize = Math.min(Math.max(requestedSize, 1), 50);
+  queryParams.set("size", String(normalizedSize));
+
+  const query = queryParams.toString();
+  const response = await httpRequest<ApiChatHistoryResponse>(
+    `/clients/${clientId}/messages${query ? `?${query}` : ""}`,
+  );
+
   return {
-    messages: [],
-    hasMore: false,
+    messages: (response.data ?? []).map(mapApiChatMessageToItem),
+    hasMore: Boolean(response.meta?.hasMore),
+    nextCursor: response.meta?.nextCursor ?? undefined,
   };
 }
 

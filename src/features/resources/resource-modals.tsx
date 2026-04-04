@@ -51,7 +51,7 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const title = mode === "create" ? "Nuevo recurso" : "Editar recurso";
+  const title = mode === "create" ? "Nuevo equipo" : "Editar equipo";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,7 +110,7 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-primary-dark">Tipo de recurso</span>
+            <span className="mb-1 block text-sm text-primary-dark">Tipo de equipo</span>
             <select
               value={type}
               onChange={(e) => setType(e.target.value as ResourceCardItem["type"])}
@@ -152,7 +152,7 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
 
         <label className="flex items-center gap-2 text-sm text-primary-dark">
           <input checked={active} onChange={(e) => setActive(e.target.checked)} type="checkbox" />
-          Recurso activo
+          Equipo activo
         </label>
 
         <div className="flex justify-end gap-2">
@@ -220,7 +220,7 @@ export function TransferResourceModal({ resource, locations, onClose, onSubmit }
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4" />
             <p>
-              Si activas <strong>clearSchedule</strong>, se asume cancelacion de turnos futuros antes de mover el recurso.
+              Si activas <strong>clearSchedule</strong>, se asume cancelacion de turnos futuros antes de mover el equipo.
             </p>
           </div>
         </div>

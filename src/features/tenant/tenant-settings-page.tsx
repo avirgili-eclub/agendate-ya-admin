@@ -335,7 +335,7 @@ export function TenantSettingsPage() {
                     max: tenantInfo.maxLocations ?? 0,
                   },
                   {
-                    label: "Recursos",
+                    label: "Equipos",
                     current: tenantInfo.currentResources ?? 0,
                     max: tenantInfo.maxResources ?? 0,
                   },

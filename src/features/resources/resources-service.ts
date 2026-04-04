@@ -166,8 +166,8 @@ function toTransferResourceDTO(locationId: string, clearSchedule: boolean): Tran
  * Uses shared createErrorMapper with module-specific overrides.
  */
 export const toResourcesFriendlyMessage = createErrorMapper({
-  notFound: "No se encontraron recursos para la busqueda aplicada.",
-  fallback: "No pudimos cargar recursos por ahora. Vuelve a intentarlo.",
+  notFound: "No se encontraron equipos para la busqueda aplicada.",
+  fallback: "No pudimos cargar equipos por ahora. Vuelve a intentarlo.",
 });
 
 /**
@@ -176,10 +176,10 @@ export const toResourcesFriendlyMessage = createErrorMapper({
  */
 export function toResourcesOperationError(error: AppError): string {
   if (error.status === 402 || error.code === "SUBSCRIPTION_LIMIT") {
-    return "Alcanzaste el limite del plan para profesionales activos.";
+    return "Alcanzaste el limite del plan para equipos/profesionales activos.";
   }
   if (error.status === 403 || error.code === "FORBIDDEN") {
-    return "No tienes permisos para ver o modificar recursos.";
+    return "No tienes permisos para ver o modificar equipos.";
   }
   return toResourcesFriendlyMessage(error);
 }
