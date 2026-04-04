@@ -1,4 +1,4 @@
-import { Bell, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
@@ -18,6 +18,7 @@ export function AppShell() {
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -82,16 +83,40 @@ export function AppShell() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
+      <div
+        className={`grid grid-cols-1 gap-4 p-4 lg:gap-6 lg:p-6 ${
+          isDesktopSidebarCollapsed
+            ? "lg:grid-cols-[72px_minmax(0,1fr)]"
+            : "lg:grid-cols-[260px_minmax(0,1fr)]"
+        }`}
+      >
         <aside
           id="main-navigation"
-          className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+          className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-full lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
           role="navigation"
           aria-label="Menú principal"
         >
-          <div className="mb-4 border-b border-white/20 px-3 pb-3">
-            <p className="text-sm font-semibold">Admin Console</p>
-            <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
+          <div
+            className={`mb-4 border-b border-white/20 pb-3 ${
+              isDesktopSidebarCollapsed ? "px-1 lg:px-0" : "px-3"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className={`${isDesktopSidebarCollapsed ? "lg:hidden" : ""}`}>
+                <p className="text-sm font-semibold">Admin Console</p>
+                <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDesktopSidebarCollapsed((current) => !current)}
+                className="hidden rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:inline-flex"
+                aria-label={isDesktopSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+                title={isDesktopSidebarCollapsed ? "Expandir" : "Colapsar"}
+              >
+                {isDesktopSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+              </button>
+            </div>
           </div>
 
           <nav className="space-y-1">
@@ -99,12 +124,15 @@ export function AppShell() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className={`group flex items-center gap-3 rounded-md py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                  isDesktopSidebarCollapsed ? "px-3 lg:justify-center lg:px-2" : "px-3"
+                }`}
                 activeProps={{ className: "bg-white/15 text-white" }}
                 onClick={() => setIsMobileMenuOpen(false)}
+                title={isDesktopSidebarCollapsed ? item.label : undefined}
               >
                 <item.icon className="size-4" aria-hidden="true" />
-                <span>{item.label}</span>
+                <span className={isDesktopSidebarCollapsed ? "lg:hidden" : ""}>{item.label}</span>
               </Link>
             ))}
           </nav>
