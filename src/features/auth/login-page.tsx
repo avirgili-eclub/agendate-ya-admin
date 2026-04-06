@@ -18,12 +18,18 @@ function toFriendlyLoginMessage(appError: AppError) {
     appError.status === 503 ||
     appError.status === 0
   ) {
-    return "El servicio no se encuentra disponible. Vuelve a intentarlo mas tarde.";
+    return "El servicio no se encuentra disponible. Vuelve a intentarlo más tarde.";
   }
-  if (appError.code === "UNAUTHORIZED" || appError.code === "VALIDATION_ERROR" || appError.status === 400) {
-    return "No pudimos iniciar sesion. Verifica usuario o contrasena e intenta nuevamente.";
+  if (appError.code === "UNAUTHORIZED" || appError.status === 401) {
+    return "Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.";
   }
-  return "No pudimos iniciar sesion en este momento. Vuelve a intentarlo.";
+  if (appError.code === "VALIDATION_ERROR" || appError.status === 400) {
+    return "Revisa los datos ingresados y vuelve a intentarlo.";
+  }
+  if (appError.code === "FORBIDDEN" || appError.status === 403) {
+    return "Tu cuenta no tiene permisos para ingresar al panel.";
+  }
+  return "No pudimos iniciar sesión en este momento. Vuelve a intentarlo.";
 }
 
 export function LoginPage() {
@@ -78,7 +84,7 @@ export function LoginPage() {
 
         {sessionExpired ? (
           <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
-            Tu sesion expiro. Inicia sesion nuevamente.
+            Tu sesión expiró. Inicia sesión nuevamente.
           </div>
         ) : null}
 
@@ -87,21 +93,6 @@ export function LoginPage() {
             {error}
           </div>
         ) : null}
-
-        <div className="mt-6">
-          <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
-            Continuar con Google
-          </GoogleButton>
-        </div>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-neutral-dark" />
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-neutral px-2 text-primary-light">O continua con email</span>
-          </div>
-        </div>
 
         <form className="space-y-4" onSubmit={onSubmit}>
           <label className="block">
@@ -130,6 +121,16 @@ export function LoginPage() {
             />
           </label>
 
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => alert("Recuperación de contraseña próxima a implementarse")}
+              className="text-sm font-medium text-secondary transition hover:text-secondary-light"
+            >
+              Olvidé mi contraseña
+            </button>
+          </div>
+
           <Button className="w-full" type="submit" disabled={isLoading} size="lg">
             {isLoading ? "Ingresando..." : "Ingresar"}
           </Button>
@@ -141,6 +142,19 @@ export function LoginPage() {
             </Link>
           </p>
         </form>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-neutral-dark" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-neutral px-2 text-primary-light">O continuá con Google</span>
+          </div>
+        </div>
+
+        <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+          Continuar con Google
+        </GoogleButton>
       </div>
     </AuthLayout>
   );
