@@ -7,6 +7,10 @@ export interface FeedbackMessage {
   message: string;
 }
 
+type ShowFeedbackOptions = {
+  persist?: boolean;
+};
+
 /**
  * Hook that manages both transient feedback (toast-like) and persistent notifications.
  * - Shows temporary visual feedback via transient component
@@ -17,16 +21,18 @@ export function useFeedback(category?: NotificationCategory) {
   const { addNotification } = useNotifications();
 
   const showFeedback = useCallback(
-    (tone: "success" | "error", message: string) => {
+    (tone: "success" | "error", message: string, options: ShowFeedbackOptions = {}) => {
       // Show transient visual feedback
       setFeedback({ tone, message });
 
       // Persist in notification center
-      addNotification({
-        type: tone,
-        message,
-        category,
-      });
+      if (options.persist !== false) {
+        addNotification({
+          type: tone,
+          message,
+          category,
+        });
+      }
     },
     [addNotification, category]
   );

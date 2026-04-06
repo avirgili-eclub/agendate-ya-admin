@@ -5,6 +5,12 @@ import { useEffect, useState } from "react";
 import { APP_NAV_ITEMS, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
+import {
+  getGoogleCalendarAlertStatus,
+  subscribeGoogleCalendarAlertStatus,
+  type GoogleCalendarAlertStatus,
+} from "@/features/calendar/google-calendar-alert";
+import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { useNotifications } from "@/shared/notifications/notification-store";
@@ -19,10 +25,20 @@ export function AppShell() {
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
+  const [googleCalendarAlertStatus, setGoogleCalendarAlertStatus] =
+    useState<GoogleCalendarAlertStatus>(() => getGoogleCalendarAlertStatus());
+
+  const canViewGoogleCalendarAlert = canViewGoogleCalendarStatus(session.user?.role);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    return subscribeGoogleCalendarAlertStatus((status) => {
+      setGoogleCalendarAlertStatus(status);
+    });
+  }, []);
 
   async function handleLogout() {
     await logout();
@@ -139,6 +155,25 @@ export function AppShell() {
         </aside>
 
         <main className="min-w-0 space-y-4">
+          {canViewGoogleCalendarAlert && googleCalendarAlertStatus === "NEEDS_REAUTH" && (
+            <div
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
+              role="alert"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm">
+                  Tu conexión con Google Calendar expiró. Ve a Configuración para reconectar.
+                </p>
+                <a
+                  href="/configuracion?tab=integraciones"
+                  className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                >
+                  Ir a Configuración
+                </a>
+              </div>
+            </div>
+          )}
+
           <PageCard className="bg-neutral-light">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary-light">Admin / {pageMeta.title}</p>
             <h1 className="mt-1 text-3xl font-bold text-primary-dark">{pageMeta.title}</h1>

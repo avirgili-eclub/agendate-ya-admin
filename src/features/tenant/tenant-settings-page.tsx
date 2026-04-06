@@ -1,8 +1,18 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
-import { Building2, Globe, Calendar, CreditCard, Edit, Save, X, Info } from "lucide-react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { Building2, Globe, Calendar, CreditCard, Edit, Save, X, Info, RefreshCw, Unlink, Link2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
+import {
+  canManageGoogleCalendarConnection,
+  canViewGoogleCalendarStatus,
+  disconnectGoogleCalendar,
+  fetchGoogleCalendarAuthStatus,
+  fetchGoogleCalendarAuthUrl,
+  fetchGoogleCalendarConnections,
+} from "@/features/calendar/google-calendar-service";
+import { setGoogleCalendarAlertStatus } from "@/features/calendar/google-calendar-alert";
 import {
   fetchTenantInfo,
   updateTenantInfo,
@@ -14,6 +24,9 @@ import {
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
+import { useFeedback } from "@/shared/notifications/use-feedback";
+import { useNotifications } from "@/shared/notifications/notification-store";
 
 const AVAILABLE_TIMEZONES = [
   { value: "America/Asuncion", label: "Paraguay (GMT-4)" },
@@ -34,14 +47,32 @@ const BUSINESS_TYPES = [
 
 export function TenantSettingsPage() {
   const queryClient = useQueryClient();
+  const session = getSessionState();
+  const canViewCalendarStatus = canViewGoogleCalendarStatus(session.user?.role);
+  const canManageCalendarConnection = canManageGoogleCalendarConnection(session.user?.role);
+
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("");
   const [businessType, setBusinessType] = useState("");
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
+  const { addNotification } = useNotifications();
 
   const { data: tenantInfo, isLoading: isLoadingInfo, error: infoError } = useQuery({
     queryKey: ["tenant-info"],
     queryFn: fetchTenantInfo,
+  });
+
+  const calendarStatusQuery = useQuery({
+    queryKey: ["google-calendar", "auth-status"],
+    queryFn: fetchGoogleCalendarAuthStatus,
+    enabled: canViewCalendarStatus,
+  });
+
+  const calendarConnectionsQuery = useQuery({
+    queryKey: ["google-calendar", "connections"],
+    queryFn: fetchGoogleCalendarConnections,
+    enabled: canViewCalendarStatus && calendarStatusQuery.data?.status === "ACTIVE",
   });
 
   const hasSubscriptionData = Boolean(
@@ -60,6 +91,129 @@ export function TenantSettingsPage() {
       setIsEditing(false);
     },
   });
+
+  const disconnectGoogleCalendarMutation = useMutation({
+    mutationFn: disconnectGoogleCalendar,
+    onSuccess: async () => {
+      showFeedback("success", "Google Calendar desconectado.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["google-calendar", "auth-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["google-calendar", "connections"] }),
+      ]);
+    },
+    onError: (error) => {
+      showFeedback(
+        "error",
+        toTenantFriendlyMessage(error as unknown as AppError),
+      );
+    },
+  });
+
+  useEffect(() => {
+    if (!canViewCalendarStatus) {
+      setGoogleCalendarAlertStatus("NONE");
+      return;
+    }
+
+    const status = calendarStatusQuery.data?.status;
+    if (!status) {
+      return;
+    }
+
+    setGoogleCalendarAlertStatus(status === "NEEDS_REAUTH" ? "NEEDS_REAUTH" : "NONE");
+  }, [calendarStatusQuery.data?.status, canViewCalendarStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const googleStatus = currentUrl.searchParams.get("google");
+    const reason = currentUrl.searchParams.get("reason");
+
+    if (!googleStatus) {
+      return;
+    }
+
+    if (googleStatus === "connected") {
+      showFeedback("success", "✅ Google Calendar conectado correctamente", { persist: false });
+      addNotification({
+        type: "success",
+        title: "Google Calendar conectado",
+        message:
+          "Tu cuenta de Google fue conectada exitosamente. Los turnos se sincronizarán automáticamente.",
+        category: "system",
+      });
+      setGoogleCalendarAlertStatus("NONE");
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["google-calendar", "auth-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["google-calendar", "connections"] }),
+      ]);
+    }
+
+    if (googleStatus === "error") {
+      const messages: Record<string, string> = {
+        cancelled: "Cancelaste la conexión con Google. Podés intentarlo de nuevo.",
+        google_error:
+          "Google rechazó la conexión. Verificá que estés usando la cuenta del negocio.",
+        server_error: "Hubo un error en el servidor. Intentalo en unos minutos.",
+      };
+
+      const message =
+        reason
+          ? (messages[reason] ?? "No se pudo conectar con Google. Intentalo de nuevo.")
+          : "No se pudo conectar con Google. Intentalo de nuevo.";
+
+      showFeedback("error", message, { persist: false });
+      addNotification({
+        type: "warning",
+        title: "Error al conectar Google Calendar",
+        message,
+        category: "system",
+      });
+    }
+
+    currentUrl.searchParams.delete("google");
+    currentUrl.searchParams.delete("reason");
+    window.history.replaceState({}, "", `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+  }, [addNotification, queryClient, showFeedback]);
+
+  const calendarConnectedAtLabel = useMemo(() => {
+    if (!calendarStatusQuery.data?.connectedAt) {
+      return null;
+    }
+
+    return new Date(calendarStatusQuery.data.connectedAt).toLocaleDateString("es-PY", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }, [calendarStatusQuery.data?.connectedAt]);
+
+  async function handleConnectGoogleCalendar() {
+    try {
+      const response = await fetchGoogleCalendarAuthUrl();
+      window.location.href = response.authUrl;
+    } catch (error) {
+      showFeedback(
+        "error",
+        toTenantFriendlyMessage(error as unknown as AppError),
+      );
+    }
+  }
+
+  async function handleDisconnectGoogleCalendar() {
+    const confirmed = window.confirm(
+      "¿Desconectar Google Calendar? Los calendarios seguirán en tu cuenta de Google pero dejarán de sincronizarse.",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    await disconnectGoogleCalendarMutation.mutateAsync();
+  }
 
   const handleStartEdit = () => {
     if (tenantInfo) {
@@ -102,6 +256,8 @@ export function TenantSettingsPage() {
 
   return (
     <div className="space-y-6">
+      {feedback ? <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} /> : null}
+
       {/* Header */}
       <header>
         <h1 className="text-2xl font-semibold text-primary">Configuración</h1>
@@ -382,6 +538,98 @@ export function TenantSettingsPage() {
         <PageCard>
           <div className="text-center text-sm text-primary-light">
             Información de suscripción no disponible en este entorno todavía.
+          </div>
+        </PageCard>
+      )}
+
+      {canViewCalendarStatus && (
+        <PageCard>
+          <div className="flex items-center gap-3 border-b border-neutral-dark pb-4">
+            <Link2 className="size-6 text-primary" />
+            <h2 className="text-lg font-semibold text-primary">Google Calendar</h2>
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {calendarStatusQuery.isLoading ? (
+              <p className="text-sm text-primary-light">Estado: cargando integración...</p>
+            ) : null}
+
+            {calendarStatusQuery.isError ? (
+              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {toTenantFriendlyMessage(calendarStatusQuery.error as unknown as AppError)}
+              </p>
+            ) : null}
+
+            {!calendarStatusQuery.isLoading && !calendarStatusQuery.isError && calendarStatusQuery.data?.status === "ACTIVE" ? (
+              <>
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <p className="text-sm font-medium text-green-800">
+                    Conectado{calendarConnectedAtLabel ? ` desde ${calendarConnectedAtLabel}` : ""}
+                  </p>
+                  <p className="mt-1 text-sm text-green-700">
+                    {calendarConnectionsQuery.data?.length ?? 0} calendarios activos
+                  </p>
+                </div>
+
+                {canManageCalendarConnection ? (
+                  <Button
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
+                    onClick={handleDisconnectGoogleCalendar}
+                    disabled={disconnectGoogleCalendarMutation.isPending}
+                  >
+                    <Unlink className="mr-2 size-4" />
+                    {disconnectGoogleCalendarMutation.isPending ? "Desconectando..." : "Desconectar"}
+                  </Button>
+                ) : (
+                  <p className="text-xs text-primary-light">
+                    Solo un TENANT_ADMIN puede desconectar esta integración.
+                  </p>
+                )}
+              </>
+            ) : null}
+
+            {!calendarStatusQuery.isLoading && !calendarStatusQuery.isError && calendarStatusQuery.data?.status === "NEEDS_REAUTH" ? (
+              <>
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm font-medium text-amber-900">Conexión expirada</p>
+                  <p className="mt-1 text-sm text-amber-800">Necesitás reconectar tu cuenta de Google.</p>
+                </div>
+
+                {canManageCalendarConnection ? (
+                  <Button onClick={handleConnectGoogleCalendar}>
+                    <RefreshCw className="mr-2 size-4" />
+                    Reconectar con Google
+                  </Button>
+                ) : (
+                  <p className="text-xs text-primary-light">
+                    Solo un TENANT_ADMIN puede reconectar la integración.
+                  </p>
+                )}
+              </>
+            ) : null}
+
+            {!calendarStatusQuery.isLoading && !calendarStatusQuery.isError && calendarStatusQuery.data?.status === "NOT_CONNECTED" ? (
+              <>
+                <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
+                  <p className="text-sm font-medium text-primary">Sin conectar</p>
+                  <p className="mt-1 text-sm text-primary-light">
+                    Conectá tu cuenta de Gmail para sincronizar turnos automáticamente con Google Calendar.
+                  </p>
+                </div>
+
+                {canManageCalendarConnection ? (
+                  <Button onClick={handleConnectGoogleCalendar}>
+                    <Link2 className="mr-2 size-4" />
+                    Conectar con Google
+                  </Button>
+                ) : (
+                  <p className="text-xs text-primary-light">
+                    Solo un TENANT_ADMIN puede conectar la integración.
+                  </p>
+                )}
+              </>
+            ) : null}
           </div>
         </PageCard>
       )}

@@ -3,6 +3,8 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 
 import type { AppError } from "@/core/errors/app-error";
 import { login } from "@/core/auth/auth-service";
+import { setGoogleCalendarAlertStatus } from "@/features/calendar/google-calendar-alert";
+import { runSilentGoogleCalendarStatusCheck } from "@/features/calendar/google-calendar-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { AuthLayout } from "./components/auth-layout";
@@ -38,13 +40,27 @@ export function LoginPage() {
     return search.reason === "session-expired";
   }, [location.search]);
 
+  const loginReturnUrl = useMemo(() => {
+    const search = location.search as Record<string, string | undefined>;
+    return search.returnUrl ?? search.redirect;
+  }, [location.search]);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setIsLoading(true);
 
     try {
-      await login({ email, password });
+      const authData = await login({ email, password });
+      setGoogleCalendarAlertStatus("NONE");
+      // Silent background check: must never block or break login.
+      void runSilentGoogleCalendarStatusCheck(authData.user.role);
+
+      if (loginReturnUrl && loginReturnUrl.startsWith("/")) {
+        window.location.assign(loginReturnUrl);
+        return;
+      }
+
       await navigate({ to: "/" });
     } catch (e) {
       const appError = e as AppError;

@@ -56,10 +56,11 @@ const privateRoute = createRoute({
   id: "private",
   beforeLoad: ({ location }) => {
     if (!isAuthenticated()) {
+      const returnUrl = `${location.pathname}${location.searchStr ?? ""}`;
       throw redirect({
         to: "/login",
         search: {
-          redirect: location.pathname,
+          returnUrl,
         },
       });
     }

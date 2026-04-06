@@ -133,6 +133,9 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
+                      {notification.title ? (
+                        <p className={cn("text-sm font-semibold", styles.text)}>{notification.title}</p>
+                      ) : null}
                       <p className={cn("text-sm", styles.text)}>{notification.message}</p>
                       <p className="mt-1 text-xs text-primary-light">
                         {formatTimestamp(notification.timestamp)}
