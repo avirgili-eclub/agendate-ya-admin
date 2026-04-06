@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Headset, ShieldCheck } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
 import { login } from "@/core/auth/auth-service";
@@ -78,9 +79,11 @@ export function LoginPage() {
 
   return (
     <AuthLayout>
-      <div>
-        <h1 className="text-3xl font-bold text-primary">Bienvenido de vuelta</h1>
-        <p className="mt-2 text-sm text-primary-light">Ingresa tus credenciales para acceder al panel administrador.</p>
+      <div className="space-y-6">
+        <header>
+          <h1 className="text-3xl font-bold text-primary">Bienvenido de vuelta</h1>
+          <p className="mt-2 text-sm text-primary-light">Ingresa tus credenciales para acceder al panel administrador.</p>
+        </header>
 
         {sessionExpired ? (
           <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
@@ -94,67 +97,85 @@ export function LoginPage() {
           </div>
         ) : null}
 
-        <form className="space-y-4" onSubmit={onSubmit}>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-primary-dark">Email</span>
-            <input
-              className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
-              name="email"
-              autoComplete="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
-              required
-            />
-          </label>
+        <section className="rounded-xl border border-neutral-dark bg-white p-5 shadow-sm">
+          <form className="space-y-4" onSubmit={onSubmit}>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-primary-dark">Email</span>
+              <input
+                className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light transition focus:border-primary focus:ring-2"
+                name="email"
+                autoComplete="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu@email.com"
+                required
+              />
+            </label>
 
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-primary-dark">Contraseña</span>
-            <PasswordInput
-              name="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-            />
-          </label>
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-primary-dark">Contraseña</span>
+              <PasswordInput
+                name="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </label>
 
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => alert("Recuperación de contraseña próxima a implementarse")}
-              className="text-sm font-medium text-secondary transition hover:text-secondary-light"
-            >
-              Olvidé mi contraseña
-            </button>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => alert("Recuperación de contraseña próxima a implementarse")}
+                className="inline-flex h-10 items-center justify-center rounded-md px-3 text-sm font-medium text-secondary transition hover:bg-secondary/10 hover:text-secondary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-light"
+              >
+                Olvidé mi contraseña
+              </button>
+            </div>
+
+            <Button className="w-full" type="submit" disabled={isLoading} size="lg">
+              {isLoading ? "Ingresando..." : "Ingresar"}
+            </Button>
+
+            <p className="text-center text-sm text-primary-light">
+              ¿Todavía no tienes una cuenta?{" "}
+              <Link to="/registro" className="font-medium text-secondary hover:text-secondary-light transition">
+                Regístrate
+              </Link>
+            </p>
+          </form>
+        </section>
+
+        <section className="space-y-4 rounded-xl border border-neutral-dark/80 bg-neutral-light p-4">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-neutral-dark" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-neutral-light px-2 text-primary-light">O continuá con Google</span>
+            </div>
           </div>
+          <p className="text-center text-xs text-primary-light">Usa tu cuenta de Google del negocio para continuar.</p>
 
-          <Button className="w-full" type="submit" disabled={isLoading} size="lg">
-            {isLoading ? "Ingresando..." : "Ingresar"}
-          </Button>
+          <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+            Continuar con Google
+          </GoogleButton>
+        </section>
 
-          <p className="text-center text-sm text-primary-light">
-            ¿Todavía no tienes una cuenta?{" "}
-            <Link to="/registro" className="font-medium text-secondary hover:text-secondary-light transition">
-              Regístrate
-            </Link>
-          </p>
-        </form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-neutral-dark" />
+        <section className="rounded-xl border border-neutral-dark/60 bg-white/70 px-4 py-3 text-xs text-primary-light lg:hidden">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-primary" />
+              <span>Acceso seguro</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Headset className="size-4 text-primary" />
+              <span>Soporte disponible</span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-neutral px-2 text-primary-light">O continuá con Google</span>
-          </div>
-        </div>
-
-        <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
-          Continuar con Google
-        </GoogleButton>
+        </section>
       </div>
     </AuthLayout>
   );
