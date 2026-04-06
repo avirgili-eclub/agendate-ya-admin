@@ -14,6 +14,7 @@ export type ResourceCardItem = {
   active: boolean;
   description?: string;
   capacity?: number;
+  calendarConnected: boolean;
 };
 
 export type ResourceLocationItem = {
@@ -70,6 +71,7 @@ type ApiResource = {
   description?: string | null;
   capacity?: number | null;
   active: boolean;
+  calendarConnected?: boolean;
 };
 
 type ApiService = {
@@ -101,6 +103,7 @@ function toCardItem(
     active: resource.active,
     description: resource.description ?? undefined,
     capacity: resource.capacity ?? undefined,
+    calendarConnected: resource.calendarConnected ?? false,
   };
 }
 
@@ -256,6 +259,17 @@ function ensureLocationId(locations: ResourceLocationItem[], locationName: strin
 async function fetchResourceById(id: string): Promise<ApiResource> {
   const response = await httpRequest<DataEnvelope<ApiResource>>(`/resources/${id}`);
   return unwrapData<ApiResource>(response);
+}
+
+export async function fetchResourceCalendarStatus(resourceId: string): Promise<boolean> {
+  const resource = await fetchResourceById(resourceId);
+  return resource.calendarConnected ?? false;
+}
+
+export async function provisionResourceCalendar(resourceId: string): Promise<void> {
+  await httpRequest<unknown>(`/calendar/resources/${resourceId}/provision`, {
+    method: "POST",
+  });
 }
 
 async function fetchAssignedServices(resourceId: string): Promise<ApiService[]> {

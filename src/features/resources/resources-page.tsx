@@ -243,6 +243,11 @@ export function ResourcesPage() {
                     <div>
                       <ResourceTypeBadge type={resource.type} />
                     </div>
+                    {!resource.calendarConnected && (
+                      <div>
+                        <StatusChip tone="warning" label="Sin calendario" />
+                      </div>
+                    )}
                   </div>
                 </div>
 

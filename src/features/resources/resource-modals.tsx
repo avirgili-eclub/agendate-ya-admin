@@ -1,14 +1,22 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, X } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { AlertTriangle, Link2, Loader2, RefreshCw, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
+import { fetchGoogleCalendarAuthStatus } from "@/features/calendar/google-calendar-service";
 import {
+  fetchResourceCalendarStatus,
+  provisionResourceCalendar,
   processFormError,
   type ResourceCardItem,
   type ResourceServiceCatalogItem,
   type ResourceUpsertInput,
 } from "@/features/resources/resources-service";
+import { useNotifications } from "@/shared/notifications/notification-store";
+import { useFeedback } from "@/shared/notifications/use-feedback";
 import { Button } from "@/shared/ui/button";
+import { TransientFeedback } from "@/shared/ui/transient-feedback";
 
 type ModalShellProps = {
   title: string;
@@ -41,17 +49,104 @@ type ResourceUpsertModalProps = {
 };
 
 export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmit }: ResourceUpsertModalProps) {
+  const queryClient = useQueryClient();
+  const session = getSessionState();
+  const userRole = (session.user?.role ?? "").toUpperCase();
+  const canProvisionGoogleCalendar = userRole === "TENANT_ADMIN" || userRole === "SUPER_ADMIN";
+
+  const resourceId = initial?.id;
+
   const [name, setName] = useState(initial?.name ?? "");
   const [locationName, setLocationName] = useState(initial?.locationName ?? locations[1] ?? "");
   const [type, setType] = useState<ResourceCardItem["type"]>(initial?.type ?? "PROFESSIONAL");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [capacity, setCapacity] = useState(String(initial?.capacity ?? 1));
   const [active, setActive] = useState(initial?.active ?? true);
+  const [calendarConnected, setCalendarConnected] = useState(Boolean(initial?.calendarConnected));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const { feedback, showFeedback, dismissFeedback } = useFeedback("resource");
+  const { addNotification } = useNotifications();
 
   const title = mode === "create" ? "Nuevo equipo" : "Editar equipo";
+
+  useEffect(() => {
+    setCalendarConnected(Boolean(initial?.calendarConnected));
+  }, [initial?.calendarConnected, initial?.id]);
+
+  const resourceCalendarStatusQuery = useQuery({
+    queryKey: ["resource", resourceId, "calendar-status"],
+    queryFn: () => fetchResourceCalendarStatus(resourceId!),
+    enabled: mode === "edit" && Boolean(resourceId),
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (typeof resourceCalendarStatusQuery.data === "boolean") {
+      setCalendarConnected(resourceCalendarStatusQuery.data);
+    }
+  }, [resourceCalendarStatusQuery.data]);
+
+  const calendarAuthStatusQuery = useQuery({
+    queryKey: ["google-calendar", "auth-status"],
+    queryFn: fetchGoogleCalendarAuthStatus,
+    enabled: mode === "edit" && Boolean(resourceId) && !calendarConnected && canProvisionGoogleCalendar,
+    staleTime: 5 * 60_000,
+  });
+
+  const provisionCalendarMutation = useMutation({
+    mutationFn: () => provisionResourceCalendar(resourceId!),
+    onSuccess: () => {
+      setCalendarConnected(true);
+      showFeedback("success", `✅ Google Calendar creado para ${name || initial?.name || "este equipo"}`);
+      void queryClient.invalidateQueries({ queryKey: ["resource", resourceId, "calendar-status"] });
+      void queryClient.invalidateQueries({ queryKey: ["resources"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+
+      if (appError.status === 409) {
+        setCalendarConnected(true);
+        showFeedback("info", "El equipo ya tiene un calendario asociado.");
+        void queryClient.invalidateQueries({ queryKey: ["resource", resourceId, "calendar-status"] });
+        void queryClient.invalidateQueries({ queryKey: ["resources"] });
+        return;
+      }
+
+      if (appError.status === 422) {
+        const message = "Primero conectá tu cuenta de Google en Configuración.";
+        showFeedback("warning", message, {
+          persist: false,
+          action: {
+            label: "Ir a Configuración",
+            href: "/configuracion?tab=integraciones",
+          },
+        });
+        addNotification({
+          type: "warning",
+          title: "Google Calendar no disponible",
+          message,
+          category: "resource",
+          actionUrl: "/configuracion?tab=integraciones",
+        });
+        void queryClient.invalidateQueries({ queryKey: ["google-calendar", "auth-status"] });
+        return;
+      }
+
+      if (appError.status === 500) {
+        showFeedback("error", "No se pudo crear el calendario. Intentalo de nuevo.");
+        return;
+      }
+
+      if (appError.status === 404) {
+        showFeedback("error", "No se encontró el recurso. Intentalo de nuevo.");
+        return;
+      }
+
+      showFeedback("error", "Error inesperado. Intentalo de nuevo.");
+    },
+  });
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +175,8 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
   return (
     <ModalShell title={title} onClose={onClose}>
       <form className="space-y-4" onSubmit={handleSubmit}>
+        {feedback ? <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} /> : null}
+
         {formError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p> : null}
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -154,6 +251,83 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
           <input checked={active} onChange={(e) => setActive(e.target.checked)} type="checkbox" />
           Equipo activo
         </label>
+
+        {mode === "edit" && resourceId ? (
+          <div className="rounded-xl border border-neutral-dark bg-white p-4">
+            <h3 className="text-base font-semibold text-primary">Google Calendar</h3>
+
+            {resourceCalendarStatusQuery.isLoading ? (
+              <p className="mt-2 text-sm text-primary-light">Verificando estado del calendario...</p>
+            ) : calendarConnected ? (
+              <p className="mt-2 text-sm font-medium text-green-700">✅ Calendario sincronizado</p>
+            ) : (
+              <div className="mt-2 space-y-3">
+                <div>
+                  <p className="text-sm text-primary">- Sin calendario asignado</p>
+
+                  {!canProvisionGoogleCalendar ? (
+                    <p className="mt-1 text-sm text-primary-light">
+                      Los turnos de este equipo no se sincronizan con Google Calendar.
+                    </p>
+                  ) : calendarAuthStatusQuery.isLoading ? (
+                    <p className="mt-1 text-sm text-primary-light">Verificando conexión de Google del tenant...</p>
+                  ) : calendarAuthStatusQuery.isError ? (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-sm text-primary-light">
+                        No pudimos verificar la conexión de Google en este momento.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          void calendarAuthStatusQuery.refetch();
+                        }}
+                        disabled={calendarAuthStatusQuery.isFetching}
+                      >
+                        <RefreshCw className="mr-2 size-4" />
+                        Reintentar verificación
+                      </Button>
+                    </div>
+                  ) : calendarAuthStatusQuery.data?.status === "ACTIVE" ? (
+                    <>
+                      <p className="mt-1 text-sm text-primary-light">
+                        Los turnos de este equipo no se sincronizan con Google Calendar.
+                      </p>
+                      <Button
+                        type="button"
+                        className="mt-3"
+                        onClick={() => provisionCalendarMutation.mutate()}
+                        disabled={provisionCalendarMutation.isPending}
+                      >
+                        {provisionCalendarMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 size-4 animate-spin" />
+                            Creando calendario...
+                          </>
+                        ) : (
+                          "Crear calendario"
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-sm text-primary-light">
+                        Conectá tu cuenta de Google desde Configuración para habilitar la sincronización.
+                      </p>
+                      <a
+                        href="/configuracion?tab=integraciones"
+                        className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-secondary hover:text-secondary-light"
+                      >
+                        <Link2 className="size-4" />
+                        Ir a Configuración
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
