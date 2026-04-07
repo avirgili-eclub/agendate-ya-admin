@@ -20,6 +20,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     const notification: Notification = {
       id: crypto.randomUUID(),
       type: input.type,
+      title: input.title,
       message: input.message,
       category: input.category,
       source: "user_action",

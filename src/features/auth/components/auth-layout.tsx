@@ -33,8 +33,12 @@ export function AuthLayout({ children, showTestimonial = true }: AuthLayoutProps
       </aside>
 
       {/* Panel derecho: Formulario */}
-      <main className="flex w-full flex-col bg-neutral lg:w-1/2">
-        <div className="flex flex-1 items-center justify-center p-6 sm:p-8 md:p-12">
+      <main className="relative flex w-full flex-col overflow-hidden bg-neutral lg:w-1/2">
+        {/* Ambientación mobile para evitar sensación de vacío en pantallas altas */}
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/10 blur-3xl lg:hidden" />
+        <div className="pointer-events-none absolute -bottom-28 -left-20 h-72 w-72 rounded-full bg-secondary/15 blur-3xl lg:hidden" />
+
+        <div className="relative z-10 flex flex-1 items-center justify-center p-6 sm:p-8 md:p-12">
           <div className="w-full max-w-md">{children}</div>
         </div>
       </main>

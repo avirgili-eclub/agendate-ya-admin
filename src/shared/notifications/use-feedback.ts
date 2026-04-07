@@ -1,11 +1,23 @@
 import { useState, useCallback } from "react";
 import { useNotifications } from "./notification-store";
-import type { NotificationCategory } from "./notification-types";
+import type { NotificationCategory, NotificationType } from "./notification-types";
 
 export interface FeedbackMessage {
-  tone: "success" | "error";
+  tone: NotificationType;
   message: string;
+  action?: {
+    label: string;
+    href: string;
+  };
 }
+
+type ShowFeedbackOptions = {
+  persist?: boolean;
+  action?: {
+    label: string;
+    href: string;
+  };
+};
 
 /**
  * Hook that manages both transient feedback (toast-like) and persistent notifications.
@@ -17,16 +29,18 @@ export function useFeedback(category?: NotificationCategory) {
   const { addNotification } = useNotifications();
 
   const showFeedback = useCallback(
-    (tone: "success" | "error", message: string) => {
+    (tone: NotificationType, message: string, options: ShowFeedbackOptions = {}) => {
       // Show transient visual feedback
-      setFeedback({ tone, message });
+      setFeedback({ tone, message, action: options.action });
 
       // Persist in notification center
-      addNotification({
-        type: tone,
-        message,
-        category,
-      });
+      if (options.persist !== false) {
+        addNotification({
+          type: tone,
+          message,
+          category,
+        });
+      }
     },
     [addNotification, category]
   );

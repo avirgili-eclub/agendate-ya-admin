@@ -6,3 +6,5 @@ dist/
 coverage/
 docs/openapi.json
 .claude/settings.local.json
+docs/
+.playwright-mcp/

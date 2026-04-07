@@ -1,10 +1,16 @@
-import { Bell, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, MessageSquare, Search, X } from "lucide-react";
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { APP_NAV_ITEMS, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
+import {
+  getGoogleCalendarAlertStatus,
+  subscribeGoogleCalendarAlertStatus,
+  type GoogleCalendarAlertStatus,
+} from "@/features/calendar/google-calendar-alert";
+import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { useNotifications } from "@/shared/notifications/notification-store";
@@ -18,10 +24,21 @@ export function AppShell() {
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
+  const [googleCalendarAlertStatus, setGoogleCalendarAlertStatus] =
+    useState<GoogleCalendarAlertStatus>(() => getGoogleCalendarAlertStatus());
+
+  const canViewGoogleCalendarAlert = canViewGoogleCalendarStatus(session.user?.role);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    return subscribeGoogleCalendarAlertStatus((status) => {
+      setGoogleCalendarAlertStatus(status);
+    });
+  }, []);
 
   async function handleLogout() {
     await logout();
@@ -82,16 +99,40 @@ export function AppShell() {
         />
       )}
 
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-6 lg:p-6">
+      <div
+        className={`grid grid-cols-1 gap-4 p-4 lg:gap-6 lg:p-6 ${
+          isDesktopSidebarCollapsed
+            ? "lg:grid-cols-[72px_minmax(0,1fr)]"
+            : "lg:grid-cols-[260px_minmax(0,1fr)]"
+        }`}
+      >
         <aside
           id="main-navigation"
-          className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
+          className={`fixed left-0 top-16 z-30 h-[calc(100vh-4rem)] w-72 max-w-[85vw] overflow-y-auto border-r border-neutral-dark bg-primary-dark px-3 py-4 text-white shadow-sm transition-transform duration-200 lg:sticky lg:top-20 lg:z-auto lg:h-fit lg:w-full lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-xl lg:border ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}`}
           role="navigation"
           aria-label="Menú principal"
         >
-          <div className="mb-4 border-b border-white/20 px-3 pb-3">
-            <p className="text-sm font-semibold">Admin Console</p>
-            <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
+          <div
+            className={`mb-4 border-b border-white/20 pb-3 ${
+              isDesktopSidebarCollapsed ? "px-1 lg:px-0" : "px-3"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className={`${isDesktopSidebarCollapsed ? "lg:hidden" : ""}`}>
+                <p className="text-sm font-semibold">Admin Console</p>
+                <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsDesktopSidebarCollapsed((current) => !current)}
+                className="hidden rounded-md p-1.5 text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white lg:inline-flex"
+                aria-label={isDesktopSidebarCollapsed ? "Expandir menú lateral" : "Colapsar menú lateral"}
+                title={isDesktopSidebarCollapsed ? "Expandir" : "Colapsar"}
+              >
+                {isDesktopSidebarCollapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+              </button>
+            </div>
           </div>
 
           <nav className="space-y-1">
@@ -99,18 +140,40 @@ export function AppShell() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className={`group flex items-center gap-3 rounded-md py-2 text-sm text-white/85 transition-colors hover:bg-primary-light hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                  isDesktopSidebarCollapsed ? "px-3 lg:justify-center lg:px-2" : "px-3"
+                }`}
                 activeProps={{ className: "bg-white/15 text-white" }}
                 onClick={() => setIsMobileMenuOpen(false)}
+                title={isDesktopSidebarCollapsed ? item.label : undefined}
               >
                 <item.icon className="size-4" aria-hidden="true" />
-                <span>{item.label}</span>
+                <span className={isDesktopSidebarCollapsed ? "lg:hidden" : ""}>{item.label}</span>
               </Link>
             ))}
           </nav>
         </aside>
 
         <main className="min-w-0 space-y-4">
+          {canViewGoogleCalendarAlert && googleCalendarAlertStatus === "NEEDS_REAUTH" && (
+            <div
+              className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
+              role="alert"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm">
+                  Tu conexión con Google Calendar expiró. Ve a Configuración para reconectar.
+                </p>
+                <a
+                  href="/configuracion?tab=integraciones"
+                  className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
+                >
+                  Ir a Configuración
+                </a>
+              </div>
+            </div>
+          )}
+
           <PageCard className="bg-neutral-light">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary-light">Admin / {pageMeta.title}</p>
             <h1 className="mt-1 text-3xl font-bold text-primary-dark">{pageMeta.title}</h1>

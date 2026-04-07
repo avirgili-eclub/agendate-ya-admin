@@ -3,6 +3,7 @@ export type AppErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "RATE_LIMIT_EXCEEDED"
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
   | "SUBSCRIPTION_LIMIT"
@@ -46,6 +47,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("NOT_FOUND")) {
     return "NOT_FOUND";
+  }
+  if (normalized.includes("RATE_LIMIT_EXCEEDED") || normalized.includes("TOO_MANY_REQUESTS")) {
+    return "RATE_LIMIT_EXCEEDED";
   }
   if (normalized.includes("SUBSCRIPTION_LIMIT")) {
     return "SUBSCRIPTION_LIMIT";
@@ -101,6 +105,7 @@ export function toAppError(input: {
     408: "REQUEST_TIMEOUT",
     409: "BOOKING_CONFLICT",
     422: "INVALID_STATE_TRANSITION",
+    429: "RATE_LIMIT_EXCEEDED",
     503: "SERVICE_UNAVAILABLE",
   };
 

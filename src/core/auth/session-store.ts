@@ -3,6 +3,7 @@ export type AuthUser = {
   email: string;
   fullName: string;
   role: string;
+  emailVerified?: boolean;
 };
 
 type SessionState = {
@@ -129,4 +130,48 @@ export function clearSessionState() {
 
 export function isAuthenticated() {
   return Boolean(state.accessToken);
+}
+
+// Onboarding token storage (temporary, sessionStorage only)
+const ONBOARDING_TOKEN_KEY = "agendateya_onboarding_token";
+const ONBOARDING_REFRESH_KEY = "agendateya_onboarding_refresh";
+
+export function getOnboardingTokens(): { token: string | null; refresh: string | null } {
+  if (typeof window === "undefined") {
+    return { token: null, refresh: null };
+  }
+  return {
+    token: window.sessionStorage.getItem(ONBOARDING_TOKEN_KEY),
+    refresh: window.sessionStorage.getItem(ONBOARDING_REFRESH_KEY),
+  };
+}
+
+export function setOnboardingTokens(token: string, refresh: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(ONBOARDING_TOKEN_KEY, token);
+  window.sessionStorage.setItem(ONBOARDING_REFRESH_KEY, refresh);
+}
+
+export function clearOnboardingTokens() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(ONBOARDING_TOKEN_KEY);
+  window.sessionStorage.removeItem(ONBOARDING_REFRESH_KEY);
+}
+
+// JWT decode helper (client-side, no verification)
+export function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return null;
+    }
+    const payload = JSON.parse(atob(parts[1]));
+    return payload;
+  } catch {
+    return null;
+  }
 }

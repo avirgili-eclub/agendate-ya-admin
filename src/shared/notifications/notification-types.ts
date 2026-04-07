@@ -19,6 +19,7 @@ export type NotificationSource = "user_action" | "system" | "backend_event";
 export interface Notification {
   id: string;
   type: NotificationType;
+  title?: string;
   message: string;
   category?: NotificationCategory;
   source: NotificationSource;
@@ -32,6 +33,7 @@ export interface Notification {
 
 export interface NotificationInput {
   type: NotificationType;
+  title?: string;
   message: string;
   category?: NotificationCategory;
   actionUrl?: string;
