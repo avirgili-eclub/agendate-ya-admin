@@ -157,6 +157,8 @@ export function TenantSettingsPage() {
         cancelled: "Cancelaste la conexión con Google. Podés intentarlo de nuevo.",
         google_error:
           "Google rechazó la conexión. Verificá que estés usando la cuenta del negocio.",
+        invalid_state:
+          "No pudimos validar el estado de seguridad de Google. Intentalo de nuevo.",
         server_error: "Hubo un error en el servidor. Intentalo en unos minutos.",
       };
 
