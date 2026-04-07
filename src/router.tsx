@@ -8,9 +8,15 @@ import {
 
 import { isAuthenticated } from "@/core/auth/session-store";
 import { AppShell } from "@/shared/layout/app-shell";
+import { useGoogleOAuthCallback } from "@/features/auth/use-google-oauth-callback";
 import { ForbiddenPage } from "@/features/auth/forbidden-page";
 import { LoginPage } from "@/features/auth/login-page";
 import { RegisterPage } from "@/features/auth/register-page";
+import { AuthCallbackPage } from "@/features/auth/auth-callback-page";
+import { OnboardingPage } from "@/features/auth/onboarding-page";
+import { ConfirmEmailPage } from "@/features/auth/confirm-email-page";
+import { ForgotPasswordPage } from "@/features/auth/forgot-password-page";
+import { ResetPasswordPage } from "@/features/auth/reset-password-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { HealthPage } from "@/features/health/health-page";
 import { ResourcesPage } from "@/features/resources/resources-page";
@@ -24,6 +30,8 @@ import { UsersPage } from "@/features/users/users-page";
 import { TenantSettingsPage } from "@/features/tenant/tenant-settings-page";
 
 function RootLayout() {
+  useGoogleOAuthCallback();
+
   return (
     <main className="min-h-screen bg-neutral font-sans text-primary-dark">
       <Outlet />
@@ -55,7 +63,15 @@ const privateRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "private",
   beforeLoad: ({ location }) => {
+    const hash = typeof location.hash === "string" ? location.hash : "";
+    const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+    const hasOAuthTokens = Boolean(hashParams.get("token") && hashParams.get("refresh"));
+
     if (!isAuthenticated()) {
+      if (hasOAuthTokens) {
+        return;
+      }
+
       const returnUrl = `${location.pathname}${location.searchStr ?? ""}`;
       throw redirect({
         to: "/login",
@@ -78,6 +94,36 @@ const registerRoute = createRoute({
   getParentRoute: () => publicRoute,
   path: "/registro",
   component: RegisterPage,
+});
+
+const authCallbackRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/auth/callback",
+  component: AuthCallbackPage,
+});
+
+const onboardingRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/onboarding",
+  component: OnboardingPage,
+});
+
+const confirmEmailRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/confirm-email",
+  component: ConfirmEmailPage,
+});
+
+const forgotPasswordRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/forgot-password",
+  component: ForgotPasswordPage,
+});
+
+const resetPasswordRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/reset-password",
+  component: ResetPasswordPage,
 });
 
 const indexRoute = createRoute({
@@ -167,7 +213,15 @@ const forbiddenRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  publicRoute.addChildren([loginRoute, registerRoute]),
+  publicRoute.addChildren([
+    loginRoute,
+    registerRoute,
+    authCallbackRoute,
+    onboardingRoute,
+    confirmEmailRoute,
+    forgotPasswordRoute,
+    resetPasswordRoute,
+  ]),
   privateRoute.addChildren([
     indexRoute,
     dashboardRoute,

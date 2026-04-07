@@ -4,7 +4,7 @@ import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
 import type { AppError } from "@/core/errors/app-error";
-import { register } from "@/core/auth/auth-service";
+import { register, startGoogleLogin } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import {
@@ -16,6 +16,9 @@ import {
 } from "@/shared/ui/select";
 import { AuthLayout } from "./components/auth-layout";
 import { GoogleButton } from "./components/google-button";
+import { EmailVerificationBanner } from "./components/email-verification-banner";
+import { getRateLimitMessage, isRateLimitError, useRateLimitCooldown } from "./rate-limit";
+import { useGoogleOAuthCallback } from "./use-google-oauth-callback";
 
 type RegisterStep = 1 | 2;
 
@@ -69,6 +72,9 @@ function normalizePyPhone(phone: string) {
 }
 
 function toFriendlyRegisterMessage(appError: AppError) {
+  if (appError.code === "RATE_LIMIT_EXCEEDED" || appError.status === 429) {
+    return getRateLimitMessage(appError);
+  }
   if (
     appError.code === "REQUEST_TIMEOUT" ||
     appError.code === "SERVICE_UNAVAILABLE" ||
@@ -83,16 +89,31 @@ function toFriendlyRegisterMessage(appError: AppError) {
   if (appError.code === "UNAUTHORIZED" || appError.status === 401) {
     return "No se pudo completar el registro. Vuelve a intentarlo.";
   }
+  if (appError.status === 409) {
+    const lowerMessage = appError.message.toLowerCase();
+    if (lowerMessage.includes("email")) {
+      return "Ya existe una cuenta con este email.";
+    }
+    if (lowerMessage.includes("slug")) {
+      return "Ese identificador ya esta en uso. Elige otro.";
+    }
+    return "Ya existe un registro con los datos ingresados.";
+  }
   return "No pudimos completar el onboarding por ahora. Intentalo nuevamente.";
 }
 
 export function RegisterPage() {
   const navigate = useNavigate();
 
+  useGoogleOAuthCallback();
+
   const [step, setStep] = useState<RegisterStep>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showEmailVerificationBanner, setShowEmailVerificationBanner] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const { isCoolingDown, remainingSeconds, startCooldown } = useRateLimitCooldown();
 
   const [businessName, setBusinessName] = useState("");
   const [businessType, setBusinessType] = useState<"SERVICE" | "HOSPITALITY">("SERVICE");
@@ -237,6 +258,11 @@ export function RegisterPage() {
           fullName,
         },
       });
+      
+      // Show email verification banner
+      setShowEmailVerificationBanner(true);
+      setUserEmail(email);
+
       await navigate({ to: "/" });
     } catch (e) {
       const appError = e as Partial<AppError>;
@@ -246,11 +272,22 @@ export function RegisterPage() {
         message: typeof appError.message === "string" ? appError.message : "Unexpected error",
         details: Array.isArray(appError.details) ? appError.details : [],
       };
+      if (isRateLimitError(normalizedError)) {
+        startCooldown();
+      }
       setFieldErrors((prev) => ({ ...prev, ...toFieldErrors(normalizedError) }));
       setError(toFriendlyRegisterMessage(normalizedError));
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function handleGoogleLogin() {
+    if (isCoolingDown) {
+      return;
+    }
+    startCooldown();
+    startGoogleLogin("/dashboard");
   }
 
   return (
@@ -273,10 +310,17 @@ export function RegisterPage() {
             />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs font-medium text-primary-light">
-            <span className={step === 1 ? "text-primary" : undefined}>Paso 1: Negocio</span>
-            <span className={step === 2 ? "text-primary" : undefined}>Paso 2: Sede y admin</span>
+            <span>Paso {step} de 2</span>
+            <span>{step === 1 ? "Información del negocio" : "Datos de administrador"}</span>
           </div>
         </div>
+
+        {showEmailVerificationBanner ? (
+          <EmailVerificationBanner
+            email={userEmail}
+            onDismiss={() => setShowEmailVerificationBanner(false)}
+          />
+        ) : null}
 
         {error ? (
           <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -286,7 +330,7 @@ export function RegisterPage() {
 
         {step === 2 && (
           <div className="mt-6">
-            <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+            <GoogleButton onClick={handleGoogleLogin} disabled={isCoolingDown}>
               Continuar con Google
             </GoogleButton>
             <div className="relative my-6">
@@ -543,10 +587,16 @@ export function RegisterPage() {
                 <Button type="button" variant="outline" size="lg" onClick={() => setStep(1)}>
                   Volver
                 </Button>
-                <Button type="submit" size="lg" disabled={isLoading}>
-                  {isLoading ? "Creando..." : "Crear cuenta"}
+                <Button type="submit" size="lg" disabled={isLoading || isCoolingDown}>
+                  {isLoading ? "Creando..." : isCoolingDown ? `Espera ${remainingSeconds}s` : "Crear cuenta"}
                 </Button>
               </div>
+
+              {isCoolingDown ? (
+                <p className="text-center text-xs text-secondary">
+                  Limite temporal alcanzado. Espera {remainingSeconds}s para continuar.
+                </p>
+              ) : null}
             </div>
           )}
         </form>

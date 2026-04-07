@@ -3,15 +3,21 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Headset, ShieldCheck } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
-import { login } from "@/core/auth/auth-service";
+import { login, startGoogleLogin } from "@/core/auth/auth-service";
 import { setGoogleCalendarAlertStatus } from "@/features/calendar/google-calendar-alert";
 import { runSilentGoogleCalendarStatusCheck } from "@/features/calendar/google-calendar-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { AuthLayout } from "./components/auth-layout";
 import { GoogleButton } from "./components/google-button";
+import { EmailVerificationBanner } from "./components/email-verification-banner";
+import { getRateLimitMessage, isRateLimitError, useRateLimitCooldown } from "./rate-limit";
+import { useGoogleOAuthCallback } from "./use-google-oauth-callback";
 
 function toFriendlyLoginMessage(appError: AppError) {
+  if (appError.code === "RATE_LIMIT_EXCEEDED" || appError.status === 429) {
+    return getRateLimitMessage(appError);
+  }
   if (
     appError.code === "REQUEST_TIMEOUT" ||
     appError.code === "SERVICE_UNAVAILABLE" ||
@@ -22,6 +28,13 @@ function toFriendlyLoginMessage(appError: AppError) {
     return "El servicio no se encuentra disponible. Vuelve a intentarlo más tarde.";
   }
   if (appError.code === "UNAUTHORIZED" || appError.status === 401) {
+    if (appError.message && appError.message.includes("disabled")) {
+      return "Tu cuenta esta desactivada. Contacta al soporte.";
+    }
+    // Check for Google-only account message
+    if (appError.message && appError.message.includes("Google")) {
+      return "Esta cuenta fue creada con Google. Usá el botón 'Continuar con Google'.";
+    }
     return "Email o contraseña incorrectos. Verifica tus datos e intenta nuevamente.";
   }
   if (appError.code === "VALIDATION_ERROR" || appError.status === 400) {
@@ -37,10 +50,15 @@ export function LoginPage() {
   const navigate = useNavigate();
   const location = useRouterState({ select: (state) => state.location });
 
+  useGoogleOAuthCallback();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showEmailVerificationBanner, setShowEmailVerificationBanner] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const { isCoolingDown, remainingSeconds, startCooldown } = useRateLimitCooldown();
 
   const sessionExpired = useMemo(() => {
     const search = location.search as Record<string, string | undefined>;
@@ -56,12 +74,19 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setIsLoading(true);
+    setShowEmailVerificationBanner(false);
 
     try {
       const authData = await login({ email, password });
       setGoogleCalendarAlertStatus("NONE");
       // Silent background check: must never block or break login.
       void runSilentGoogleCalendarStatusCheck(authData.user.role);
+
+      // Check if email is verified
+      if (authData.user.emailVerified === false) {
+        setShowEmailVerificationBanner(true);
+        setUserEmail(authData.user.email);
+      }
 
       if (loginReturnUrl && loginReturnUrl.startsWith("/")) {
         window.location.assign(loginReturnUrl);
@@ -71,10 +96,22 @@ export function LoginPage() {
       await navigate({ to: "/" });
     } catch (e) {
       const appError = e as AppError;
+      if (isRateLimitError(appError)) {
+        startCooldown();
+      }
       setError(toFriendlyLoginMessage(appError));
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function handleGoogleLogin() {
+    if (isCoolingDown) {
+      return;
+    }
+    startCooldown();
+    const returnUrl = loginReturnUrl && loginReturnUrl.startsWith("/") ? loginReturnUrl : "/dashboard";
+    startGoogleLogin(returnUrl);
   }
 
   return (
@@ -89,6 +126,13 @@ export function LoginPage() {
           <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
             Tu sesión expiró. Inicia sesión nuevamente.
           </div>
+        ) : null}
+
+        {showEmailVerificationBanner ? (
+          <EmailVerificationBanner
+            email={userEmail}
+            onDismiss={() => setShowEmailVerificationBanner(false)}
+          />
         ) : null}
 
         {error ? (
@@ -126,18 +170,23 @@ export function LoginPage() {
             </label>
 
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => alert("Recuperación de contraseña próxima a implementarse")}
+              <Link
+                to="/forgot-password"
                 className="inline-flex h-10 items-center justify-center rounded-md px-3 text-sm font-medium text-secondary transition hover:bg-secondary/10 hover:text-secondary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-light"
               >
                 Olvidé mi contraseña
-              </button>
+              </Link>
             </div>
 
-            <Button className="w-full" type="submit" disabled={isLoading} size="lg">
-              {isLoading ? "Ingresando..." : "Ingresar"}
+            <Button className="w-full" type="submit" disabled={isLoading || isCoolingDown} size="lg">
+              {isLoading ? "Ingresando..." : isCoolingDown ? `Espera ${remainingSeconds}s` : "Ingresar"}
             </Button>
+
+            {isCoolingDown ? (
+              <p className="text-center text-xs text-secondary">
+                Limite temporal alcanzado. Espera {remainingSeconds}s antes de volver a intentar.
+              </p>
+            ) : null}
 
             <p className="text-center text-sm text-primary-light">
               ¿Todavía no tienes una cuenta?{" "}
@@ -159,7 +208,7 @@ export function LoginPage() {
           </div>
           <p className="text-center text-xs text-primary-light">Usa tu cuenta de Google del negocio para continuar.</p>
 
-          <GoogleButton onClick={() => alert("Funcionalidad de Google OAuth pendiente de implementar")}>
+          <GoogleButton onClick={handleGoogleLogin} disabled={isCoolingDown}>
             Continuar con Google
           </GoogleButton>
         </section>
