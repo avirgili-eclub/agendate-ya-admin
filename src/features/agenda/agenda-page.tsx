@@ -6,6 +6,7 @@ import { isValidPhoneNumber } from "libphonenumber-js";
 import "react-international-phone/style.css";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
 import { useCalendarBookingsQuery, useLocationsQuery } from "@/features/agenda/use-agenda-query";
 import {
   updateBookingStatus,
@@ -15,8 +16,10 @@ import {
   getStatusTone,
   getValidStatusTransitions,
   fetchLocationResources,
+  fetchResourceById,
   type BookingCardItem,
   type BookingStatus,
+  type ResourceItem,
 } from "@/features/agenda/agenda-service";
 import {
   createBooking,
@@ -259,9 +262,14 @@ type AgendaCreateBookingFormProps = {
 
 function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: AgendaCreateBookingFormProps) {
   const queryClient = useQueryClient();
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const isProfessional = currentRole === "PROFESSIONAL";
+  const currentResourceId = session.user?.resourceId ?? "";
+  const professionalResourceName = session.user?.fullName?.trim() || "Mi recurso";
 
   const [locationId, setLocationId] = useState(initialLocationId ?? "");
-  const [resourceId, setResourceId] = useState("");
+  const [resourceId, setResourceId] = useState(isProfessional ? currentResourceId : "");
   const [serviceId, setServiceId] = useState("");
   const [clientName, setClientName] = useState("");
   const [clientPhone, setClientPhone] = useState("+595");
@@ -278,14 +286,44 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
     }
   }, [initialLocationId]);
 
+  useEffect(() => {
+    if (!isProfessional || !currentResourceId) {
+      return;
+    }
+
+    setResourceId((previous) => (previous === currentResourceId ? previous : currentResourceId));
+  }, [isProfessional, currentResourceId]);
+
   const locationsQuery = useLocationsQuery();
 
   const resourcesQuery = useQuery({
     queryKey: ["agenda", "resources", locationId],
     queryFn: () => fetchLocationResources(locationId),
-    enabled: !!locationId,
+    enabled: !!locationId && !isProfessional,
     staleTime: 60_000,
   });
+
+  const professionalResourceQuery = useQuery({
+    queryKey: ["agenda", "resource", currentResourceId],
+    queryFn: () => fetchResourceById(currentResourceId),
+    enabled: isProfessional && !!currentResourceId,
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (!isProfessional) {
+      return;
+    }
+
+    const professionalLocationId = professionalResourceQuery.data?.locationId;
+    if (!professionalLocationId) {
+      return;
+    }
+
+    setLocationId((previous) =>
+      previous === professionalLocationId ? previous : professionalLocationId,
+    );
+  }, [isProfessional, professionalResourceQuery.data?.locationId]);
 
   const servicesQuery = useQuery({
     queryKey: ["bookings", "services"],
@@ -315,8 +353,11 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
     setFieldErrors({});
 
     const validationErrors: Record<string, string> = {};
-    if (!locationId) {
+    if (!isProfessional && !locationId) {
       validationErrors.locationId = "Debes seleccionar un local.";
+    }
+    if (isProfessional && !currentResourceId) {
+      validationErrors.resourceId = "Tu usuario no tiene recurso asignado.";
     }
     if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
       validationErrors.clientPhone = "Ingresa un telefono valido.";
@@ -328,7 +369,7 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
     }
 
     createMutation.mutate({
-      resourceId,
+      resourceId: isProfessional ? currentResourceId : resourceId,
       serviceId,
       clientName,
       clientPhone,
@@ -340,7 +381,19 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
   }
 
   const locations = locationsQuery.data?.filter((location) => location.active) ?? [];
-  const resources = resourcesQuery.data?.filter((resource) => resource.active) ?? [];
+  const resources: ResourceItem[] = isProfessional
+    ? currentResourceId
+      ? [
+          {
+            id: currentResourceId,
+            locationId: professionalResourceQuery.data?.locationId ?? "",
+            name: professionalResourceQuery.data?.name ?? professionalResourceName,
+            type: professionalResourceQuery.data?.type ?? "PROFESSIONAL",
+            active: true,
+          },
+        ]
+      : []
+    : resourcesQuery.data?.filter((resource) => resource.active) ?? [];
   const services = servicesQuery.data?.filter((service) => service.active) ?? [];
 
   return (
@@ -418,9 +471,13 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
           <Select
             value={locationId}
             onValueChange={(value) => {
+              if (isProfessional) {
+                return;
+              }
               setLocationId(value);
               setResourceId("");
             }}
+            disabled={isProfessional}
           >
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar local" />
@@ -440,7 +497,11 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
-          <Select value={resourceId} onValueChange={setResourceId} disabled={!locationId}>
+          <Select
+            value={resourceId}
+            onValueChange={setResourceId}
+            disabled={isProfessional || (!locationId && !isProfessional)}
+          >
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar recurso" />
             </SelectTrigger>
@@ -530,10 +591,17 @@ function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: Agen
 
 export function AgendaPage() {
   const queryClient = useQueryClient();
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const currentResourceId = session.user?.resourceId;
+  const isProfessional = currentRole === "PROFESSIONAL";
+
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
-  const [selectedResources, setSelectedResources] = useState<string[]>([]);
+  const [selectedResources, setSelectedResources] = useState<string[]>(
+    isProfessional && currentResourceId ? [currentResourceId] : []
+  );
   const [selectedStatuses, setSelectedStatuses] = useState<BookingStatus[]>([
     "PENDING",
     "CONFIRMED",
@@ -575,6 +643,22 @@ export function AgendaPage() {
     return Array.from(map.values()).filter((resource) => resource.active);
   }, [resourcesByLocationQueries]);
 
+  const scopedResources = useMemo(() => {
+    if (!isProfessional || !currentResourceId) {
+      return resources;
+    }
+
+    return resources.filter((resource) => resource.id === currentResourceId);
+  }, [resources, isProfessional, currentResourceId]);
+
+  const scopedResourceIds =
+    isProfessional && currentResourceId ? [currentResourceId] : selectedResources;
+
+  const professionalResource =
+    isProfessional && currentResourceId
+      ? resources.find((resource) => resource.id === currentResourceId)
+      : undefined;
+
   const hasResourcesError = resourcesByLocationQueries.some((query) => query.isError);
   const isResourcesLoading = resourcesByLocationQueries.some((query) => query.isLoading);
   const businessName = tenantQuery.data?.name ?? "AgendateYA";
@@ -594,7 +678,7 @@ export function AgendaPage() {
 
   // Query de calendario: solo se ejecuta si hay recursos y estados seleccionados
   const calendarBookingsQuery = useCalendarBookingsQuery({
-    resourceIds: selectedResources,
+    resourceIds: scopedResourceIds,
     startDate: calendarDateRange.startDate,
     endDate: calendarDateRange.endDate,
     statuses: selectedStatuses,
@@ -604,8 +688,38 @@ export function AgendaPage() {
 
   // Limpiar recursos seleccionados cuando cambian las locaciones
   useEffect(() => {
+    if (isProfessional) {
+      return;
+    }
     setSelectedResources([]);
-  }, [selectedLocations]);
+  }, [selectedLocations, isProfessional]);
+
+  useEffect(() => {
+    if (!isProfessional || !currentResourceId || locations.length === 0) {
+      return;
+    }
+
+    setSelectedLocations((previous) => {
+      const next = locations.map((location) => location.id);
+      if (previous.length === next.length && previous.every((id, index) => id === next[index])) {
+        return previous;
+      }
+      return next;
+    });
+  }, [isProfessional, currentResourceId, locations]);
+
+  useEffect(() => {
+    if (!isProfessional || !currentResourceId) {
+      return;
+    }
+
+    setSelectedResources((previous) => {
+      if (previous.length === 1 && previous[0] === currentResourceId) {
+        return previous;
+      }
+      return [currentResourceId];
+    });
+  }, [isProfessional, currentResourceId]);
 
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) => updateBookingStatus(id, status),
@@ -648,12 +762,14 @@ export function AgendaPage() {
   };
 
   const handleLocationToggle = (locationId: string) => {
+    if (isProfessional) return; // PROFESSIONAL users cannot change location
     setSelectedLocations((prev) =>
       prev.includes(locationId) ? prev.filter((id) => id !== locationId) : [...prev, locationId]
     );
   };
 
   const handleResourceToggle = (resourceId: string) => {
+    if (isProfessional) return; // PROFESSIONAL users cannot change resource
     setSelectedResources((prev) =>
       prev.includes(resourceId) ? prev.filter((id) => id !== resourceId) : [...prev, resourceId]
     );
@@ -698,6 +814,14 @@ export function AgendaPage() {
 
   return (
     <div className="space-y-4">
+      {/* Error state for PROFESSIONAL without resourceId */}
+      {isProfessional && !currentResourceId && (
+        <ErrorState
+          title="Configuración incompleta"
+          message="Tu cuenta no tiene un recurso asignado. Contacta al administrador para resolver este problema."
+        />
+      )}
+
       {/* Header - Date controls and view mode */}
       <PageCard className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
@@ -755,7 +879,11 @@ export function AgendaPage() {
             </button>
           </div>
 
-          <Button size="sm" onClick={() => setShowNewBookingPanel(true)}>
+          <Button
+            size="sm"
+            onClick={() => setShowNewBookingPanel(true)}
+            disabled={isProfessional && !currentResourceId}
+          >
             <Plus className="mr-1 size-4" />
             Nuevo Turno
           </Button>
@@ -793,52 +921,57 @@ export function AgendaPage() {
                     type="checkbox"
                     checked={selectedLocations.includes(location.id)}
                     onChange={() => handleLocationToggle(location.id)}
-                    className="size-4 rounded border-neutral-dark text-primary focus:ring-primary-light"
+                    disabled={isProfessional}
+                    className="size-4 rounded border-neutral-dark text-primary focus:ring-primary-light disabled:opacity-50 disabled:cursor-not-allowed"
                   />
-                  <span className="text-sm text-primary">{location.name}</span>
+                  <span className={`text-sm ${isProfessional ? "text-primary-light" : "text-primary"}`}>
+                    {location.name}
+                  </span>
                 </label>
               ))}
             </div>
           </PageCard>
 
           {/* Resources list */}
-          <PageCard>
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
-              <Users className="size-4" />
-              Equipo
-            </h3>
-            {isResourcesLoading && selectedLocations.length > 0 && <LoadingState message="Cargando recursos..." />}
-            {hasResourcesError && (
-              <ErrorState
-                title="No se pudieron cargar recursos"
-                message="Reintentá luego de ajustar la seleccion de locales."
-              />
-            )}
-            {resources.length === 0 && !isResourcesLoading && !hasResourcesError && (
-              <EmptyState
-                icon={Users}
-                title="Sin equipo"
-                description={
-                  selectedLocations.length === 0
-                    ? "Seleccioná un local para ver a los profesionales."
-                    : "No hay profesionales activos en la selección actual."
-                }
-              />
-            )}
-            <div className="space-y-1">
-              {resources.map((resource) => (
-                <label key={resource.id} className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedResources.includes(resource.id)}
-                    onChange={() => handleResourceToggle(resource.id)}
-                    className="size-4 rounded border-neutral-dark text-primary focus:ring-primary-light"
-                  />
-                  <span className="text-sm text-primary">{resource.name}</span>
-                </label>
-              ))}
-            </div>
-          </PageCard>
+          {!isProfessional && (
+            <PageCard>
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
+                <Users className="size-4" />
+                Equipo
+              </h3>
+              {isResourcesLoading && selectedLocations.length > 0 && <LoadingState message="Cargando recursos..." />}
+              {hasResourcesError && (
+                <ErrorState
+                  title="No se pudieron cargar recursos"
+                  message="Reintentá luego de ajustar la seleccion de locales."
+                />
+              )}
+              {scopedResources.length === 0 && !isResourcesLoading && !hasResourcesError && (
+                <EmptyState
+                  icon={Users}
+                  title="Sin equipo"
+                  description={
+                    selectedLocations.length === 0
+                      ? "Seleccioná un local para ver a los profesionales."
+                      : "No hay profesionales activos en la selección actual."
+                  }
+                />
+              )}
+              <div className="space-y-1">
+                {scopedResources.map((resource) => (
+                  <label key={resource.id} className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={scopedResourceIds.includes(resource.id)}
+                      onChange={() => handleResourceToggle(resource.id)}
+                      className="size-4 rounded border-neutral-dark text-primary focus:ring-primary-light"
+                    />
+                    <span className="text-sm text-primary">{resource.name}</span>
+                  </label>
+                ))}
+              </div>
+            </PageCard>
+          )}
 
           {/* Status legend */}
           <PageCard>
@@ -880,7 +1013,7 @@ export function AgendaPage() {
 
           {calendarBookingsQuery.isLoading && <LoadingState message="Cargando agenda..." />}
 
-          {selectedResources.length === 0 && !calendarBookingsQuery.isLoading && (
+          {scopedResourceIds.length === 0 && !calendarBookingsQuery.isLoading && (
             <EmptyState
               icon={Users}
               title="Seleccioná recursos para ver turnos"
@@ -888,7 +1021,7 @@ export function AgendaPage() {
             />
           )}
 
-          {selectedResources.length > 0 && selectedStatuses.length === 0 && !calendarBookingsQuery.isLoading && (
+          {scopedResourceIds.length > 0 && selectedStatuses.length === 0 && !calendarBookingsQuery.isLoading && (
             <EmptyState
               icon={CalendarDays}
               title="Seleccioná al menos un estado"
@@ -896,7 +1029,7 @@ export function AgendaPage() {
             />
           )}
 
-          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && selectedStatuses.length > 0 && viewMode === "week" && (
+          {!calendarBookingsQuery.isLoading && scopedResourceIds.length > 0 && selectedStatuses.length > 0 && viewMode === "week" && (
             <PageCard className="overflow-x-auto">
               <div className="min-w-[1120px]">
                 <div className="grid grid-cols-7 gap-2">
@@ -949,7 +1082,7 @@ export function AgendaPage() {
             </PageCard>
           )}
 
-          {!calendarBookingsQuery.isLoading && selectedResources.length > 0 && selectedStatuses.length > 0 && (viewMode === "day" || viewMode === "month") && (
+          {!calendarBookingsQuery.isLoading && scopedResourceIds.length > 0 && selectedStatuses.length > 0 && (viewMode === "day" || viewMode === "month") && (
             <EmptyState
               icon={CalendarDays}
               title="Vista en preparación"
@@ -966,7 +1099,13 @@ export function AgendaPage() {
         title="Nuevo Turno"
       >
         <AgendaCreateBookingForm
-          initialLocationId={selectedLocations.length === 1 ? selectedLocations[0] : undefined}
+          initialLocationId={
+            isProfessional
+              ? professionalResource?.locationId
+              : selectedLocations.length === 1
+              ? selectedLocations[0]
+              : undefined
+          }
           onClose={() => setShowNewBookingPanel(false)}
           onCreated={() => {
             showFeedback("success", "Turno creado correctamente.");

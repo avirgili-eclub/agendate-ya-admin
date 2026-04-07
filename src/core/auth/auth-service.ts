@@ -7,6 +7,7 @@ import {
   type AuthUser,
   getOnboardingTokens,
   clearOnboardingTokens,
+  decodeJwt,
 } from "./session-store";
 
 type LoginRequest = {
@@ -71,6 +72,20 @@ type OnboardingCompleteResponseData = RegisterResponseData;
 
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
+
+function withResourceIdFromToken(user: AuthUser, accessToken: string): AuthUser {
+  if (user.resourceId) {
+    return user;
+  }
+
+  const payload = decodeJwt(accessToken);
+  const rid = typeof payload?.rid === "string" ? payload.rid : undefined;
+
+  return {
+    ...user,
+    resourceId: rid,
+  };
+}
 
 async function refreshAccessToken(): Promise<string | null> {
   const session = getSessionState();
@@ -141,7 +156,7 @@ export async function login(payload: LoginRequest) {
   setSessionState({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
-    user: data.user,
+    user: withResourceIdFromToken(data.user, data.accessToken),
   });
 
   return data;
@@ -164,7 +179,7 @@ export async function register(payload: RegisterRequest) {
   setSessionState({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
-    user: data.user,
+    user: withResourceIdFromToken(data.user, data.accessToken),
   });
 
   return data;
@@ -218,7 +233,7 @@ export async function completeOnboarding(payload: OnboardingCompleteRequest) {
   setSessionState({
     accessToken: data.accessToken,
     refreshToken: data.refreshToken,
-    user: data.user,
+    user: withResourceIdFromToken(data.user, data.accessToken),
   });
 
   return data;

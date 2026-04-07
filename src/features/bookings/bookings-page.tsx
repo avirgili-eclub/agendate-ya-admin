@@ -1,10 +1,11 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, useEffect, type FormEvent } from "react";
 import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
 import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useBookingsQuery, useBookingDetailQuery } from "@/features/bookings/use-bookings-query";
 import {
@@ -421,8 +422,21 @@ type BookingDetailPanelProps = {
 function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: BookingDetailPanelProps) {
   const queryClient = useQueryClient();
   const { showFeedback } = useFeedback("booking");
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const isProfessional = currentRole === "PROFESSIONAL";
+
   const detailQuery = useBookingDetailQuery(bookingId);
   const [confirmingAction, setConfirmingAction] = useState<{ action: "cancel" | "status"; newStatus?: BookingStatus } | null>(null);
+  const detailError = detailQuery.error as unknown as AppError | undefined;
+  const isSilentNotFound = isProfessional && detailQuery.isError && detailError?.status === 404;
+
+  // Silent 404 handling for PROFESSIONAL users
+  useEffect(() => {
+    if (isSilentNotFound) {
+      onClose();
+    }
+  }, [isSilentNotFound, onClose]);
 
   const pickPreferredText = (
     primary: string | undefined,
@@ -480,6 +494,10 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: B
 
   const booking = detailQuery.data ?? bookingSummary;
 
+  if (isSilentNotFound) {
+    return null;
+  }
+
   if (!booking) {
     return (
       <div className="px-6 py-8 text-center text-sm text-red-600">
@@ -527,7 +545,7 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: B
 
   return (
     <div className="px-6 py-4">
-      {detailQuery.isError && bookingSummary && (
+      {detailQuery.isError && bookingSummary && !isSilentNotFound && (
         <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           No se pudieron cargar todos los detalles del turno. Mostrando datos disponibles del listado.
         </div>

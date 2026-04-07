@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Edit, User, Phone, Mail, Calendar, MessageSquare } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
 import {
   fetchClientById,
   fetchClientBookingHistory,
@@ -25,12 +26,25 @@ type TabKey = "data" | "chat";
 
 export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("data");
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const isProfessional = currentRole === "PROFESSIONAL";
 
   const { data: client, isLoading, error } = useQuery({
     queryKey: ["client", clientId],
     queryFn: () => fetchClientById(clientId),
     enabled: isOpen,
   });
+
+  const clientError = error as unknown as AppError | undefined;
+  const isSilentNotFound = isProfessional && clientError?.status === 404;
+
+  // Silent 404 handling for PROFESSIONAL users
+  useEffect(() => {
+    if (isSilentNotFound) {
+      onClose();
+    }
+  }, [isSilentNotFound, onClose]);
 
   const { data: bookingsData } = useQuery({
     queryKey: ["client-bookings", clientId],
@@ -60,7 +74,7 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
         <div className="py-8 text-center text-sm text-primary-light">Cargando...</div>
       )}
 
-      {error && (
+      {error && !isSilentNotFound && (
         <div className="rounded-md bg-red-50 p-4 text-sm text-red-600">
           {toClientsFriendlyMessage(error as unknown as AppError)}
         </div>

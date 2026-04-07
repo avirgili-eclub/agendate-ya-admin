@@ -1,8 +1,9 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Clock, Plus, Trash2, Calendar } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
 import { fetchLocationResources } from "@/features/agenda/agenda-service";
 import {
   DAY_NAMES,
@@ -51,9 +52,15 @@ function gatherRuleInputs(resourceIds: string[], template: WeeklyTemplateInput):
 
 export function AvailabilityPage() {
   const queryClient = useQueryClient();
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const currentResourceId = session.user?.resourceId;
+  const isProfessional = currentRole === "PROFESSIONAL";
 
   const [selectedLocationName, setSelectedLocationName] = useState("Todas las ubicaciones");
-  const [selectedResourceId, setSelectedResourceId] = useState("");
+  const [selectedResourceId, setSelectedResourceId] = useState(
+    isProfessional && currentResourceId ? currentResourceId : ""
+  );
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   const [globalStartTime, setGlobalStartTime] = useState("08:00");
@@ -84,17 +91,19 @@ export function AvailabilityPage() {
     pageSize: 100,
   });
 
+  const effectiveResourceId = isProfessional && currentResourceId ? currentResourceId : selectedResourceId;
+
   const rulesQuery = useQuery({
-    queryKey: ["availability", "rules", selectedResourceId],
-    queryFn: () => fetchAvailabilityRules(selectedResourceId),
-    enabled: !!selectedResourceId,
+    queryKey: ["availability", "rules", effectiveResourceId],
+    queryFn: () => fetchAvailabilityRules(effectiveResourceId),
+    enabled: !!effectiveResourceId,
     staleTime: 30_000,
   });
 
   const overridesQuery = useQuery({
-    queryKey: ["availability", "overrides", selectedResourceId],
-    queryFn: () => fetchAvailabilityOverrides(selectedResourceId),
-    enabled: !!selectedResourceId,
+    queryKey: ["availability", "overrides", effectiveResourceId],
+    queryFn: () => fetchAvailabilityOverrides(effectiveResourceId),
+    enabled: !!effectiveResourceId,
     staleTime: 30_000,
   });
 
@@ -104,12 +113,29 @@ export function AvailabilityPage() {
   );
 
   const availableResources = useMemo(() => resourcesQuery.data?.data ?? [], [resourcesQuery.data]);
+  const scopedResources = useMemo(() => {
+    if (!isProfessional || !currentResourceId) {
+      return availableResources;
+    }
+
+    return availableResources.filter((resource) => resource.id === currentResourceId);
+  }, [availableResources, isProfessional, currentResourceId]);
+
+  useEffect(() => {
+    if (!isProfessional || !currentResourceId) {
+      return;
+    }
+
+    if (selectedResourceId !== currentResourceId) {
+      setSelectedResourceId(currentResourceId);
+    }
+  }, [isProfessional, currentResourceId, selectedResourceId]);
 
   const createRuleMutation = useMutation({
     mutationFn: createAvailabilityRule,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Regla creada correctamente." });
-      void queryClient.invalidateQueries({ queryKey: ["availability", "rules", selectedResourceId] });
+      void queryClient.invalidateQueries({ queryKey: ["availability", "rules", effectiveResourceId] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -121,7 +147,7 @@ export function AvailabilityPage() {
     mutationFn: deleteAvailabilityRule,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Regla eliminada." });
-      void queryClient.invalidateQueries({ queryKey: ["availability", "rules", selectedResourceId] });
+      void queryClient.invalidateQueries({ queryKey: ["availability", "rules", effectiveResourceId] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -133,7 +159,7 @@ export function AvailabilityPage() {
     mutationFn: createAvailabilityOverride,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Excepción creada correctamente." });
-      void queryClient.invalidateQueries({ queryKey: ["availability", "overrides", selectedResourceId] });
+      void queryClient.invalidateQueries({ queryKey: ["availability", "overrides", effectiveResourceId] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -145,7 +171,7 @@ export function AvailabilityPage() {
     mutationFn: deleteAvailabilityOverride,
     onSuccess: () => {
       setFeedback({ tone: "success", message: "Excepción eliminada." });
-      void queryClient.invalidateQueries({ queryKey: ["availability", "overrides", selectedResourceId] });
+      void queryClient.invalidateQueries({ queryKey: ["availability", "overrides", effectiveResourceId] });
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
@@ -267,11 +293,21 @@ export function AvailabilityPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-semibold text-primary">Disponibilidad</h1>
           <p className="mt-1 text-sm text-primary-light">
-            Configura disponibilidad global y por localidad. La configuración por localidad pisa la global.
+            {isProfessional
+              ? "Gestiona tu disponibilidad personal."
+              : "Configura disponibilidad global y por localidad. La configuración por localidad pisa la global."}
           </p>
         </div>
 
         {feedback && <FeedbackBanner tone={feedback.tone} message={feedback.message} />}
+
+        {/* Error state for PROFESSIONAL without resourceId */}
+        {isProfessional && !currentResourceId && (
+          <ErrorState
+            title="Configuración incompleta"
+            message="Tu cuenta no tiene un recurso asignado. Contacta al administrador para resolver este problema."
+          />
+        )}
 
         {locationsQuery.isLoading && <LoadingState message="Cargando localidades..." />}
         {locationsQuery.isError && (
@@ -290,7 +326,9 @@ export function AvailabilityPage() {
           />
         )}
 
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {/* Global and Location templates - hidden for PROFESSIONAL */}
+        {!isProfessional && (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <PageCard className="bg-white">
             <h2 className="text-lg font-semibold text-primary">Configuración global</h2>
             <p className="mt-1 text-xs text-primary-light">
@@ -406,8 +444,10 @@ export function AvailabilityPage() {
             </Button>
           </PageCard>
         </div>
+        )}
 
-        <PageCard className="mt-4 bg-white">
+        {!isProfessional && (
+          <PageCard className="mt-4 bg-white">
           <h2 className="text-lg font-semibold text-primary">Días especiales por localidad</h2>
           <p className="mt-1 text-xs text-primary-light">
             Define excepciones de horario para una localidad completa (ej: sábados 08:00 a 13:00).
@@ -461,7 +501,8 @@ export function AvailabilityPage() {
           >
             {applySpecialDayMutation.isPending ? "Aplicando..." : "Aplicar día especial a localidad"}
           </Button>
-        </PageCard>
+          </PageCard>
+        )}
 
         <div className="my-6 border-t border-neutral-dark" />
 
@@ -474,10 +515,14 @@ export function AvailabilityPage() {
             <select
               value={selectedLocationName}
               onChange={(e) => {
+                if (isProfessional) {
+                  return;
+                }
                 setSelectedLocationName(e.target.value);
                 setSelectedResourceId("");
               }}
-              className="flex-1 rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary"
+              disabled={isProfessional}
+              className="flex-1 rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary disabled:bg-neutral"
             >
               {locations.map((loc) => (
                 <option key={loc} value={loc}>
@@ -487,32 +532,32 @@ export function AvailabilityPage() {
             </select>
 
             <select
-              value={selectedResourceId}
+              value={effectiveResourceId}
               onChange={(e) => setSelectedResourceId(e.target.value)}
-              disabled={availableResources.length === 0}
+              disabled={isProfessional || scopedResources.length === 0}
               className="flex-1 rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary disabled:bg-neutral"
             >
               <option value="">Selecciona un recurso</option>
-              {availableResources.map((resource) => (
+              {scopedResources.map((resource) => (
                 <option key={resource.id} value={resource.id}>
                   {resource.name} ({resource.locationName})
                 </option>
               ))}
             </select>
           </div>
-          {availableResources.length === 0 && selectedLocationName !== "Todas las ubicaciones" && (
+          {scopedResources.length === 0 && selectedLocationName !== "Todas las ubicaciones" && !isProfessional && (
             <p className="mt-2 text-xs text-primary-light">No hay recursos activos en esta localidad.</p>
           )}
         </div>
 
-        {!selectedResourceId && (
+        {!effectiveResourceId && (
           <div className="rounded-lg border border-neutral-dark bg-neutral p-8 text-center">
             <Clock className="mx-auto mb-3 size-12 text-primary-light" />
             <p className="text-sm text-primary-light">Selecciona un recurso para configurar disponibilidad puntual.</p>
           </div>
         )}
 
-        {selectedResourceId && (
+        {effectiveResourceId && (
           <div className="space-y-6">
             <div className="rounded-lg border border-neutral-dark bg-white p-5">
               <h2 className="text-lg font-semibold text-primary">Horarios semanales (recurso)</h2>
@@ -554,7 +599,7 @@ export function AvailabilityPage() {
                     </div>
                   )}
                   <WeeklyRuleForm
-                    resourceId={selectedResourceId}
+                    resourceId={effectiveResourceId}
                     onSubmit={async (input) => {
                       await createRuleMutation.mutateAsync(input);
                     }}
@@ -607,7 +652,7 @@ export function AvailabilityPage() {
                   )}
 
                   <OverrideForm
-                    resourceId={selectedResourceId}
+                    resourceId={effectiveResourceId}
                     onSubmit={async (input) => {
                       await createOverrideMutation.mutateAsync(input);
                     }}

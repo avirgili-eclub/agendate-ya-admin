@@ -4,6 +4,7 @@ import { NumericFormat } from "react-number-format";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
+import { getSessionState } from "@/core/auth/session-store";
 import { fetchResourceLocations } from "@/features/resources/resources-service";
 import { useServicesQuery } from "@/features/services/use-services-query";
 import {
@@ -357,11 +358,14 @@ function ServiceFormModal({ mode, initialService, onClose, onSubmit }: ServiceFo
 
 export function ServicesPage() {
   const queryClient = useQueryClient();
+  const currentRole = getSessionState().user?.role?.toUpperCase() ?? "";
+  const canManageServices = currentRole !== "PROFESSIONAL";
   const [search, setSearch] = useState("");
   const [selectedLocation, setSelectedLocation] = useState("Todas las ubicaciones");
   const { feedback, showFeedback, dismissFeedback } = useFeedback("service");
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [editingService, setEditingService] = useState<ServiceItem | null>(null);
+  const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
   const [servicePendingDelete, setServicePendingDelete] = useState<ServiceItem | null>(null);
 
   const locationsQuery = useQuery({
@@ -451,15 +455,27 @@ export function ServicesPage() {
         <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h1 className="text-2xl font-semibold text-primary">Servicios</h1>
-            <p className="mt-1 text-sm text-primary-light">Gestiona el catálogo de servicios del negocio.</p>
+            <p className="mt-1 text-sm text-primary-light">
+              {canManageServices
+                ? "Gestiona el catálogo de servicios del negocio."
+                : "Vista de solo lectura del catálogo de servicios."}
+            </p>
           </div>
-          <Button size="sm" onClick={() => setShowCreatePanel(true)}>
-            <Plus className="mr-2 size-4" />
-            Nuevo Servicio
-          </Button>
+          {canManageServices && (
+            <Button size="sm" onClick={() => setShowCreatePanel(true)}>
+              <Plus className="mr-2 size-4" />
+              Nuevo Servicio
+            </Button>
+          )}
         </div>
 
         <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
+
+        {!canManageServices && (
+          <div className="mb-6 rounded-md border border-neutral-dark bg-neutral px-3 py-2 text-sm text-primary-light">
+            Tu rol actual permite visualizar y consultar detalles, pero no crear, editar ni eliminar servicios.
+          </div>
+        )}
 
         <div className="mb-6 flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
@@ -487,9 +503,11 @@ export function ServicesPage() {
             ))}
           </select>
 
-          <Button variant="outline" size="sm" aria-label="Filtros adicionales">
-            <SlidersHorizontal className="size-4" />
-          </Button>
+          {canManageServices && (
+            <Button variant="outline" size="sm" aria-label="Filtros adicionales">
+              <SlidersHorizontal className="size-4" />
+            </Button>
+          )}
         </div>
 
         {servicesQuery.isLoading && <LoadingState message="Cargando servicios..." />}
@@ -560,21 +578,34 @@ export function ServicesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setEditingService(service)}
+                    onClick={() => setSelectedService(service)}
                     className="flex-1 text-xs"
-                    aria-label={`Editar ${service.name}`}
+                    aria-label={`Ver detalle de ${service.name}`}
                   >
-                    Editar
+                    Ver detalle
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleDelete(service)}
-                    className="flex-1 text-xs text-red-600 hover:bg-red-50"
-                    aria-label={`Eliminar ${service.name}`}
-                  >
-                    Eliminar
-                  </Button>
+                  {canManageServices && (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditingService(service)}
+                        className="flex-1 text-xs"
+                        aria-label={`Editar ${service.name}`}
+                      >
+                        Editar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDelete(service)}
+                        className="flex-1 text-xs text-red-600 hover:bg-red-50"
+                        aria-label={`Eliminar ${service.name}`}
+                      >
+                        Eliminar
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -582,17 +613,93 @@ export function ServicesPage() {
         )}
       </PageCard>
 
-      <SidePanel isOpen={showCreatePanel} onClose={() => setShowCreatePanel(false)} title="Nuevo Servicio">
-        <ServiceFormModal
-          mode="create"
-          onClose={() => setShowCreatePanel(false)}
-          onSubmit={async (input) => {
-            await createServiceMutation.mutateAsync(input);
-          }}
-        />
+      <SidePanel
+        isOpen={Boolean(selectedService)}
+        onClose={() => setSelectedService(null)}
+        title={selectedService?.name ?? "Detalle de servicio"}
+      >
+        {selectedService && (
+          <div className="space-y-4">
+            {selectedService.imageUrl ? (
+              <img
+                src={selectedService.imageUrl}
+                alt={selectedService.name}
+                className="h-40 w-full rounded-md object-cover"
+              />
+            ) : (
+              <div className="flex h-40 w-full items-center justify-center rounded-md bg-neutral" aria-hidden="true">
+                <ImageIcon className="size-6 text-primary-light" />
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-primary-light">Nombre</p>
+              <p className="text-sm font-semibold text-primary">{selectedService.name}</p>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide text-primary-light">Descripción</p>
+              <p className="text-sm text-primary">{selectedService.description ?? "Sin descripción"}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Duración</p>
+                <p className="text-sm text-primary">{selectedService.durationMinutes} min</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Precio</p>
+                <p className="text-sm text-primary">{formatPriceForCard(selectedService.currency, selectedService.price)}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Estado</p>
+                <StatusChip
+                  tone={selectedService.active ? "success" : "neutral"}
+                  label={selectedService.active ? "Activo" : "Inactivo"}
+                />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Recurso requerido</p>
+                <p className="text-sm text-primary">{selectedService.requiresResource ? "Sí" : "No"}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Creado</p>
+                <p className="text-sm text-primary">{new Date(selectedService.createdAt).toLocaleString("es-PY")}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Actualizado</p>
+                <p className="text-sm text-primary">{new Date(selectedService.updatedAt).toLocaleString("es-PY")}</p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setSelectedService(null)}>
+                Cerrar
+              </Button>
+            </div>
+          </div>
+        )}
       </SidePanel>
 
-      {editingService && (
+      {canManageServices && (
+        <SidePanel isOpen={showCreatePanel} onClose={() => setShowCreatePanel(false)} title="Nuevo Servicio">
+          <ServiceFormModal
+            mode="create"
+            onClose={() => setShowCreatePanel(false)}
+            onSubmit={async (input) => {
+              await createServiceMutation.mutateAsync(input);
+            }}
+          />
+        </SidePanel>
+      )}
+
+      {canManageServices && editingService && (
         <SidePanel isOpen={true} onClose={() => setEditingService(null)} title="Editar Servicio">
           <ServiceFormModal
             mode="edit"
@@ -605,28 +712,30 @@ export function ServicesPage() {
         </SidePanel>
       )}
 
-      <ConfirmDialog
-        isOpen={Boolean(servicePendingDelete)}
-        title="Confirmar eliminación"
-        message={
-          <>
-            Vas a eliminar el servicio <strong className="text-primary">{servicePendingDelete?.name ?? ""}</strong>.
-          </>
-        }
-        isPending={deleteServiceMutation.isPending}
-        pendingLabel="Eliminando..."
-        confirmLabel="Eliminar servicio"
-        tone="danger"
-        onClose={() => setServicePendingDelete(null)}
-        onConfirm={() => {
-          if (!servicePendingDelete) {
-            return;
+      {canManageServices && (
+        <ConfirmDialog
+          isOpen={Boolean(servicePendingDelete)}
+          title="Confirmar eliminación"
+          message={
+            <>
+              Vas a eliminar el servicio <strong className="text-primary">{servicePendingDelete?.name ?? ""}</strong>.
+            </>
           }
-          deleteServiceMutation.mutate(servicePendingDelete.id);
-        }}
-      >
-        <p>Esta acción no se puede deshacer.</p>
-      </ConfirmDialog>
+          isPending={deleteServiceMutation.isPending}
+          pendingLabel="Eliminando..."
+          confirmLabel="Eliminar servicio"
+          tone="danger"
+          onClose={() => setServicePendingDelete(null)}
+          onConfirm={() => {
+            if (!servicePendingDelete) {
+              return;
+            }
+            deleteServiceMutation.mutate(servicePendingDelete.id);
+          }}
+        >
+          <p>Esta acción no se puede deshacer.</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }
