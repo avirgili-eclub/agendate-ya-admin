@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type FormEvent } from "react";
-import { Plus, ChevronLeft, ChevronRight, MapPin, Users, CalendarDays, MessageCircle } from "lucide-react";
+import { MapPin, Users, CalendarDays } from "lucide-react";
 import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -8,19 +8,28 @@ import "react-international-phone/style.css";
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
 import { useCalendarBookingsQuery, useLocationsQuery } from "@/features/agenda/use-agenda-query";
+import { AgendaCalendarRenderer } from "@/features/agenda/components/agenda-calendar-renderer";
+import { ViewModeSelector } from "@/features/agenda/components/view-mode-selector";
 import {
   updateBookingStatus,
   deleteBooking,
   toAgendaFriendlyMessage,
   getStatusLabel,
   getStatusTone,
-  getValidStatusTransitions,
   fetchLocationResources,
   fetchResourceById,
-  type BookingCardItem,
   type BookingStatus,
   type ResourceItem,
 } from "@/features/agenda/agenda-service";
+import {
+  formatDayLabel,
+  formatMonthLabel,
+  formatWeekRangeLabel,
+  getDateRangeForView,
+  getWeekDays,
+  moveDateByView,
+  type ViewMode,
+} from "@/features/agenda/utils/calendar-date";
 import {
   createBooking,
   fetchBookingServicesCatalog,
@@ -41,15 +50,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
-type ViewMode = "week" | "day" | "month";
-
-type WeekDay = {
-  date: Date;
-  dayLabel: string;
-  dateLabel: string;
-  isToday: boolean;
-};
-
 const STATUS_FILTER_OPTIONS: BookingStatus[] = [
   "PENDING",
   "CONFIRMED",
@@ -57,202 +57,6 @@ const STATUS_FILTER_OPTIONS: BookingStatus[] = [
   "NO_SHOW",
   "CANCELLED",
 ];
-
-function getWeekDays(baseDate: Date): WeekDay[] {
-  const days: WeekDay[] = [];
-  const startOfWeek = new Date(baseDate);
-  const dayOfWeek = startOfWeek.getDay();
-  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday = 1
-  startOfWeek.setDate(startOfWeek.getDate() + diff);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  for (let i = 0; i < 7; i++) {
-    const day = new Date(startOfWeek);
-    day.setDate(startOfWeek.getDate() + i);
-
-    const dayDate = new Date(day);
-    dayDate.setHours(0, 0, 0, 0);
-    const isToday = dayDate.getTime() === today.getTime();
-
-    days.push({
-      date: day,
-      dayLabel: new Intl.DateTimeFormat("es-AR", { weekday: "short" }).format(day),
-      dateLabel: new Intl.DateTimeFormat("es-AR", { day: "numeric", month: "short" }).format(day),
-      isToday,
-    });
-  }
-
-  return days;
-}
-
-function formatTime(isoString: string): string {
-  return new Intl.DateTimeFormat("es-AR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(isoString));
-}
-
-function formatDateParam(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-type BookingCardProps = {
-  booking: BookingCardItem;
-  onStatusChange: (id: string, status: BookingStatus) => void;
-  onDelete: (id: string) => void;
-  businessName: string;
-  timezone: string;
-};
-
-function normalizeWhatsappPhone(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
-
-function formatBookingDateTime(isoString: string, timezone: string): string {
-  return new Intl.DateTimeFormat("es-PY", {
-    timeZone: timezone,
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(isoString));
-}
-
-function buildWhatsappMessage(
-  booking: BookingCardItem,
-  businessName: string,
-  timezone: string,
-): string {
-  const formattedDateTime = formatBookingDateTime(booking.startTime, timezone);
-
-  return [
-    businessName,
-    `Hola ${booking.clientName}! Esperamos que estes muy bien.`,
-    `Queremos confirmar si asistiras a tu turno del ${formattedDateTime}.`,
-    `Servicio: ${booking.serviceName}`,
-    `Profesional: ${booking.resourceName}`,
-    "Quedamos atentos. Muchas gracias!",
-  ].join("\n");
-}
-
-function BookingCard({ booking, onStatusChange, onDelete, businessName, timezone }: BookingCardProps) {
-  const [showActions, setShowActions] = useState(false);
-  const validTransitions = getValidStatusTransitions(booking.status).filter(
-    (status) => status !== "CANCELLED",
-  );
-  const tone = getStatusTone(booking.status);
-  const accentByTone: Record<typeof tone, string> = {
-    success: "border-l-4 border-l-green-500",
-    warning: "border-l-4 border-l-amber-500",
-    neutral: "border-l-4 border-l-slate-400",
-    danger: "border-l-4 border-l-red-500",
-  };
-  const dotByTone: Record<typeof tone, string> = {
-    success: "bg-green-600",
-    warning: "bg-amber-500",
-    neutral: "bg-slate-500",
-    danger: "bg-red-600",
-  };
-
-  const whatsappPhone = booking.clientPhone ? normalizeWhatsappPhone(booking.clientPhone) : "";
-
-  const handleOpenWhatsapp = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-
-    if (!whatsappPhone) {
-      return;
-    }
-
-    const message = buildWhatsappMessage(booking, businessName, timezone);
-    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
-
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
-  };
-
-  return (
-    <div
-      className={`group relative mb-2 cursor-pointer rounded-lg border border-neutral-dark bg-white p-2 shadow-sm transition-all hover:shadow-md ${accentByTone[tone]}`}
-      onClick={() => setShowActions(!showActions)}
-    >
-      <div className="min-w-0 space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <p className="truncate text-xs font-semibold text-primary">
-            {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
-          </p>
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-neutral px-1.5 py-0.5 text-[10px] font-medium text-primary-light">
-            <span className={`size-1.5 rounded-full ${dotByTone[tone]}`} aria-hidden="true" />
-            {getStatusLabel(booking.status)}
-          </span>
-        </div>
-        <div className="flex min-w-0 items-center gap-1">
-          <p className="truncate text-xs font-medium text-primary" title={booking.clientName}>
-            {booking.clientName}
-          </p>
-          <button
-            type="button"
-            onClick={handleOpenWhatsapp}
-            disabled={!whatsappPhone}
-            className="inline-flex size-4 shrink-0 items-center justify-center rounded text-green-600 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:text-neutral-dark"
-            aria-label={`Enviar WhatsApp a ${booking.clientName}`}
-            title={whatsappPhone ? "Enviar mensaje por WhatsApp" : "Cliente sin teléfono"}
-          >
-            <MessageCircle className="size-3" />
-          </button>
-        </div>
-        <p className="truncate text-xs text-primary-light" title={booking.serviceName}>
-          {booking.serviceName}
-        </p>
-        <p className="truncate text-[11px] text-primary-light" title={booking.resourceName}>
-          Prof.: {booking.resourceName}
-        </p>
-        {booking.notes && (
-          <p className="line-clamp-2 text-[11px] text-primary-light" title={booking.notes}>
-            Nota: {booking.notes}
-          </p>
-        )}
-      </div>
-
-      {showActions && validTransitions.length > 0 && (
-        <div className="mt-2 space-y-1 border-t border-neutral-dark pt-2">
-          {validTransitions.map((status) => (
-            <button
-              key={status}
-              onClick={(e) => {
-                e.stopPropagation();
-                onStatusChange(booking.id, status);
-                setShowActions(false);
-              }}
-              className="block w-full rounded px-2 py-1 text-left text-xs text-primary-light hover:bg-neutral"
-            >
-              {getStatusLabel(status)}
-            </button>
-          ))}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm("¿Estás seguro que querés cancelar este turno?")) {
-                onDelete(booking.id);
-              }
-              setShowActions(false);
-            }}
-            className="block w-full rounded px-2 py-1 text-left text-xs text-red-600 hover:bg-red-50"
-          >
-            Cancelar turno
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 type AgendaCreateBookingFormProps = {
   initialLocationId?: string;
@@ -597,7 +401,7 @@ export function AgendaPage() {
   const isProfessional = currentRole === "PROFESSIONAL";
 
   const [viewMode, setViewMode] = useState<ViewMode>("week");
-  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>(
     isProfessional && currentResourceId ? [currentResourceId] : []
@@ -664,19 +468,12 @@ export function AgendaPage() {
   const businessName = tenantQuery.data?.name ?? "AgendateYA";
   const tenantTimezone = tenantQuery.data?.timezone ?? "America/Asuncion";
 
-  const weekDays = useMemo(() => getWeekDays(currentWeek), [currentWeek]);
+  const weekDays = useMemo(() => getWeekDays(currentDate), [currentDate]);
+  const calendarDateRange = useMemo(
+    () => getDateRangeForView(viewMode, currentDate),
+    [viewMode, currentDate],
+  );
 
-  // Calcular rango de fechas del calendario visible (semana completa)
-  const calendarDateRange = useMemo(() => {
-    if (weekDays.length === 0) {
-      return { startDate: "", endDate: "" };
-    }
-    const startDate = formatDateParam(weekDays[0].date);
-    const endDate = formatDateParam(weekDays[weekDays.length - 1].date);
-    return { startDate, endDate };
-  }, [weekDays]);
-
-  // Query de calendario: solo se ejecuta si hay recursos y estados seleccionados
   const calendarBookingsQuery = useCalendarBookingsQuery({
     resourceIds: scopedResourceIds,
     startDate: calendarDateRange.startDate,
@@ -685,8 +482,18 @@ export function AgendaPage() {
   });
 
   const bookings = selectedStatuses.length === 0 ? [] : (calendarBookingsQuery.data ?? []);
+  const calendarLabel = useMemo(() => {
+    if (viewMode === "day") {
+      return formatDayLabel(currentDate);
+    }
 
-  // Limpiar recursos seleccionados cuando cambian las locaciones
+    if (viewMode === "month") {
+      return formatMonthLabel(currentDate);
+    }
+
+    return formatWeekRangeLabel(weekDays);
+  }, [currentDate, viewMode, weekDays]);
+
   useEffect(() => {
     if (isProfessional) {
       return;
@@ -745,20 +552,16 @@ export function AgendaPage() {
     },
   });
 
-  const handlePreviousWeek = () => {
-    const newDate = new Date(currentWeek);
-    newDate.setDate(newDate.getDate() - 7);
-    setCurrentWeek(newDate);
+  const handlePreviousPeriod = () => {
+    setCurrentDate((previous) => moveDateByView(previous, viewMode, -1));
   };
 
-  const handleNextWeek = () => {
-    const newDate = new Date(currentWeek);
-    newDate.setDate(newDate.getDate() + 7);
-    setCurrentWeek(newDate);
+  const handleNextPeriod = () => {
+    setCurrentDate((previous) => moveDateByView(previous, viewMode, 1));
   };
 
   const handleToday = () => {
-    setCurrentWeek(new Date());
+    setCurrentDate(new Date());
   };
 
   const handleLocationToggle = (locationId: string) => {
@@ -785,29 +588,6 @@ export function AgendaPage() {
     });
   };
 
-  const bookingsByDay = useMemo(() => {
-    const map: Record<string, BookingCardItem[]> = {};
-    weekDays.forEach((day) => {
-      const key = formatDateParam(day.date);
-      map[key] = [];
-    });
-
-    bookings.forEach((booking) => {
-      const bookingDate = new Date(booking.startTime);
-      const key = formatDateParam(bookingDate);
-      if (map[key]) {
-        map[key].push(booking);
-      }
-    });
-
-    // Sort bookings by start time
-    Object.keys(map).forEach((key) => {
-      map[key].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-    });
-
-    return map;
-  }, [weekDays, bookings]);
-
   const errorMessage = calendarBookingsQuery.isError
     ? toAgendaFriendlyMessage(calendarBookingsQuery.error as unknown as AppError)
     : null;
@@ -822,73 +602,16 @@ export function AgendaPage() {
         />
       )}
 
-      {/* Header - Date controls and view mode */}
-      <PageCard className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={handlePreviousWeek}>
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleToday}>
-            Hoy
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleNextWeek}>
-            <ChevronRight className="size-4" />
-          </Button>
-          <span className="ml-2 text-sm font-semibold text-primary">
-            {new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(currentWeek)}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-neutral-dark bg-white" role="tablist" aria-label="Vista de calendario">
-            <button
-              onClick={() => setViewMode("week")}
-              role="tab"
-              aria-selected={viewMode === "week"}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === "week"
-                  ? "bg-primary text-white"
-                  : "text-primary-light hover:bg-neutral"
-              }`}
-            >
-              Semana
-            </button>
-            <button
-              onClick={() => setViewMode("day")}
-              role="tab"
-              aria-selected={viewMode === "day"}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === "day"
-                  ? "bg-primary text-white"
-                  : "text-primary-light hover:bg-neutral"
-              }`}
-            >
-              Día
-            </button>
-            <button
-              onClick={() => setViewMode("month")}
-              role="tab"
-              aria-selected={viewMode === "month"}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                viewMode === "month"
-                  ? "bg-primary text-white"
-                  : "text-primary-light hover:bg-neutral"
-              }`}
-            >
-              Mes
-            </button>
-          </div>
-
-          <Button
-            size="sm"
-            onClick={() => setShowNewBookingPanel(true)}
-            disabled={isProfessional && !currentResourceId}
-          >
-            <Plus className="mr-1 size-4" />
-            Nuevo Turno
-          </Button>
-        </div>
-      </PageCard>
+      <ViewModeSelector
+        label={calendarLabel}
+        viewMode={viewMode}
+        onPrevious={handlePreviousPeriod}
+        onNext={handleNextPeriod}
+        onToday={handleToday}
+        onViewChange={setViewMode}
+        onCreateBooking={() => setShowNewBookingPanel(true)}
+        disableCreateBooking={isProfessional && !currentResourceId}
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
         {/* Left panel - Filters and legend */}
@@ -1029,64 +752,16 @@ export function AgendaPage() {
             />
           )}
 
-          {!calendarBookingsQuery.isLoading && scopedResourceIds.length > 0 && selectedStatuses.length > 0 && viewMode === "week" && (
-            <PageCard className="overflow-x-auto">
-              <div className="min-w-[1120px]">
-                <div className="grid grid-cols-7 gap-2">
-                  {weekDays.map((day) => {
-                    const dayKey = formatDateParam(day.date);
-                    const dayBookings = bookingsByDay[dayKey] ?? [];
-
-                    return (
-                      <div
-                        key={dayKey}
-                        className={`border-r border-neutral-dark last:border-r-0 ${
-                          day.isToday ? "bg-primary/5" : ""
-                        }`}
-                      >
-                        <div className="sticky top-0 border-b border-neutral-dark bg-neutral-light p-2 text-center">
-                          <p className="text-xs font-semibold uppercase text-primary-light">
-                            {day.dayLabel}
-                          </p>
-                          <p
-                            className={`text-sm font-bold ${
-                              day.isToday ? "text-primary" : "text-primary-light"
-                            }`}
-                          >
-                            {day.dateLabel}
-                          </p>
-                        </div>
-                        <div className="p-2 min-h-[400px]">
-                          {dayBookings.length === 0 ? (
-                            <p className="text-center text-xs text-primary-light">Sin turnos</p>
-                          ) : (
-                            dayBookings.map((booking) => (
-                              <BookingCard
-                                key={booking.id}
-                                booking={booking}
-                                businessName={businessName}
-                                timezone={tenantTimezone}
-                                onStatusChange={(id, status) =>
-                                  updateStatusMutation.mutate({ id, status })
-                                }
-                                onDelete={(id) => deleteMutation.mutate(id)}
-                              />
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </PageCard>
-          )}
-
-          {!calendarBookingsQuery.isLoading && scopedResourceIds.length > 0 && selectedStatuses.length > 0 && (viewMode === "day" || viewMode === "month") && (
-            <EmptyState
-              icon={CalendarDays}
-              title="Vista en preparación"
-              description={`La vista de ${viewMode === "day" ? "día" : "mes"} estará disponible en próximos slices.`}
+          {!calendarBookingsQuery.isLoading && scopedResourceIds.length > 0 && selectedStatuses.length > 0 && (
+            <AgendaCalendarRenderer
+              viewMode={viewMode}
+              currentDate={currentDate}
+              weekDays={weekDays}
+              bookings={bookings}
+              businessName={businessName}
+              timezone={tenantTimezone}
+              onStatusChange={(id, status) => updateStatusMutation.mutate({ id, status })}
+              onDelete={(id) => deleteMutation.mutate(id)}
             />
           )}
         </div>
