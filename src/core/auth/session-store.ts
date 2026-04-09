@@ -4,6 +4,7 @@ export type AuthUser = {
   fullName: string;
   role: string;
   emailVerified?: boolean;
+  resourceId?: string;
 };
 
 type SessionState = {
@@ -36,6 +37,8 @@ function sanitizeUser(candidate: unknown): AuthUser | null {
     email: user.email,
     fullName: user.fullName,
     role: user.role,
+    emailVerified: typeof user.emailVerified === "boolean" ? user.emailVerified : undefined,
+    resourceId: typeof user.resourceId === "string" ? user.resourceId : undefined,
   };
 }
 

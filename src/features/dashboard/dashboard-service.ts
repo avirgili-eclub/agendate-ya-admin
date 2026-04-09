@@ -1,5 +1,7 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
+import { getSessionState } from "@/core/auth/session-store";
+import type { AppError } from "@/core/errors/app-error";
 
 export type DashboardKpi = {
   label: string;
@@ -113,37 +115,74 @@ async function fetchAllBookings(): Promise<ApiBooking[]> {
 }
 
 export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const [bookings, locations, services] = await Promise.all([
-    fetchAllBookings(),
-    httpRequest<DataEnvelope<ApiLocation[]>>("/locations").then((response) =>
-      unwrapData<ApiLocation[]>(response),
-    ),
-    httpRequest<DataEnvelope<ApiService[]>>("/services").then((response) =>
-      unwrapData<ApiService[]>(response),
-    ),
+  const session = getSessionState();
+  const currentRole = session.user?.role?.toUpperCase() ?? "";
+  const currentResourceId = session.user?.resourceId;
+  const isProfessional = currentRole === "PROFESSIONAL";
+
+  const bookingsPromise = fetchAllBookings();
+  const servicesPromise: Promise<ApiService[]> = isProfessional
+    ? Promise.resolve([])
+    : httpRequest<DataEnvelope<ApiService[]>>("/services").then((response) =>
+        unwrapData<ApiService[]>(response),
+      );
+
+  const resourcesPromise: Promise<ApiResource[]> = isProfessional
+    ? (async () => {
+        if (!currentResourceId) {
+          return [];
+        }
+
+        try {
+          const response = await httpRequest<DataEnvelope<ApiResource>>(
+            `/resources/${currentResourceId}`,
+          );
+          return [unwrapData<ApiResource>(response)];
+        } catch (error) {
+          const appError = error as AppError;
+          if (appError.status === 404) {
+            return [];
+          }
+          throw error;
+        }
+      })()
+    : (async () => {
+        const locations = await httpRequest<DataEnvelope<ApiLocation[]>>("/locations").then((response) =>
+          unwrapData<ApiLocation[]>(response),
+        );
+
+        const resourcesByLocation = await Promise.all(
+          locations.map(async (location) => {
+            const response = await httpRequest<DataEnvelope<ApiResource[]>>(
+              `/locations/${location.id}/resources`,
+            );
+            return unwrapData<ApiResource[]>(response);
+          }),
+        );
+
+        return resourcesByLocation.flat();
+      })();
+
+  const [bookings, services, resources] = await Promise.all([
+    bookingsPromise,
+    servicesPromise,
+    resourcesPromise,
   ]);
 
-  const resourcesByLocation = await Promise.all(
-    locations.map(async (location) => {
-      const response = await httpRequest<DataEnvelope<ApiResource[]>>(
-        `/locations/${location.id}/resources`,
-      );
-      return unwrapData<ApiResource[]>(response);
-    }),
-  );
-
-  const resources = resourcesByLocation.flat();
-  const assignedByResource = await Promise.all(
-    resources.map(async (resource) => {
-      const response = await httpRequest<DataEnvelope<ApiService[]>>(
-        `/resources/${resource.id}/services`,
-      );
-      return {
-        resourceId: resource.id,
-        serviceIds: unwrapData<ApiService[]>(response).map((service) => service.id),
-      };
-    }),
-  );
+  const assignedByResource =
+    services.length === 0
+      ? []
+      : await Promise.all(
+          resources.map(async (resource) => {
+            const response = await httpRequest<DataEnvelope<ApiService[]>>(
+              `/resources/${resource.id}/services`,
+            );
+            return {
+              resourceId: resource.id,
+              serviceIds: unwrapData<ApiService[]>(response).map((service) => service.id),
+            };
+          }),
+        );
 
   const assignedServiceIds = new Set(
     assignedByResource.flatMap((item) => item.serviceIds),
@@ -172,7 +211,13 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
   const noShowCount = last30d.filter((booking) => booking.status === "NO_SHOW").length;
   const noShowRate = percentage(noShowCount, last30d.length);
 
-  const upcomingBookings = bookings
+  const bookingsForUpcoming = isProfessional
+    ? currentResourceId
+      ? bookings.filter((booking) => booking.resourceId === currentResourceId)
+      : []
+    : bookings;
+
+  const upcomingBookings = bookingsForUpcoming
     .filter((booking) => {
       const start = new Date(booking.startTime);
       return start >= now && start <= next24h;
@@ -219,6 +264,9 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
   ).length;
 
   const alerts: string[] = [];
+  if (isProfessional && !currentResourceId) {
+    alerts.push("Tu cuenta PROFESSIONAL no tiene recurso asignado.");
+  }
   if (inactiveWithFutureBookings > 0) {
     alerts.push(`${inactiveWithFutureBookings} recursos inactivos tienen turnos futuros.`);
   }

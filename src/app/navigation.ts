@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Users,
   UserSquare2,
+  User,
   Wrench,
   Briefcase,
   ClipboardList,
@@ -29,8 +30,22 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { label: "Servicios", to: "/servicios", icon: Briefcase, description: "Catalogo de servicios" },
   { label: "Disponibilidad", to: "/disponibilidad", icon: CalendarDays, description: "Reglas y excepciones" },
   { label: "Equipo", to: "/equipo", icon: ShieldCheck, description: "Usuarios internos" },
+  { label: "Perfil", to: "/perfil", icon: User, description: "Perfil profesional" },
   { label: "Configuracion", to: "/configuracion", icon: Settings, description: "Ajustes del negocio" },
 ];
+
+const PROFESSIONAL_HIDDEN_ROUTES = new Set(["/clientes", "/equipos", "/equipo", "/configuracion"]);
+const PROFESSIONAL_ONLY_ROUTES = new Set(["/perfil"]);
+
+export function getNavItemsForRole(role?: string) {
+  const normalizedRole = role?.toUpperCase() ?? "";
+
+  if (normalizedRole === "PROFESSIONAL") {
+    return APP_NAV_ITEMS.filter((item) => !PROFESSIONAL_HIDDEN_ROUTES.has(item.to));
+  }
+
+  return APP_NAV_ITEMS.filter((item) => !PROFESSIONAL_ONLY_ROUTES.has(item.to));
+}
 
 export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Dashboard", subtitle: "Vista general operativa del negocio." },
@@ -42,6 +57,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/servicios": { title: "Servicios", subtitle: "Catalogo de servicios y reglas comerciales." },
   "/disponibilidad": { title: "Disponibilidad", subtitle: "Reglas semanales y excepciones por fecha." },
   "/equipo": { title: "Equipo", subtitle: "Usuarios del panel y permisos." },
+  "/perfil": { title: "Perfil", subtitle: "Mi informacion y perfil profesional." },
   "/configuracion": { title: "Configuracion", subtitle: "Parametros generales del tenant." },
   "/health": { title: "Health", subtitle: "Smoke route tecnica." },
 };

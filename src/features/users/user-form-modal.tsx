@@ -1,8 +1,10 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
-import { toUsersFriendlyMessage, type UserCreateInput } from "@/features/users/users-service";
+import { toUsersFriendlyMessage, fetchUserRoles, type UserCreateInput } from "@/features/users/users-service";
+import { useResourcesQuery } from "@/features/resources/use-resources-query";
 import { Button } from "@/shared/ui/button";
 
 type UserFormModalProps = {
@@ -13,22 +15,39 @@ type UserFormModalProps = {
   isLoading: boolean;
 };
 
-const AVAILABLE_ROLES = [
-  { value: "admin", label: "Administrador" },
-  { value: "manager", label: "Gerente" },
-  { value: "operator", label: "Operador" },
-  { value: "viewer", label: "Visualizador" },
-];
-
 export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: UserFormModalProps) {
   const [email, setEmail] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [role, setRole] = useState("operator");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [resourceId, setResourceId] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const rolesQuery = useQuery({
+    queryKey: ["users", "roles"],
+    queryFn: fetchUserRoles,
+    enabled: isOpen,
+    staleTime: 300_000, // 5 min
+  });
+
+  const resourcesQuery = useResourcesQuery({
+    search: "",
+    location: "Todas las ubicaciones",
+    page: 0,
+    pageSize: 100,
+  });
+
+  const availableRoles = rolesQuery.data ?? [];
+  const availableResources = resourcesQuery.data?.data ?? [];
+  const showResourceSelect = role.toUpperCase() === "PROFESSIONAL";
+
+  useEffect(() => {
+    if (!role && availableRoles.length > 0) {
+      setRole(availableRoles[0].value);
+    }
+  }, [availableRoles, role]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -42,11 +61,14 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
 
     const input: UserCreateInput = {
       email: email.trim(),
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
+      name: name.trim(),
       role,
       password,
     };
+
+    if (showResourceSelect && resourceId) {
+      input.resourceId = resourceId;
+    }
 
     try {
       await onSubmit(input);
@@ -123,43 +145,23 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
               {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
             </div>
 
-            {/* First Name */}
+            {/* Name */}
             <div>
-              <label htmlFor="firstName" className="block text-sm font-medium text-primary">
-                Nombre <span className="text-red-600">*</span>
+              <label htmlFor="name" className="block text-sm font-medium text-primary">
+                Nombre Completo <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
-                id="firstName"
-                value={firstName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setFirstName(e.target.value)}
+                id="name"
+                value={name}
+                onChange={(e: ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
                 className={`mt-1 w-full rounded-md border ${
-                  fieldErrors.firstName ? "border-red-500" : "border-neutral-dark"
+                  fieldErrors.name ? "border-red-500" : "border-neutral-dark"
                 } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
-                placeholder="Juan"
+                placeholder="Juan Pérez"
               />
-              {fieldErrors.firstName && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
-              )}
-            </div>
-
-            {/* Last Name */}
-            <div>
-              <label htmlFor="lastName" className="block text-sm font-medium text-primary">
-                Apellido <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="lastName"
-                value={lastName}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
-                className={`mt-1 w-full rounded-md border ${
-                  fieldErrors.lastName ? "border-red-500" : "border-neutral-dark"
-                } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
-                placeholder="Pérez"
-              />
-              {fieldErrors.lastName && (
-                <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p>
               )}
             </div>
 
@@ -171,12 +173,16 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
               <select
                 id="role"
                 value={role}
-                onChange={(e: ChangeEvent<HTMLSelectElement>) => setRole(e.target.value)}
+                onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                  setRole(e.target.value);
+                  setResourceId(""); // Clear resource when role changes
+                }}
                 className={`mt-1 w-full rounded-md border ${
                   fieldErrors.role ? "border-red-500" : "border-neutral-dark"
                 } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
               >
-                {AVAILABLE_ROLES.map((r) => (
+                <option value="">Selecciona un rol</option>
+                {availableRoles.map((r) => (
                   <option key={r.value} value={r.value}>
                     {r.label}
                   </option>
@@ -184,6 +190,35 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
               </select>
               {fieldErrors.role && <p className="mt-1 text-xs text-red-600">{fieldErrors.role}</p>}
             </div>
+
+            {/* Resource (only for PROFESSIONAL) */}
+            {showResourceSelect && (
+              <div>
+                <label htmlFor="resourceId" className="block text-sm font-medium text-primary">
+                  Recurso Asignado <span className="text-red-600">*</span>
+                </label>
+                <select
+                  id="resourceId"
+                  value={resourceId}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setResourceId(e.target.value)}
+                  className={`mt-1 w-full rounded-md border ${
+                    fieldErrors.resourceId ? "border-red-500" : "border-neutral-dark"
+                  } bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light`}
+                >
+                  <option value="">Selecciona un recurso</option>
+                  {availableResources
+                    .filter((r) => r.type === "PROFESSIONAL")
+                    .map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.locationName})
+                      </option>
+                    ))}
+                </select>
+                {fieldErrors.resourceId && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.resourceId}</p>
+                )}
+              </div>
+            )}
 
             {/* Password */}
             <div>

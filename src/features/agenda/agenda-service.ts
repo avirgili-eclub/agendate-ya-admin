@@ -213,6 +213,11 @@ export async function fetchLocationResources(locationId: string): Promise<Resour
   return unwrapData<ApiResource[]>(response).map(mapApiResourceToItem);
 }
 
+export async function fetchResourceById(resourceId: string): Promise<ResourceItem> {
+  const response = await httpRequest<DataEnvelope<ApiResource>>(`/resources/${resourceId}`);
+  return mapApiResourceToItem(unwrapData<ApiResource>(response));
+}
+
 export async function updateBookingStatus(
   bookingId: string,
   status: BookingStatus,

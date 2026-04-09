@@ -78,6 +78,7 @@ export function useGoogleOAuthCallback() {
           fullName: ((payload.name as string) ?? (payload.fullName as string) ?? "").trim(),
           role: payload.role as string,
           emailVerified: true, // Google users are always verified
+          resourceId: payload.rid ? (payload.rid as string) : undefined,
         },
       });
       void navigate({ to: targetReturnUrl });

@@ -124,7 +124,7 @@ export function UsersPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-primary">
-                        {user.firstName} {user.lastName}
+                        {user.name}
                       </h3>
                       <div className="mt-1 flex items-center gap-1 text-xs text-primary-light">
                         <Mail className="size-3" />
@@ -177,7 +177,7 @@ export function UsersPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-primary">
-                        {user.firstName} {user.lastName}
+                        {user.name}
                       </h3>
                       <div className="mt-1 flex items-center gap-1 text-xs text-primary-light">
                         <Mail className="size-3" />
@@ -238,7 +238,7 @@ export function UsersPage() {
                 <p className="mt-1 text-sm text-primary-light">
                   ¿Estás seguro de desactivar a{" "}
                   <strong>
-                    {confirmDeactivate.firstName} {confirmDeactivate.lastName}
+                    {confirmDeactivate.name}
                   </strong>
                   ? Este usuario no podrá acceder al sistema hasta que sea reactivado.
                 </p>
