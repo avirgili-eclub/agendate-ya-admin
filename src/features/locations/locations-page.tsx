@@ -254,7 +254,7 @@ export function LocationsPage() {
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             className="h-11 w-full rounded-lg border border-neutral-dark bg-white pl-10 pr-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="Buscar por nombre, dirección, teléfono o ID..."
+            placeholder="Buscar por nombre, dirección o teléfono..."
           />
         </div>
 
@@ -301,7 +301,6 @@ export function LocationsPage() {
                   <h3 className="truncate text-lg font-semibold text-primary-dark" title={location.name}>
                     {location.name}
                   </h3>
-                  <p className="mt-1 text-xs text-primary-light">ID: {location.id}</p>
                 </div>
                 <StatusChip
                   tone={location.active ? "success" : "neutral"}

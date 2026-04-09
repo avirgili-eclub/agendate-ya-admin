@@ -6,7 +6,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 
-import { isAuthenticated } from "@/core/auth/session-store";
+import { getSessionState, isAuthenticated } from "@/core/auth/session-store";
 import { AppShell } from "@/shared/layout/app-shell";
 import { useGoogleOAuthCallback } from "@/features/auth/use-google-oauth-callback";
 import { ForbiddenPage } from "@/features/auth/forbidden-page";
@@ -28,6 +28,7 @@ import { ClientsPage } from "@/features/clients/clients-page";
 import { LocationsPage } from "@/features/locations/locations-page";
 import { UsersPage } from "@/features/users/users-page";
 import { TenantSettingsPage } from "@/features/tenant/tenant-settings-page";
+import { ProfilePage } from "@/features/profile/profile-page";
 
 function RootLayout() {
   useGoogleOAuthCallback();
@@ -83,6 +84,20 @@ const privateRoute = createRoute({
   },
   component: AppShell,
 });
+
+function blockProfessionalRestrictedRoutes() {
+  const currentRole = getSessionState().user?.role?.toUpperCase() ?? "";
+  if (currentRole === "PROFESSIONAL") {
+    throw redirect({ to: "/forbidden" });
+  }
+}
+
+function allowOnlyProfessional() {
+  const currentRole = getSessionState().user?.role?.toUpperCase() ?? "";
+  if (currentRole !== "PROFESSIONAL") {
+    throw redirect({ to: "/forbidden" });
+  }
+}
 
 const loginRoute = createRoute({
   getParentRoute: () => publicRoute,
@@ -153,6 +168,7 @@ const bookingsRoute = createRoute({
 const clientsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/clientes",
+  beforeLoad: blockProfessionalRestrictedRoutes,
   component: ClientsPage,
 });
 
@@ -165,6 +181,7 @@ const locationsRoute = createRoute({
 const resourcesRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/equipos",
+  beforeLoad: blockProfessionalRestrictedRoutes,
   component: ResourcesPage,
 });
 
@@ -172,6 +189,7 @@ const legacyResourcesRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/recursos",
   beforeLoad: () => {
+    blockProfessionalRestrictedRoutes();
     throw redirect({ to: "/equipos" });
   },
 });
@@ -191,13 +209,22 @@ const availabilityRoute = createRoute({
 const teamRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/equipo",
+  beforeLoad: blockProfessionalRestrictedRoutes,
   component: UsersPage,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/configuracion",
+  beforeLoad: blockProfessionalRestrictedRoutes,
   component: TenantSettingsPage,
+});
+
+const profileRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/perfil",
+  beforeLoad: allowOnlyProfessional,
+  component: ProfilePage,
 });
 
 const healthRoute = createRoute({
@@ -235,6 +262,7 @@ const routeTree = rootRoute.addChildren([
     availabilityRoute,
     teamRoute,
     settingsRoute,
+    profileRoute,
     healthRoute,
     forbiddenRoute,
   ]),

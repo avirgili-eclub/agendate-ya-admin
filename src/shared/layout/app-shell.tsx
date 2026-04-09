@@ -2,7 +2,7 @@ import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, MessageSquare, Search, X
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { APP_NAV_ITEMS, getPageMeta } from "@/app/navigation";
+import { getNavItemsForRole, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import {
@@ -21,6 +21,7 @@ export function AppShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const pageMeta = getPageMeta(pathname);
   const session = getSessionState();
+  const navItems = getNavItemsForRole(session.user?.role);
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -136,7 +137,7 @@ export function AppShell() {
           </div>
 
           <nav className="space-y-1">
-            {APP_NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
