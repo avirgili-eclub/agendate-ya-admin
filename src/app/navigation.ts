@@ -59,6 +59,7 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/equipo": { title: "Equipo", subtitle: "Usuarios del panel y permisos." },
   "/perfil": { title: "Perfil", subtitle: "Mi informacion y perfil profesional." },
   "/configuracion": { title: "Configuracion", subtitle: "Parametros generales del tenant." },
+  "/settings": { title: "Configuracion", subtitle: "Parametros generales del tenant." },
   "/health": { title: "Health", subtitle: "Smoke route tecnica." },
 };
 

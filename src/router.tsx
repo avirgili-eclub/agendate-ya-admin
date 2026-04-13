@@ -220,6 +220,13 @@ const settingsRoute = createRoute({
   component: TenantSettingsPage,
 });
 
+const legacySettingsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/settings",
+  beforeLoad: blockProfessionalRestrictedRoutes,
+  component: TenantSettingsPage,
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/perfil",
@@ -262,6 +269,7 @@ const routeTree = rootRoute.addChildren([
     availabilityRoute,
     teamRoute,
     settingsRoute,
+    legacySettingsRoute,
     profileRoute,
     healthRoute,
     forbiddenRoute,
