@@ -48,6 +48,13 @@
     font-weight: 700;
   }
 
+  .brand:focus-visible,
+  .nav-actions a:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
   .brand img,
   .logo-fallback {
     border-radius: 999px;
@@ -72,6 +79,7 @@
     color: var(--text-secondary);
     text-decoration: none;
     font-size: 0.95rem;
+    padding: 2px 4px;
   }
 
   @media (max-width: 760px) {

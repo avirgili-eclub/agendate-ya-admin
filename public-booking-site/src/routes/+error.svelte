@@ -11,6 +11,11 @@
       : "Ocurrio un problema temporal de red o del servidor. Intenta nuevamente.";
 </script>
 
+<svelte:head>
+  <title>{title}</title>
+  <meta name="robots" content="noindex,nofollow" />
+</svelte:head>
+
 <main class="error-wrap">
   <h1>{title}</h1>
   <p>{description}</p>
