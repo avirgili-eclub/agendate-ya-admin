@@ -31,6 +31,10 @@ export type CreateRuleInput = {
   validUntil?: string;
 };
 
+export type ReplaceAvailabilityRulesInput = {
+  rules: CreateRuleInput[];
+};
+
 export type CreateOverrideInput = {
   resourceId: string;
   date: string;
@@ -107,6 +111,17 @@ function assertRuleInput(input: CreateRuleInput) {
   }
 }
 
+function normalizeTimeForApi(value: string): string {
+  // HTML time inputs usually return HH:mm, backend expects LocalTime HH:mm:ss.
+  if (/^\d{2}:\d{2}:\d{2}$/.test(value)) {
+    return value;
+  }
+  if (/^\d{2}:\d{2}$/.test(value)) {
+    return `${value}:00`;
+  }
+  return value;
+}
+
 function assertOverrideInput(input: CreateOverrideInput) {
   const details: Array<{ field: string; message: string }> = [];
   if (!input.resourceId.trim()) {
@@ -144,8 +159,8 @@ export async function createAvailabilityRule(input: CreateRuleInput): Promise<Av
       body: {
         resourceId: input.resourceId,
         dayOfWeek: input.dayOfWeek,
-        startTime: input.startTime,
-        endTime: input.endTime,
+        startTime: normalizeTimeForApi(input.startTime),
+        endTime: normalizeTimeForApi(input.endTime),
         validFrom: input.validFrom || null,
         validUntil: input.validUntil || null,
       },
@@ -175,6 +190,35 @@ export async function updateAvailabilityRule(
 
 export async function deleteAvailabilityRule(id: string): Promise<void> {
   await httpRequest(`/availability-rules/${id}`, { method: "DELETE" });
+}
+
+export async function replaceAvailabilityRules(
+  resourceId: string,
+  input: ReplaceAvailabilityRulesInput,
+): Promise<AvailabilityRule[]> {
+  const normalizedRules = input.rules.map((rule) => {
+    assertRuleInput(rule);
+    return {
+      resourceId: rule.resourceId,
+      dayOfWeek: rule.dayOfWeek,
+      startTime: normalizeTimeForApi(rule.startTime),
+      endTime: normalizeTimeForApi(rule.endTime),
+      validFrom: rule.validFrom || null,
+      validUntil: rule.validUntil || null,
+    };
+  });
+
+  const response = await httpRequest<DataEnvelope<ApiRule[]>>(
+    `/resources/${resourceId}/availability-rules`,
+    {
+      method: "PUT",
+      body: {
+        rules: normalizedRules,
+      },
+    },
+  );
+
+  return unwrapData<ApiRule[]>(response).map(mapApiRuleToRule);
 }
 
 // Availability Overrides
