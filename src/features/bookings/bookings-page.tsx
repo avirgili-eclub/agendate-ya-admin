@@ -893,19 +893,6 @@ export function BookingsPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-primary">Turnos</h1>
-          <p className="text-sm text-primary-light">
-            Gestión completa de reservas y turnos del negocio
-          </p>
-        </div>
-        <Button onClick={() => setShowCreateForm(true)}>
-          <Plus className="mr-2 size-4" />
-          Nuevo Turno
-        </Button>
-      </header>
-
       {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
       <PageCard>
@@ -921,29 +908,23 @@ export function BookingsPage() {
 
         {bookingsQuery.isSuccess && (
           <>
-            {data.length === 0 ? (
-              <EmptyState
-                icon={CalendarDays}
-                title="Sin turnos"
-                description="No hay turnos registrados. Crea el primero para comenzar."
-              />
-            ) : (
-              <>
-                <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="relative w-full xl:max-w-sm">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
-                    <input
-                      type="text"
-                      value={searchTerm}
-                      onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Buscar cliente, servicio, recurso o teléfono..."
-                      className="h-11 w-full rounded-md border border-neutral-dark bg-white pl-10 pr-3 text-sm text-primary outline-none ring-primary-light focus:ring-2"
-                    />
-                  </div>
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative w-full lg:max-w-xl lg:flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Buscar cliente, servicio, recurso o teléfono..."
+                    className="h-11 w-full rounded-md border border-neutral-dark bg-white pl-10 pr-3 text-sm text-primary outline-none ring-primary-light focus:ring-2"
+                  />
+                </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:flex xl:items-center">
+              <div className="flex w-full flex-col gap-3 sm:flex-row lg:ml-auto lg:w-auto lg:items-center">
+                {data.length > 0 && (
+                  <>
                     <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as BookingStatusFilter)}>
-                      <SelectTrigger className="min-w-[190px]">
+                      <SelectTrigger className="w-full sm:w-[190px]">
                         <SelectValue placeholder="Filtrar por estado" />
                       </SelectTrigger>
                       <SelectContent>
@@ -956,7 +937,7 @@ export function BookingsPage() {
                     </Select>
 
                     <Select value={channelFilter} onValueChange={(value) => setChannelFilter(value as BookingChannelFilter)}>
-                      <SelectTrigger className="min-w-[190px]">
+                      <SelectTrigger className="w-full sm:w-[190px]">
                         <SelectValue placeholder="Filtrar por canal" />
                       </SelectTrigger>
                       <SelectContent>
@@ -967,9 +948,24 @@ export function BookingsPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                </div>
+                  </>
+                )}
 
+                <Button onClick={() => setShowCreateForm(true)} className="w-full justify-center sm:w-auto lg:shrink-0">
+                  <Plus className="mr-2 size-4" />
+                  Nuevo Turno
+                </Button>
+              </div>
+            </div>
+
+            {data.length === 0 ? (
+              <EmptyState
+                icon={CalendarDays}
+                title="Sin turnos"
+                description="No hay turnos registrados. Crea el primero para comenzar."
+              />
+            ) : (
+              <>
                 <DataTable
                   data={visibleBookings}
                   columns={columns}

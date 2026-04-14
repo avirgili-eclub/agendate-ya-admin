@@ -50,8 +50,8 @@ export function getNavItemsForRole(role?: string) {
 export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Dashboard", subtitle: "Vista general operativa del negocio." },
   "/agenda": { title: "Agenda", subtitle: "Gestion semanal de turnos y disponibilidad." },
-  "/turnos": { title: "Turnos", subtitle: "Administracion completa de reservas y bookings." },
-  "/clientes": { title: "Clientes", subtitle: "Historial y datos de clientes del tenant." },
+  "/turnos": { title: "Turnos", subtitle: "Gestión completa de reservas y turnos del negocio" },
+  "/clientes": { title: "Clientes", subtitle: "Gestiona tu base de clientes, historial de turnos y comunicaciones." },
   "/locales": { title: "Locales", subtitle: "Administracion de sedes y sucursales." },
   "/equipos": { title: "Equipos", subtitle: "Profesionales, salas y equipamiento operativo." },
   "/servicios": { title: "Servicios", subtitle: "Catalogo de servicios y reglas comerciales." },
