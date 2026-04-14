@@ -1,19 +1,18 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Edit, User, Phone, Mail, Calendar, MessageSquare } from "lucide-react";
+import { Edit, User, Phone, Mail, MessageSquare } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
 import {
   fetchClientById,
-  fetchClientBookingHistory,
   toClientsFriendlyMessage,
   type ClientItem,
 } from "@/features/clients/clients-service";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { Button } from "@/shared/ui/button";
-import { StatusChip } from "@/shared/ui/status-chip";
 import { ClientChatHistory } from "@/features/clients/client-chat-history";
+import { ClientBookingHistory } from "@/features/clients/client-booking-history";
 
 type ClientDetailPanelProps = {
   clientId: string;
@@ -46,26 +45,10 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
     }
   }, [isSilentNotFound, onClose]);
 
-  const { data: bookingsData } = useQuery({
-    queryKey: ["client-bookings", clientId],
-    queryFn: () => fetchClientBookingHistory(clientId, { size: 10 }),
-    enabled: isOpen && activeTab === "data",
-  });
-
-  const bookings = bookingsData?.bookings ?? [];
-
   const handleEdit = () => {
     if (client) {
       onEdit(client);
     }
-  };
-
-  const getStatusTone = (status: string): "success" | "warning" | "neutral" | "danger" => {
-    const lowerStatus = status.toLowerCase();
-    if (lowerStatus === "confirmed" || lowerStatus === "completed") return "success";
-    if (lowerStatus === "pending") return "warning";
-    if (lowerStatus === "cancelled" || lowerStatus === "no_show") return "danger";
-    return "neutral";
   };
 
   return (
@@ -175,52 +158,7 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
               {/* Booking History */}
               <section>
                 <h3 className="mb-4 text-lg font-semibold text-primary">Historial de Turnos</h3>
-                {bookings.length === 0 ? (
-                  <div className="rounded-lg bg-neutral p-8 text-center">
-                    <Calendar className="mx-auto size-8 text-neutral-dark" />
-                    <p className="mt-3 text-sm text-primary-light">
-                      No hay turnos registrados para este cliente.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {bookings.map((booking) => (
-                      <div
-                        key={booking.id}
-                        className="rounded-lg border border-neutral-dark bg-white p-4 shadow-sm"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <p className="font-semibold text-primary">{booking.serviceName}</p>
-                            {booking.resourceName && (
-                              <p className="mt-1 text-xs text-primary-light">
-                                Con: {booking.resourceName}
-                              </p>
-                            )}
-                            {booking.locationName && (
-                              <p className="mt-1 text-xs text-primary-light">
-                                Lugar: {booking.locationName}
-                              </p>
-                            )}
-                            <p className="mt-2 text-xs text-primary-light">
-                              {new Date(booking.scheduledAt).toLocaleDateString("es-PY", {
-                                weekday: "long",
-                                year: "numeric",
-                                month: "long",
-                                day: "numeric",
-                              })}{" "}
-                              {new Date(booking.scheduledAt).toLocaleTimeString("es-PY", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </div>
-                          <StatusChip label={booking.status} tone={getStatusTone(booking.status)} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <ClientBookingHistory clientId={clientId} isActive={isOpen && activeTab === "data"} />
               </section>
             </div>
           )}

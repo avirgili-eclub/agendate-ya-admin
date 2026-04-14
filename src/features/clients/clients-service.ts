@@ -38,6 +38,21 @@ export type ClientBookingHistoryItem = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  refs: {
+    bookingId: string;
+    serviceId: string | null;
+    resourceId: string | null;
+    locationId: string | null;
+    googleEventId: string | null;
+  };
+};
+
+export type ClientBookingHistoryPage = {
+  bookings: ClientBookingHistoryItem[];
+  total: number;
+  page: number;
+  size: number;
+  hasMore: boolean;
 };
 
 export type ChatMessage = {
@@ -120,6 +135,13 @@ type ApiClientBooking = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  refs?: {
+    bookingId?: string | null;
+    serviceId?: string | null;
+    resourceId?: string | null;
+    locationId?: string | null;
+    googleEventId?: string | null;
+  } | null;
 };
 
 type ApiChatMessage = {
@@ -280,18 +302,30 @@ export async function updateClient(id: string, input: ClientUpsertInput): Promis
 export async function fetchClientBookingHistory(
   clientId: string,
   params?: { page?: number; size?: number }
-): Promise<{ bookings: ClientBookingHistoryItem[]; total: number }> {
+): Promise<ClientBookingHistoryPage> {
   const queryParams = new URLSearchParams();
   if (params?.page !== undefined) queryParams.set("page", String(params.page));
   if (params?.size !== undefined) queryParams.set("size", String(params.size));
 
   const query = queryParams.toString();
-  const response = await httpRequest<PagedEnvelope<ApiClientBooking>>(
+  const response = await httpRequest<
+    Partial<PagedEnvelope<ApiClientBooking>> & {
+      data?: ApiClientBooking[];
+      meta?: Partial<PagedEnvelope<ApiClientBooking>["meta"]>;
+    }
+  >(
     `/clients/${clientId}/bookings${query ? `?${query}` : ""}`
   );
 
+  const safeData = Array.isArray(response.data) ? response.data : [];
+  const page = typeof response.meta?.page === "number" ? response.meta.page : params?.page ?? 0;
+  const size = typeof response.meta?.size === "number" ? response.meta.size : params?.size ?? safeData.length;
+  const total =
+    typeof response.meta?.total === "number" ? response.meta.total : safeData.length;
+  const loadedUntil = (page + 1) * size;
+
   return {
-    bookings: response.data.map((b) => ({
+    bookings: safeData.map((b) => ({
       id: b.id,
       serviceName: b.serviceName,
       resourceName: b.resourceName ?? undefined,
@@ -299,8 +333,18 @@ export async function fetchClientBookingHistory(
       status: b.status,
       scheduledAt: b.scheduledAt,
       createdAt: b.createdAt,
+      refs: {
+        bookingId: b.refs?.bookingId ?? b.id,
+        serviceId: b.refs?.serviceId ?? null,
+        resourceId: b.refs?.resourceId ?? null,
+        locationId: b.refs?.locationId ?? null,
+        googleEventId: b.refs?.googleEventId ?? null,
+      },
     })),
-    total: response.meta.total,
+    total,
+    page,
+    size,
+    hasMore: loadedUntil < total,
   };
 }
 
