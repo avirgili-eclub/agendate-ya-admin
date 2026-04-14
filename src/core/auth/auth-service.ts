@@ -122,6 +122,10 @@ async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+export async function refreshSessionAccessToken(): Promise<string | null> {
+  return refreshAccessToken();
+}
+
 export async function login(payload: LoginRequest) {
   if (import.meta.env.DEV && payload.email === "admin@admin.com" && payload.password === "admin123") {
     const devUser: AuthUser = {

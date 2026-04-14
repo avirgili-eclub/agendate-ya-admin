@@ -7,7 +7,8 @@ import {
   useRef,
   type PropsWithChildren,
 } from "react";
-import { getSessionState, subscribeSession } from "@/core/auth/session-store";
+import { refreshSessionAccessToken } from "@/core/auth/auth-service";
+import { decodeJwt, getSessionState, subscribeSession } from "@/core/auth/session-store";
 import {
   createNotificationsStream,
   fetchNotifications,
@@ -35,6 +36,7 @@ interface NotificationContextValue {
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 const LAST_EVENT_ID_STORAGE_KEY = "agendateya_admin_notifications_last_event_id";
+const TOKEN_EXPIRY_BUFFER_SECONDS = 60;
 
 function getStoredLastEventId(): string | undefined {
   if (typeof window === "undefined") {
@@ -79,6 +81,23 @@ function applyStreamEvent(previous: Notification[], event: NotificationsStreamEv
   const mapped = mapBackendNotification(backendNotification);
   const withoutCurrent = previous.filter((item) => item.id !== mapped.id);
   return mergeNotifications([mapped], withoutCurrent);
+}
+
+function isTokenExpiredOrNearExpiry(token: string, bufferSeconds = TOKEN_EXPIRY_BUFFER_SECONDS): boolean {
+  const payload = decodeJwt(token);
+  const expClaim = payload?.exp;
+  const exp =
+    typeof expClaim === "number"
+      ? expClaim
+      : typeof expClaim === "string"
+        ? Number(expClaim)
+        : Number.NaN;
+
+  if (!Number.isFinite(exp)) {
+    return false;
+  }
+
+  return exp * 1000 <= Date.now() + bufferSeconds * 1000;
 }
 
 export function NotificationProvider({ children }: PropsWithChildren) {
@@ -137,6 +156,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     }
 
     let cancelled = false;
+    let isRefreshingStreamToken = false;
 
     const bootstrap = async () => {
       try {
@@ -158,32 +178,65 @@ export function NotificationProvider({ children }: PropsWithChildren) {
 
     bootstrap();
 
-    streamRef.current?.close();
-    try {
-      streamRef.current = createNotificationsStream(
-        accessToken,
-        {
-          onEvent: (event) => {
-            if (event.lastEventId) {
-              storeLastEventId(event.lastEventId);
-            }
+    function onStreamEvent(event: NotificationsStreamEvent) {
+      if (event.lastEventId) {
+        storeLastEventId(event.lastEventId);
+      }
 
-            setNotifications((previous) => {
-              const next = applyStreamEvent(previous, event);
-              if (typeof event.data?.unreadCount === "number") {
-                setBackendUnreadCount(event.data.unreadCount);
-              } else if (event.eventName.startsWith("notification.")) {
-                scheduleUnreadCountSync();
-              }
-              return next;
-            });
-          },
-        },
-        getStoredLastEventId(),
-      );
-    } catch {
-      streamRef.current = null;
+      setNotifications((previous) => {
+        const next = applyStreamEvent(previous, event);
+        if (typeof event.data?.unreadCount === "number") {
+          setBackendUnreadCount(event.data.unreadCount);
+        } else if (event.eventName.startsWith("notification.")) {
+          scheduleUnreadCountSync();
+        }
+        return next;
+      });
     }
+
+    function connectStream(token: string) {
+      streamRef.current?.close();
+      try {
+        streamRef.current = createNotificationsStream(
+          token,
+          {
+            onEvent: onStreamEvent,
+            onError: () => {
+              void handleStreamError();
+            },
+          },
+          getStoredLastEventId(),
+        );
+      } catch {
+        streamRef.current = null;
+      }
+    }
+
+    async function handleStreamError() {
+      if (cancelled || isRefreshingStreamToken) {
+        return;
+      }
+
+      const currentToken = getSessionState().accessToken;
+      if (!currentToken || !isTokenExpiredOrNearExpiry(currentToken)) {
+        return;
+      }
+
+      isRefreshingStreamToken = true;
+      streamRef.current?.close();
+      streamRef.current = null;
+
+      try {
+        const refreshedToken = await refreshSessionAccessToken();
+        if (!cancelled && refreshedToken) {
+          connectStream(refreshedToken);
+        }
+      } finally {
+        isRefreshingStreamToken = false;
+      }
+    }
+
+    connectStream(accessToken);
 
     return () => {
       cancelled = true;
