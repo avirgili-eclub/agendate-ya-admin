@@ -51,6 +51,13 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
     }
   };
 
+  const completedCount = client?.bookingSummary?.completedCount ?? client?.totalBookings ?? 0;
+  const confirmedCount = client?.bookingSummary?.confirmedCount ?? 0;
+  const noShowCount = client?.bookingSummary?.noShowCount ?? 0;
+  const cancelledCount = client?.bookingSummary?.cancelledCount ?? 0;
+  const completedAndConfirmedTotal = completedCount + confirmedCount;
+  const missedRatePct = client?.bookingSummary?.missedRatePct ?? null;
+
   return (
     <SidePanel isOpen={isOpen} onClose={onClose} title="Detalle del Cliente">
       {isLoading && (
@@ -151,6 +158,53 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
                         day: "numeric",
                       })}
                     </p>
+                  </div>
+
+                  <div className="border-t border-neutral-dark pt-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-primary-light">
+                      Resumen de Turnos
+                    </p>
+
+                    {!client.bookingSummary ? (
+                      <p className="mt-2 text-sm text-primary-light">
+                        Sin datos suficientes para mostrar métricas de turnos.
+                      </p>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-neutral-dark bg-white p-3">
+                          <p className="text-[11px] uppercase tracking-wide text-primary-light">Completados</p>
+                          <p className="mt-1 text-lg font-semibold text-primary">
+                            {completedCount}
+                            <span className="ml-1 text-sm font-medium text-primary-light">
+                              / {completedAndConfirmedTotal}
+                            </span>
+                          </p>
+                          <p className="mt-1 text-[11px] text-primary-light">sobre completados + confirmados</p>
+                        </div>
+
+                        <div className="rounded-lg border border-neutral-dark bg-white p-3">
+                          <p className="text-[11px] uppercase tracking-wide text-primary-light">No Show</p>
+                          <p className="mt-1 text-lg font-semibold text-amber-700">{noShowCount}</p>
+                          <p className="mt-1 text-[11px] text-primary-light">ausencias registradas</p>
+                        </div>
+
+                        <div className="rounded-lg border border-neutral-dark bg-white p-3">
+                          <p className="text-[11px] uppercase tracking-wide text-primary-light">Cancelados</p>
+                          <p className="mt-1 text-lg font-semibold text-primary">{cancelledCount}</p>
+                          <p className="mt-1 text-[11px] text-primary-light">turnos cancelados</p>
+                        </div>
+
+                        <div className="rounded-lg border border-neutral-dark bg-white p-3">
+                          <p className="text-[11px] uppercase tracking-wide text-primary-light">Tasa de inasistencia</p>
+                          <p className="mt-1 text-lg font-semibold text-primary">
+                            {missedRatePct === null ? "-" : `${missedRatePct.toFixed(1)}%`}
+                          </p>
+                          <p className="mt-1 text-[11px] text-primary-light">
+                            {missedRatePct === null ? "sin historial suficiente" : "no-show + cancelados"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>

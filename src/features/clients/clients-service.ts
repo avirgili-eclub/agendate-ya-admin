@@ -18,6 +18,16 @@ export type ClientItem = {
   updatedAt: string;
   lastBookingDate?: string;
   totalBookings: number;
+  bookingSummary: BookingSummary | null;
+};
+
+export type BookingSummary = {
+  completedCount: number;
+  confirmedCount: number;
+  noShowCount: number;
+  cancelledCount: number;
+  totalCount: number;
+  missedRatePct: number | null;
 };
 
 /**
@@ -97,6 +107,14 @@ type ApiClient = {
     lastBookingDate?: string;
     totalBookings?: number;
   };
+  bookingSummary?: {
+    completedCount: number;
+    confirmedCount: number;
+    noShowCount: number;
+    cancelledCount: number;
+    totalCount: number;
+    missedRatePct: number | null;
+  } | null;
 };
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
@@ -198,6 +216,16 @@ function mapApiChatMessageToItem(api: ApiChatMessage): ChatMessage {
  */
 function mapApiClientToItem(api: ApiClient): ClientItem {
   const { firstName, lastName } = splitFullName(api.fullName ?? "");
+  const bookingSummary: BookingSummary | null = api.bookingSummary
+    ? {
+        completedCount: api.bookingSummary.completedCount,
+        confirmedCount: api.bookingSummary.confirmedCount,
+        noShowCount: api.bookingSummary.noShowCount,
+        cancelledCount: api.bookingSummary.cancelledCount,
+        totalCount: api.bookingSummary.totalCount,
+        missedRatePct: api.bookingSummary.missedRatePct,
+      }
+    : null;
 
   return {
     id: api.id,
@@ -210,7 +238,9 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
     createdAt: api.createdAt,
     updatedAt: api.updatedAt ?? api.createdAt,
     lastBookingDate: api.metadata?.lastBookingDate,
-    totalBookings: api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
+    totalBookings:
+      bookingSummary?.completedCount ?? api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
+    bookingSummary,
   };
 }
 
