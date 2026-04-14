@@ -159,27 +159,31 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     bootstrap();
 
     streamRef.current?.close();
-    streamRef.current = createNotificationsStream(
-      accessToken,
-      {
-        onEvent: (event) => {
-          if (event.lastEventId) {
-            storeLastEventId(event.lastEventId);
-          }
-
-          setNotifications((previous) => {
-            const next = applyStreamEvent(previous, event);
-            if (typeof event.data?.unreadCount === "number") {
-              setBackendUnreadCount(event.data.unreadCount);
-            } else if (event.eventName.startsWith("notification.")) {
-              scheduleUnreadCountSync();
+    try {
+      streamRef.current = createNotificationsStream(
+        accessToken,
+        {
+          onEvent: (event) => {
+            if (event.lastEventId) {
+              storeLastEventId(event.lastEventId);
             }
-            return next;
-          });
+
+            setNotifications((previous) => {
+              const next = applyStreamEvent(previous, event);
+              if (typeof event.data?.unreadCount === "number") {
+                setBackendUnreadCount(event.data.unreadCount);
+              } else if (event.eventName.startsWith("notification.")) {
+                scheduleUnreadCountSync();
+              }
+              return next;
+            });
+          },
         },
-      },
-      getStoredLastEventId(),
-    );
+        getStoredLastEventId(),
+      );
+    } catch {
+      streamRef.current = null;
+    }
 
     return () => {
       cancelled = true;

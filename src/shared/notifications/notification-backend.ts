@@ -41,6 +41,20 @@ function toApiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
 
+function toAbsoluteApiUrl(path: string): string {
+  const fullPath = toApiUrl(path);
+  const isAbsolute = /^https?:\/\//i.test(fullPath);
+  if (isAbsolute) {
+    return fullPath;
+  }
+
+  if (typeof window === "undefined") {
+    return fullPath;
+  }
+
+  return new URL(fullPath, window.location.origin).toString();
+}
+
 function tryParseObject(input: unknown): Record<string, unknown> | null {
   if (!input || typeof input !== "object") {
     return null;
@@ -155,7 +169,7 @@ export function createNotificationsStream(
   handlers: StreamHandlers,
   lastEventId?: string,
 ): EventSource {
-  const streamUrl = new URL(toApiUrl("/admin/notifications/stream"));
+  const streamUrl = new URL(toAbsoluteApiUrl("/admin/notifications/stream"));
   streamUrl.searchParams.set("access_token", accessToken);
 
   if (lastEventId) {
