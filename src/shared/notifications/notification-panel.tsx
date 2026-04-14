@@ -137,6 +137,14 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
                         <p className={cn("text-sm font-semibold", styles.text)}>{notification.title}</p>
                       ) : null}
                       <p className={cn("text-sm", styles.text)}>{notification.message}</p>
+                      {notification.actionUrl ? (
+                        <a
+                          href={notification.actionUrl}
+                          className="mt-2 inline-flex text-xs font-semibold text-primary hover:underline"
+                        >
+                          Ver detalle
+                        </a>
+                      ) : null}
                       <p className="mt-1 text-xs text-primary-light">
                         {formatTimestamp(notification.timestamp)}
                       </p>
