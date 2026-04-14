@@ -112,28 +112,11 @@ export function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary">Clientes</h1>
-          <p className="mt-1 text-sm text-primary-light">
-            Gestiona tu base de clientes, historial de turnos y comunicaciones.
-          </p>
-        </div>
-        <Button
-          className="flex items-center gap-2"
-          onClick={() => setFormMode("create")}
-        >
-          <Plus className="size-4" />
-          Nuevo Cliente
-        </Button>
-      </header>
-
       <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
       {/* Search and Filter */}
       <PageCard>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
             <input
@@ -148,6 +131,16 @@ export function ClientsPage() {
                 Escribe al menos 3 caracteres para buscar.
               </p>
             )}
+          </div>
+
+          <div className="flex w-full justify-end lg:w-auto">
+            <Button
+              className="flex w-full items-center justify-center gap-2 sm:w-auto"
+              onClick={() => setFormMode("create")}
+            >
+              <Plus className="size-4" />
+              Nuevo Cliente
+            </Button>
           </div>
         </div>
       </PageCard>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type FormEvent } from "react";
-import { MapPin, Users, CalendarDays } from "lucide-react";
+import { MapPin, Users, CalendarDays, ListChecks } from "lucide-react";
 import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -588,6 +588,21 @@ export function AgendaPage() {
     });
   };
 
+  const handleToggleAllResources = () => {
+    if (isProfessional) return;
+    
+    const visibleResourceIds = scopedResources.map((r) => r.id);
+    const allSelected = visibleResourceIds.every((id) => selectedResources.includes(id));
+    
+    if (allSelected) {
+      // Deselect all
+      setSelectedResources([]);
+    } else {
+      // Select all
+      setSelectedResources(visibleResourceIds);
+    }
+  };
+
   const errorMessage = calendarBookingsQuery.isError
     ? toAgendaFriendlyMessage(calendarBookingsQuery.error as unknown as AppError)
     : null;
@@ -658,10 +673,29 @@ export function AgendaPage() {
           {/* Resources list */}
           {!isProfessional && (
             <PageCard>
-              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-primary">
-                <Users className="size-4" />
-                Equipo
-              </h3>
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Users className="size-4" />
+                  Equipo
+                </h3>
+                {scopedResources.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleToggleAllResources}
+                    className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-primary-light transition hover:bg-neutral-light hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
+                    title={
+                      scopedResources.every((r) => selectedResources.includes(r.id))
+                        ? "Deseleccionar todos"
+                        : "Seleccionar todos"
+                    }
+                  >
+                    <ListChecks className="size-3.5" />
+                    {scopedResources.every((r) => selectedResources.includes(r.id))
+                      ? "Ninguno"
+                      : "Todos"}
+                  </button>
+                )}
+              </div>
               {isResourcesLoading && selectedLocations.length > 0 && <LoadingState message="Cargando recursos..." />}
               {hasResourcesError && (
                 <ErrorState

@@ -102,7 +102,9 @@ function emit() {
 export function subscribeSession(listener: SessionListener) {
   listeners.add(listener);
   listener({ ...state });
-  return () => listeners.delete(listener);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function getSessionState(): SessionState {

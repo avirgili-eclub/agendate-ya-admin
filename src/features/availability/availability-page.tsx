@@ -8,12 +8,12 @@ import { fetchLocationResources } from "@/features/agenda/agenda-service";
 import {
   DAY_NAMES,
   createAvailabilityOverride,
-  createAvailabilityRule,
   deleteAvailabilityOverride,
-  deleteAvailabilityRule,
   fetchAvailabilityOverrides,
   fetchAvailabilityRules,
+  replaceAvailabilityRules,
   toAvailabilityFriendlyMessage,
+  type AvailabilityRule,
   type CreateOverrideInput,
   type CreateRuleInput,
 } from "@/features/availability/availability-service";
@@ -26,6 +26,7 @@ import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
+import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 
 type Feedback = { tone: "success" | "error"; message: string } | null;
 
@@ -33,6 +34,19 @@ type WeeklyTemplateInput = {
   startTime: string;
   endTime: string;
   activeDays: number[];
+};
+
+type TimeBlock = {
+  startTime: string;
+  endTime: string;
+};
+
+type WeeklyDraft = Record<number, TimeBlock[]>;
+
+type WeeklyConfirmAction = {
+  mode: "save" | "restore";
+  totalBlocks: number;
+  removedDays: string[];
 };
 
 function toCheckedDays(daySet: Set<number>): number[] {
@@ -48,6 +62,108 @@ function gatherRuleInputs(resourceIds: string[], template: WeeklyTemplateInput):
       endTime: template.endTime,
     })),
   );
+}
+
+function createEmptyDraft(): WeeklyDraft {
+  return {
+    0: [],
+    1: [],
+    2: [],
+    3: [],
+    4: [],
+    5: [],
+    6: [],
+  };
+}
+
+function toUiTime(value: string): string {
+  return value.length >= 5 ? value.slice(0, 5) : value;
+}
+
+function buildWeeklyDraft(rules: AvailabilityRule[]): WeeklyDraft {
+  const draft = createEmptyDraft();
+  for (const rule of rules) {
+    draft[rule.dayOfWeek].push({
+      startTime: toUiTime(rule.startTime),
+      endTime: toUiTime(rule.endTime),
+    });
+  }
+  for (const day of Object.keys(draft)) {
+    const dayNumber = Number(day);
+    draft[dayNumber].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
+  return draft;
+}
+
+function cloneDraft(draft: WeeklyDraft): WeeklyDraft {
+  return {
+    0: draft[0].map((block) => ({ ...block })),
+    1: draft[1].map((block) => ({ ...block })),
+    2: draft[2].map((block) => ({ ...block })),
+    3: draft[3].map((block) => ({ ...block })),
+    4: draft[4].map((block) => ({ ...block })),
+    5: draft[5].map((block) => ({ ...block })),
+    6: draft[6].map((block) => ({ ...block })),
+  };
+}
+
+function draftToRuleInputs(resourceId: string, draft: WeeklyDraft): CreateRuleInput[] {
+  return Object.entries(draft).flatMap(([dayOfWeek, blocks]) =>
+    blocks.map((block) => ({
+      resourceId,
+      dayOfWeek: Number(dayOfWeek),
+      startTime: block.startTime,
+      endTime: block.endTime,
+      validFrom: undefined,
+      validUntil: undefined,
+    })),
+  );
+}
+
+function serializeDraft(draft: WeeklyDraft): string {
+  const normalized = Object.keys(draft)
+    .map((day) => Number(day))
+    .sort((a, b) => a - b)
+    .map((day) => ({
+      day,
+      blocks: [...draft[day]].sort((a, b) => a.startTime.localeCompare(b.startTime)),
+    }));
+  return JSON.stringify(normalized);
+}
+
+function validateWeeklyDraft(draft: WeeklyDraft): string[] {
+  const errors: string[] = [];
+
+  for (const dayOfWeek of Object.keys(draft).map(Number)) {
+    const blocks = [...draft[dayOfWeek]].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const seenStarts = new Set<string>();
+
+    for (let i = 0; i < blocks.length; i += 1) {
+      const block = blocks[i];
+
+      if (!block.startTime || !block.endTime) {
+        errors.push(`${DAY_NAMES[dayOfWeek]}: cada bloque requiere hora de inicio y fin.`);
+      }
+
+      if (block.startTime >= block.endTime) {
+        errors.push(`${DAY_NAMES[dayOfWeek]}: la hora de inicio debe ser menor a la hora de fin.`);
+      }
+
+      if (seenStarts.has(block.startTime)) {
+        errors.push(`${DAY_NAMES[dayOfWeek]}: hay bloques duplicados con inicio ${block.startTime}.`);
+      }
+      seenStarts.add(block.startTime);
+
+      if (i > 0) {
+        const previous = blocks[i - 1];
+        if (block.startTime < previous.endTime) {
+          errors.push(`${DAY_NAMES[dayOfWeek]}: hay bloques horarios solapados.`);
+        }
+      }
+    }
+  }
+
+  return errors;
 }
 
 export function AvailabilityPage() {
@@ -77,11 +193,15 @@ export function AvailabilityPage() {
   const [specialAvailable, setSpecialAvailable] = useState(true);
   const [specialStartTime, setSpecialStartTime] = useState("08:00");
   const [specialEndTime, setSpecialEndTime] = useState("13:00");
+  const [weeklyDraft, setWeeklyDraft] = useState<WeeklyDraft>(createEmptyDraft);
+  const [loadedWeeklyDraft, setLoadedWeeklyDraft] = useState<WeeklyDraft>(createEmptyDraft);
+  const [weeklyConfirmAction, setWeeklyConfirmAction] = useState<WeeklyConfirmAction | null>(null);
 
   const locationsQuery = useQuery({
     queryKey: ["availability", "locations"],
     queryFn: fetchResourceLocations,
     staleTime: 60_000,
+    enabled: !isProfessional,
   });
 
   const resourcesQuery = useResourcesQuery({
@@ -89,6 +209,8 @@ export function AvailabilityPage() {
     location: selectedLocationName,
     page: 0,
     pageSize: 100,
+  }, {
+    enabled: !isProfessional,
   });
 
   const effectiveResourceId = isProfessional && currentResourceId ? currentResourceId : selectedResourceId;
@@ -106,6 +228,16 @@ export function AvailabilityPage() {
     enabled: !!effectiveResourceId,
     staleTime: 30_000,
   });
+
+  useEffect(() => {
+    if (!rulesQuery.data) {
+      return;
+    }
+
+    const nextDraft = buildWeeklyDraft(rulesQuery.data);
+    setWeeklyDraft(nextDraft);
+    setLoadedWeeklyDraft(cloneDraft(nextDraft));
+  }, [rulesQuery.data]);
 
   const locations = useMemo(
     () => ["Todas las ubicaciones", ...(locationsQuery.data ?? []).map((loc) => loc.name)],
@@ -131,10 +263,16 @@ export function AvailabilityPage() {
     }
   }, [isProfessional, currentResourceId, selectedResourceId]);
 
-  const createRuleMutation = useMutation({
-    mutationFn: createAvailabilityRule,
+  const replaceRulesMutation = useMutation({
+    mutationFn: async (draft: WeeklyDraft) => {
+      if (!effectiveResourceId) {
+        throw new Error("Selecciona un recurso para guardar disponibilidad.");
+      }
+      const rules = draftToRuleInputs(effectiveResourceId, draft);
+      return replaceAvailabilityRules(effectiveResourceId, { rules });
+    },
     onSuccess: () => {
-      setFeedback({ tone: "success", message: "Regla creada correctamente." });
+      setFeedback({ tone: "success", message: "Horarios actualizados correctamente." });
       void queryClient.invalidateQueries({ queryKey: ["availability", "rules", effectiveResourceId] });
     },
     onError: (error) => {
@@ -143,17 +281,11 @@ export function AvailabilityPage() {
     },
   });
 
-  const deleteRuleMutation = useMutation({
-    mutationFn: deleteAvailabilityRule,
-    onSuccess: () => {
-      setFeedback({ tone: "success", message: "Regla eliminada." });
-      void queryClient.invalidateQueries({ queryKey: ["availability", "rules", effectiveResourceId] });
-    },
-    onError: (error) => {
-      const appError = error as unknown as AppError;
-      setFeedback({ tone: "error", message: toAvailabilityFriendlyMessage(appError) });
-    },
-  });
+  const weeklyValidationErrors = useMemo(() => validateWeeklyDraft(weeklyDraft), [weeklyDraft]);
+  const hasWeeklyChanges = useMemo(
+    () => serializeDraft(weeklyDraft) !== serializeDraft(loadedWeeklyDraft),
+    [weeklyDraft, loadedWeeklyDraft],
+  );
 
   const createOverrideMutation = useMutation({
     mutationFn: createAvailabilityOverride,
@@ -196,8 +328,13 @@ export function AvailabilityPage() {
         activeDays: toCheckedDays(globalDays),
       };
 
-      const ruleInputs = gatherRuleInputs(uniqueResourceIds, template);
-      await Promise.all(ruleInputs.map((input) => createAvailabilityRule(input)));
+      await Promise.all(
+        uniqueResourceIds.map((resourceId) =>
+          replaceAvailabilityRules(resourceId, {
+            rules: gatherRuleInputs([resourceId], template),
+          }),
+        ),
+      );
       return uniqueResourceIds.length;
     },
     onSuccess: (count) => {
@@ -224,8 +361,13 @@ export function AvailabilityPage() {
         endTime: localEndTime,
         activeDays: toCheckedDays(localDays),
       };
-      const ruleInputs = gatherRuleInputs(resources.map((item) => item.id), template);
-      await Promise.all(ruleInputs.map((input) => createAvailabilityRule(input)));
+      await Promise.all(
+        resources.map((resource) =>
+          replaceAvailabilityRules(resource.id, {
+            rules: gatherRuleInputs([resource.id], template),
+          }),
+        ),
+      );
       return resources.length;
     },
     onSuccess: (count) => {
@@ -287,11 +429,105 @@ export function AvailabilityPage() {
     });
   }
 
+  function toggleWeeklyDay(dayOfWeek: number) {
+    setWeeklyDraft((prev) => {
+      const next = cloneDraft(prev);
+      if (next[dayOfWeek].length > 0) {
+        next[dayOfWeek] = [];
+      } else {
+        next[dayOfWeek] = [{ startTime: "09:00", endTime: "18:00" }];
+      }
+      return next;
+    });
+  }
+
+  function addWeeklyBlock(dayOfWeek: number) {
+    setWeeklyDraft((prev) => {
+      const next = cloneDraft(prev);
+      next[dayOfWeek].push({ startTime: "09:00", endTime: "18:00" });
+      return next;
+    });
+  }
+
+  function updateWeeklyBlock(dayOfWeek: number, index: number, patch: Partial<TimeBlock>) {
+    setWeeklyDraft((prev) => {
+      const next = cloneDraft(prev);
+      next[dayOfWeek][index] = {
+        ...next[dayOfWeek][index],
+        ...patch,
+      };
+      return next;
+    });
+  }
+
+  function removeWeeklyBlock(dayOfWeek: number, index: number) {
+    setWeeklyDraft((prev) => {
+      const next = cloneDraft(prev);
+      next[dayOfWeek] = next[dayOfWeek].filter((_, blockIndex) => blockIndex !== index);
+      return next;
+    });
+  }
+
+  function handleWeeklySaveRequest() {
+    if (!effectiveResourceId) {
+      return;
+    }
+
+    if (weeklyValidationErrors.length > 0 || !hasWeeklyChanges) {
+      return;
+    }
+
+    const removedDays = Object.keys(loadedWeeklyDraft)
+      .map(Number)
+      .filter((day) => loadedWeeklyDraft[day].length > 0 && weeklyDraft[day].length === 0)
+      .map((day) => DAY_NAMES[day]);
+
+    const totalBlocks = Object.values(weeklyDraft).reduce((sum, blocks) => sum + blocks.length, 0);
+    setWeeklyConfirmAction({
+      mode: "save",
+      totalBlocks,
+      removedDays,
+    });
+  }
+
+  function handleRestoreLocationDefaultsRequest() {
+    if (!effectiveResourceId) {
+      return;
+    }
+
+    const removedDays = Object.keys(loadedWeeklyDraft)
+      .map(Number)
+      .filter((day) => loadedWeeklyDraft[day].length > 0)
+      .map((day) => DAY_NAMES[day]);
+
+    setWeeklyConfirmAction({
+      mode: "restore",
+      totalBlocks: 0,
+      removedDays,
+    });
+  }
+
+  async function handleConfirmWeeklyAction() {
+    if (!weeklyConfirmAction) {
+      return;
+    }
+
+    try {
+      if (weeklyConfirmAction.mode === "save") {
+        await replaceRulesMutation.mutateAsync(weeklyDraft);
+      } else {
+        await replaceRulesMutation.mutateAsync(createEmptyDraft());
+      }
+      setWeeklyConfirmAction(null);
+    } catch {
+      // Feedback is already handled by mutation callbacks.
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageCard>
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-primary">Disponibilidad</h1>
           <p className="mt-1 text-sm text-primary-light">
             {isProfessional
               ? "Gestiona tu disponibilidad personal."
@@ -309,8 +545,8 @@ export function AvailabilityPage() {
           />
         )}
 
-        {locationsQuery.isLoading && <LoadingState message="Cargando localidades..." />}
-        {locationsQuery.isError && (
+        {!isProfessional && locationsQuery.isLoading && <LoadingState message="Cargando localidades..." />}
+        {!isProfessional && locationsQuery.isError && (
           <ErrorState
             title="No se pudieron cargar localidades"
             message="Reintenta para continuar con la configuración de disponibilidad."
@@ -318,7 +554,7 @@ export function AvailabilityPage() {
           />
         )}
 
-        {!locationsQuery.isLoading && !locationsQuery.isError && (locationsQuery.data?.length ?? 0) === 0 && (
+        {!isProfessional && !locationsQuery.isLoading && !locationsQuery.isError && (locationsQuery.data?.length ?? 0) === 0 && (
           <EmptyState
             icon={Calendar}
             title="Sin localidades"
@@ -573,37 +809,53 @@ export function AvailabilityPage() {
               {rulesQuery.isSuccess && (
                 <>
                   {rulesQuery.data.length === 0 && (
-                    <div className="py-8 text-center text-sm text-primary-light">No hay reglas semanales definidas.</div>
-                  )}
-                  {rulesQuery.data.length > 0 && (
-                    <div className="mb-4 space-y-2">
-                      {rulesQuery.data.map((rule) => (
-                        <div key={rule.id} className="flex items-center justify-between rounded-md border border-neutral-dark bg-neutral p-3">
-                          <p className="text-sm font-medium text-primary">
-                            {DAY_NAMES[rule.dayOfWeek]} - {rule.startTime} a {rule.endTime}
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (window.confirm("Eliminar esta regla?")) {
-                                deleteRuleMutation.mutate(rule.id);
-                              }
-                            }}
-                            className="text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
-                      ))}
+                    <div className="mb-4 rounded-md border border-primary/20 bg-primary/5 p-3 text-sm text-primary-light">
+                      Este recurso no tiene reglas personalizadas. Si guardas sin bloques, seguirá usando el horario de
+                      la localidad.
                     </div>
                   )}
-                  <WeeklyRuleForm
-                    resourceId={effectiveResourceId}
-                    onSubmit={async (input) => {
-                      await createRuleMutation.mutateAsync(input);
-                    }}
+
+                  {weeklyValidationErrors.length > 0 && (
+                    <div className="mb-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                      <p className="font-medium">Corrige estos errores antes de guardar:</p>
+                      <ul className="mt-1 list-disc pl-5">
+                        {weeklyValidationErrors.map((errorMessage) => (
+                          <li key={errorMessage}>{errorMessage}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <WeeklyRulesEditor
+                    draft={weeklyDraft}
+                    onToggleDay={toggleWeeklyDay}
+                    onAddBlock={addWeeklyBlock}
+                    onUpdateBlock={updateWeeklyBlock}
+                    onRemoveBlock={removeWeeklyBlock}
                   />
+
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={handleRestoreLocationDefaultsRequest}
+                      disabled={replaceRulesMutation.isPending}
+                    >
+                      Restaurar horarios de la localidad
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setWeeklyDraft(cloneDraft(loadedWeeklyDraft))}
+                      disabled={!hasWeeklyChanges || replaceRulesMutation.isPending}
+                    >
+                      Descartar cambios
+                    </Button>
+                    <Button
+                      onClick={handleWeeklySaveRequest}
+                      disabled={!hasWeeklyChanges || weeklyValidationErrors.length > 0 || replaceRulesMutation.isPending}
+                    >
+                      {replaceRulesMutation.isPending ? "Guardando..." : "Guardar horarios"}
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
@@ -662,67 +914,114 @@ export function AvailabilityPage() {
             </div>
           </div>
         )}
+
+        <ConfirmDialog
+          isOpen={Boolean(weeklyConfirmAction)}
+          title={weeklyConfirmAction?.mode === "restore" ? "Restaurar horario de localidad" : "Confirmar actualización de horarios"}
+          tone="warning"
+          confirmLabel={weeklyConfirmAction?.mode === "restore" ? "Sí, restaurar" : "Sí, guardar cambios"}
+          pendingLabel="Guardando..."
+          isPending={replaceRulesMutation.isPending}
+          onClose={() => {
+            if (!replaceRulesMutation.isPending) {
+              setWeeklyConfirmAction(null);
+            }
+          }}
+          onConfirm={() => {
+            void handleConfirmWeeklyAction();
+          }}
+          message={
+            weeklyConfirmAction?.mode === "restore"
+              ? "Se eliminarán todas las reglas personalizadas y este recurso volverá a usar el horario de su localidad."
+              : `Se guardarán ${weeklyConfirmAction?.totalBlocks ?? 0} bloque(s) horarios para este recurso.`
+          }
+        >
+          {weeklyConfirmAction?.removedDays.length ? (
+            <p>
+              Días removidos: <strong className="text-primary">{weeklyConfirmAction.removedDays.join(", ")}</strong>
+            </p>
+          ) : null}
+          <p>
+            Esta acción reemplaza todas las reglas actuales del recurso en una sola operación.
+          </p>
+        </ConfirmDialog>
       </PageCard>
     </div>
   );
 }
 
-type WeeklyRuleFormProps = {
-  resourceId: string;
-  onSubmit: (input: CreateRuleInput) => Promise<void>;
+type WeeklyRulesEditorProps = {
+  draft: WeeklyDraft;
+  onToggleDay: (dayOfWeek: number) => void;
+  onAddBlock: (dayOfWeek: number) => void;
+  onUpdateBlock: (dayOfWeek: number, index: number, patch: Partial<TimeBlock>) => void;
+  onRemoveBlock: (dayOfWeek: number, index: number) => void;
 };
 
-function WeeklyRuleForm({ resourceId, onSubmit }: WeeklyRuleFormProps) {
-  const [dayOfWeek, setDayOfWeek] = useState(0);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("18:00");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    try {
-      await onSubmit({ resourceId, dayOfWeek, startTime, endTime });
-      setDayOfWeek(0);
-      setStartTime("09:00");
-      setEndTime("18:00");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
+function WeeklyRulesEditor({
+  draft,
+  onToggleDay,
+  onAddBlock,
+  onUpdateBlock,
+  onRemoveBlock,
+}: WeeklyRulesEditorProps) {
   return (
-    <form onSubmit={handleSubmit} className="rounded-md border border-primary/20 bg-primary/5 p-4">
-      <h3 className="mb-3 text-sm font-semibold text-primary">Agregar regla semanal</h3>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-        <select
-          value={dayOfWeek}
-          onChange={(e) => setDayOfWeek(Number(e.target.value))}
-          className="rounded-md border border-neutral-dark bg-white px-2 py-2 text-sm text-primary"
-        >
-          {DAY_NAMES.map((name, index) => (
-            <option key={name} value={index}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <input
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="rounded-md border border-neutral-dark bg-white px-2 py-2 text-sm text-primary"
-        />
-        <input
-          type="time"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-          className="rounded-md border border-neutral-dark bg-white px-2 py-2 text-sm text-primary"
-        />
-        <Button type="submit" size="sm" disabled={isSubmitting} className="w-full">
-          {isSubmitting ? "..." : <Plus className="size-4" />}
-        </Button>
-      </div>
-    </form>
+    <div className="space-y-3">
+      {DAY_NAMES.map((dayName, dayOfWeek) => {
+        const blocks = draft[dayOfWeek];
+        const isEnabled = blocks.length > 0;
+
+        return (
+          <div key={dayName} className="rounded-md border border-neutral-dark p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-primary">{dayName}</p>
+                <p className="text-xs text-primary-light">
+                  {isEnabled ? "Disponible" : "No disponible"}
+                </p>
+              </div>
+              <Button type="button" size="sm" variant={isEnabled ? "outline" : "primary"} onClick={() => onToggleDay(dayOfWeek)}>
+                {isEnabled ? "Desactivar" : "Activar"}
+              </Button>
+            </div>
+
+            {isEnabled && (
+              <div className="mt-3 space-y-2">
+                {blocks.map((block, index) => (
+                  <div key={`${dayName}-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                    <input
+                      type="time"
+                      value={block.startTime}
+                      onChange={(event) => onUpdateBlock(dayOfWeek, index, { startTime: event.target.value })}
+                      className="rounded-md border border-neutral-dark bg-white px-2 py-2 text-sm text-primary"
+                    />
+                    <input
+                      type="time"
+                      value={block.endTime}
+                      onChange={(event) => onUpdateBlock(dayOfWeek, index, { endTime: event.target.value })}
+                      className="rounded-md border border-neutral-dark bg-white px-2 py-2 text-sm text-primary"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-red-600 hover:bg-red-50"
+                      onClick={() => onRemoveBlock(dayOfWeek, index)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+
+                <Button type="button" size="sm" variant="outline" onClick={() => onAddBlock(dayOfWeek)}>
+                  <Plus className="mr-2 size-4" />
+                  Agregar bloque
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
