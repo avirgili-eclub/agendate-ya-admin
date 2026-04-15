@@ -260,14 +260,6 @@ export function TenantSettingsPage() {
     <div className="space-y-6">
       {feedback ? <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} /> : null}
 
-      {/* Header */}
-      <header>
-        <h1 className="text-2xl font-semibold text-primary">Configuración</h1>
-        <p className="mt-1 text-sm text-primary-light">
-          Ajusta la configuración de tu cuenta y preferencias del sistema.
-        </p>
-      </header>
-
       {/* Error State */}
       {infoError && (
         <PageCard>
