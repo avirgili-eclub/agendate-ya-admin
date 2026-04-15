@@ -1,5 +1,6 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
@@ -7,6 +8,7 @@ import type { AppError } from "@/core/errors/app-error";
 import { register, startGoogleLogin } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
+import { fetchBusinessSubTypes } from "@/shared/lib/business-subtypes";
 import {
   Select,
   SelectContent,
@@ -116,7 +118,7 @@ export function RegisterPage() {
   const { isCoolingDown, remainingSeconds, startCooldown } = useRateLimitCooldown();
 
   const [businessName, setBusinessName] = useState("");
-  const [businessType, setBusinessType] = useState<"SERVICE" | "HOSPITALITY">("SERVICE");
+  const [businessSubType, setBusinessSubType] = useState("OTHER");
   const [timezone, setTimezone] = useState("America/Asuncion");
 
   const [locationName, setLocationName] = useState("Sede Principal");
@@ -131,6 +133,13 @@ export function RegisterPage() {
   const [passwordTouched, setPasswordTouched] = useState(false);
 
   const progressWidth = useMemo(() => (step === 1 ? "50%" : "100%"), [step]);
+  const businessSubTypesQuery = useQuery({
+    queryKey: ["business-subtypes"],
+    queryFn: fetchBusinessSubTypes,
+    staleTime: 5 * 60 * 1000,
+  });
+  const businessSubTypeOptions = businessSubTypesQuery.data ?? [];
+
   const passwordRequirementStatus = useMemo(
     () =>
       PASSWORD_REQUIREMENTS.map((rule) => ({
@@ -148,6 +157,9 @@ export function RegisterPage() {
     }
     if (!timezone.trim()) {
       nextErrors.timezone = "Selecciona una zona horaria.";
+    }
+    if (!businessSubType.trim()) {
+      nextErrors.businessSubType = "Selecciona una especialidad.";
     }
     setFieldErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -207,6 +219,9 @@ export function RegisterPage() {
       if (detail.field.includes("business.timezone")) {
         nextErrors.timezone = detail.message;
       }
+      if (detail.field.includes("business.businessSubType") || detail.field.includes("business.subType")) {
+        nextErrors.businessSubType = detail.message;
+      }
       if (detail.field.includes("location.name")) {
         nextErrors.locationName = detail.message;
       }
@@ -244,7 +259,7 @@ export function RegisterPage() {
       await register({
         business: {
           name: businessName,
-          businessType,
+          businessSubType,
           timezone,
         },
         location: {
@@ -365,16 +380,24 @@ export function RegisterPage() {
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-sm font-medium text-primary-dark">Tipo de negocio</span>
-                <Select value={businessType} onValueChange={(value) => setBusinessType(value as "SERVICE" | "HOSPITALITY")}>
+                <span className="mb-1 block text-sm font-medium text-primary-dark">Especialidad del negocio</span>
+                <Select value={businessSubType} onValueChange={setBusinessSubType}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona tipo" />
+                    <SelectValue placeholder="Selecciona especialidad" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SERVICE">Servicios</SelectItem>
-                    <SelectItem value="HOSPITALITY">Hospitalidad</SelectItem>
+                    {businessSubTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {fieldErrors.businessSubType ? (
+                  <span role="alert" className="mt-1 block text-xs text-red-700">
+                    {fieldErrors.businessSubType}
+                  </span>
+                ) : null}
               </label>
 
               <label className="block">

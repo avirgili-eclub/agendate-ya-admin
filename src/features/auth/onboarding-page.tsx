@@ -1,11 +1,13 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
 import type { AppError } from "@/core/errors/app-error";
 import { completeOnboarding } from "@/core/auth/auth-service";
 import { clearOnboardingTokens } from "@/core/auth/session-store";
+import { fetchBusinessSubTypes } from "@/shared/lib/business-subtypes";
 import { Button } from "@/shared/ui/button";
 import {
   Select,
@@ -40,7 +42,7 @@ function toFriendlyOnboardingMessage(appError: AppError) {
     return "El onboarding ya fue completado. Redirigiendo al panel...";
   }
   if (appError.status === 401) {
-    return "Tu sesión expiró. Redirigiendo a inicio de sesión...";
+    return "Tu sesion expiro. Redirigiendo a inicio de sesion...";
   }
   if (appError.status === 400) {
     return "Revisa los datos del formulario y vuelve a intentar.";
@@ -62,6 +64,9 @@ function toOnboardingFieldErrors(appError: AppError) {
     }
     if (detail.field.includes("business.timezone")) {
       nextErrors.timezone = detail.message;
+    }
+    if (detail.field.includes("business.businessSubType") || detail.field.includes("business.subType")) {
+      nextErrors.businessSubType = detail.message;
     }
     if (detail.field.includes("location.name")) {
       nextErrors.locationName = detail.message;
@@ -85,7 +90,7 @@ export function OnboardingPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [businessName, setBusinessName] = useState("");
-  const [businessType, setBusinessType] = useState<"SERVICE" | "HOSPITALITY">("SERVICE");
+  const [businessSubType, setBusinessSubType] = useState("OTHER");
   const [timezone, setTimezone] = useState("America/Asuncion");
 
   const [locationName, setLocationName] = useState("Sede Principal");
@@ -93,10 +98,20 @@ export function OnboardingPage() {
   const [locationPhone, setLocationPhone] = useState("+595");
   const [locationCountryIso2, setLocationCountryIso2] = useState("py");
 
+  const businessSubTypesQuery = useQuery({
+    queryKey: ["business-subtypes"],
+    queryFn: fetchBusinessSubTypes,
+    staleTime: 5 * 60 * 1000,
+  });
+  const businessSubTypeOptions = businessSubTypesQuery.data ?? [];
+
   function validate() {
     const nextErrors: Record<string, string> = {};
     if (!businessName.trim()) {
       nextErrors.businessName = "Ingresa el nombre del negocio.";
+    }
+    if (!businessSubType.trim()) {
+      nextErrors.businessSubType = "Selecciona una especialidad.";
     }
     if (!timezone.trim()) {
       nextErrors.timezone = "Selecciona una zona horaria.";
@@ -121,6 +136,7 @@ export function OnboardingPage() {
         nextErrors.locationPhone = "El primer digito no puede ser 0.";
       }
     }
+
     setFieldErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -139,7 +155,7 @@ export function OnboardingPage() {
       await completeOnboarding({
         business: {
           name: businessName,
-          businessType,
+          businessSubType,
           timezone,
         },
         location: {
@@ -219,20 +235,23 @@ export function OnboardingPage() {
 
               <label className="block mb-4">
                 <span className="mb-1 block text-sm font-medium text-primary-dark">
-                  Tipo de negocio
+                  Especialidad del negocio
                 </span>
-                <Select
-                  value={businessType}
-                  onValueChange={(value) => setBusinessType(value as "SERVICE" | "HOSPITALITY")}
-                >
+                <Select value={businessSubType} onValueChange={setBusinessSubType}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecciona especialidad" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="SERVICE">Servicios</SelectItem>
-                    <SelectItem value="HOSPITALITY">Hospitalidad</SelectItem>
+                    {businessSubTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+                {fieldErrors.businessSubType ? (
+                  <span className="mt-1 text-xs text-red-600">{fieldErrors.businessSubType}</span>
+                ) : null}
               </label>
 
               <label className="block">

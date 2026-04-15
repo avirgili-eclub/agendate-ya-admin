@@ -21,6 +21,11 @@ import {
   getSubscriptionStatusLabel,
   type TenantUpdateInput,
 } from "@/features/tenant/tenant-service";
+import {
+  fetchBusinessSubTypes,
+  formatBusinessTypeLabel,
+  formatBusinessSubTypeLabel,
+} from "@/shared/lib/business-subtypes";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -29,20 +34,11 @@ import { useFeedback } from "@/shared/notifications/use-feedback";
 import { useNotifications } from "@/shared/notifications/notification-store";
 
 const AVAILABLE_TIMEZONES = [
-  { value: "America/Asuncion", label: "Paraguay (GMT-4)" },
+  { value: "America/Asuncion", label: "Paraguay (GMT-3)" },
   { value: "America/Buenos_Aires", label: "Argentina (GMT-3)" },
   { value: "America/Sao_Paulo", label: "Brasil (GMT-3)" },
   { value: "America/Santiago", label: "Chile (GMT-3)" },
   { value: "America/Montevideo", label: "Uruguay (GMT-3)" },
-];
-
-const BUSINESS_TYPES = [
-  { value: "salon", label: "Salón de belleza" },
-  { value: "spa", label: "Spa" },
-  { value: "clinic", label: "Clínica médica" },
-  { value: "gym", label: "Gimnasio" },
-  { value: "restaurant", label: "Restaurante" },
-  { value: "other", label: "Otro" },
 ];
 
 export function TenantSettingsPage() {
@@ -54,7 +50,7 @@ export function TenantSettingsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState("");
   const [timezone, setTimezone] = useState("");
-  const [businessType, setBusinessType] = useState("");
+  const [businessSubType, setBusinessSubType] = useState("");
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const { addNotification } = useNotifications();
 
@@ -62,6 +58,40 @@ export function TenantSettingsPage() {
     queryKey: ["tenant-info"],
     queryFn: fetchTenantInfo,
   });
+
+  const { data: businessSubTypeOptions = [] } = useQuery({
+    queryKey: ["business-subtypes"],
+    queryFn: fetchBusinessSubTypes,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const selectedBusinessSubTypeOption = useMemo(() => {
+    if (!tenantInfo?.businessSubType) {
+      return null;
+    }
+
+    return businessSubTypeOptions.find((option) => option.value === tenantInfo.businessSubType) ?? null;
+  }, [businessSubTypeOptions, tenantInfo?.businessSubType]);
+
+  const tenantBusinessTypeLabel = useMemo(() => {
+    if (tenantInfo?.businessType) {
+      return formatBusinessTypeLabel(tenantInfo.businessType);
+    }
+
+    if (selectedBusinessSubTypeOption?.type) {
+      return formatBusinessTypeLabel(selectedBusinessSubTypeOption.type);
+    }
+
+    return null;
+  }, [selectedBusinessSubTypeOption?.type, tenantInfo?.businessType]);
+
+  const getSubTypeOptionDisplayLabel = (option: (typeof businessSubTypeOptions)[number]) => {
+    if (!option.type) {
+      return option.label;
+    }
+
+    return `${option.label} (${formatBusinessTypeLabel(option.type)})`;
+  };
 
   const calendarStatusQuery = useQuery({
     queryKey: ["google-calendar", "auth-status"],
@@ -221,7 +251,7 @@ export function TenantSettingsPage() {
     if (tenantInfo) {
       setName(tenantInfo.name);
       setTimezone(tenantInfo.timezone ?? "");
-      setBusinessType(tenantInfo.businessType ?? "");
+      setBusinessSubType(tenantInfo.businessSubType ?? "");
       setIsEditing(true);
     }
   };
@@ -237,7 +267,7 @@ export function TenantSettingsPage() {
     const input: TenantUpdateInput = {
       name: name.trim() || undefined,
       timezone: timezone || undefined,
-      businessType: businessType || undefined,
+      businessSubType: businessSubType || undefined,
     };
 
     await updateMutation.mutateAsync(input);
@@ -330,15 +360,23 @@ export function TenantSettingsPage() {
                 </div>
               )}
 
-              {tenantInfo.businessType && (
+              {tenantInfo.businessSubType && (
+                <div>
+                  <label className="text-xs font-medium uppercase tracking-wide text-primary-light">
+                    Especialidad del Negocio
+                  </label>
+                  <p className="mt-1 text-sm text-primary">
+                    {selectedBusinessSubTypeOption?.label ?? formatBusinessSubTypeLabel(tenantInfo.businessSubType)}
+                  </p>
+                </div>
+              )}
+
+              {tenantBusinessTypeLabel && (
                 <div>
                   <label className="text-xs font-medium uppercase tracking-wide text-primary-light">
                     Tipo de Negocio
                   </label>
-                  <p className="mt-1 text-sm text-primary">
-                    {BUSINESS_TYPES.find((bt) => bt.value === tenantInfo.businessType)?.label ??
-                      tenantInfo.businessType}
-                  </p>
+                  <p className="mt-1 text-sm text-primary">{tenantBusinessTypeLabel}</p>
                 </div>
               )}
 
@@ -392,19 +430,19 @@ export function TenantSettingsPage() {
               </div>
 
               <div>
-                <label htmlFor="businessType" className="block text-sm font-medium text-primary">
-                  Tipo de Negocio
+                <label htmlFor="businessSubType" className="block text-sm font-medium text-primary">
+                  Especialidad del Negocio
                 </label>
                 <select
-                  id="businessType"
-                  value={businessType}
-                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setBusinessType(e.target.value)}
+                  id="businessSubType"
+                  value={businessSubType}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setBusinessSubType(e.target.value)}
                   className="mt-1 w-full rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light"
                 >
-                  <option value="">Selecciona un tipo</option>
-                  {BUSINESS_TYPES.map((bt) => (
-                    <option key={bt.value} value={bt.value}>
-                      {bt.label}
+                  <option value="">Selecciona una especialidad</option>
+                  {businessSubTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {getSubTypeOptionDisplayLabel(option)}
                     </option>
                   ))}
                 </select>
