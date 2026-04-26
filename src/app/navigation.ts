@@ -54,12 +54,12 @@ export const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/clientes": { title: "Clientes", subtitle: "Gestiona tu base de clientes, historial de turnos y comunicaciones." },
   "/locales": { title: "Locales", subtitle: "Administracion de sedes y sucursales." },
   "/equipos": { title: "Equipos", subtitle: "Profesionales, salas y equipamiento operativo." },
-  "/servicios": { title: "Servicios", subtitle: "Catalogo de servicios y reglas comerciales." },
+  "/servicios": { title: "Servicios", subtitle: "Gestiona el catálogo de servicios del negocio." },
   "/disponibilidad": { title: "Disponibilidad", subtitle: "Reglas semanales y excepciones por fecha." },
   "/equipo": { title: "Equipo", subtitle: "Usuarios del panel y permisos." },
   "/perfil": { title: "Perfil", subtitle: "Mi informacion y perfil profesional." },
-  "/configuracion": { title: "Configuracion", subtitle: "Parametros generales del tenant." },
-  "/settings": { title: "Configuracion", subtitle: "Parametros generales del tenant." },
+  "/configuracion": { title: "Configuracion", subtitle: "Ajusta la configuración de tu cuenta y preferencias del sistema." },
+  "/settings": { title: "Configuracion", subtitle: "Ajusta la configuración de tu cuenta y preferencias del sistema." },
   "/health": { title: "Health", subtitle: "Smoke route tecnica." },
 };
 

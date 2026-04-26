@@ -76,19 +76,14 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-primary">Equipo</h1>
-          <p className="mt-1 text-sm text-primary-light">
-            Gestiona los usuarios del sistema y sus permisos de acceso.
-          </p>
+      <PageCard>
+        <div className="flex justify-start">
+          <Button onClick={() => setIsFormOpen(true)} className="flex w-full items-center justify-center gap-2 sm:w-auto">
+            <Plus className="size-4" />
+            Nuevo Usuario
+          </Button>
         </div>
-        <Button onClick={() => setIsFormOpen(true)} className="flex items-center gap-2">
-          <Plus className="size-4" />
-          Nuevo Usuario
-        </Button>
-      </header>
+      </PageCard>
 
       <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 

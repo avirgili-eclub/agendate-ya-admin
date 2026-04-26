@@ -8,6 +8,7 @@ export type TenantInfo = {
   slug: string;
   timezone?: string;
   businessType?: string;
+  businessSubType?: string;
   subscriptionTier?: string;
   subscriptionStatus?: string;
   maxLocations?: number;
@@ -24,7 +25,7 @@ export type TenantInfo = {
 export type TenantUpdateInput = {
   name?: string;
   timezone?: string;
-  businessType?: string;
+  businessSubType?: string;
 };
 
 type DataEnvelope<T> = { data: T };
@@ -34,6 +35,7 @@ type ApiTenant = {
   name: string;
   slug: string;
   timezone?: string | null;
+  businessSubType?: string | null;
   businessType?: string | null;
   subscriptionTier?: string | null;
   subscriptionStatus?: string | null;
@@ -55,6 +57,7 @@ function mapApiTenantToInfo(api: ApiTenant): TenantInfo {
     slug: api.slug,
     timezone: api.timezone ?? undefined,
     businessType: api.businessType ?? undefined,
+    businessSubType: api.businessSubType ?? undefined,
     subscriptionTier: api.subscriptionTier ?? undefined,
     subscriptionStatus: api.subscriptionStatus ?? undefined,
     maxLocations: api.maxLocations ?? undefined,

@@ -30,7 +30,7 @@ type RefreshResponseData = {
 type RegisterRequest = {
   business: {
     name: string;
-    businessType: "SERVICE" | "HOSPITALITY";
+    businessSubType: string;
     timezone: string;
     slug?: string;
   };
@@ -57,7 +57,7 @@ type RegisterResponseData = LoginResponseData & {
 type OnboardingCompleteRequest = {
   business: {
     name: string;
-    businessType: "SERVICE" | "HOSPITALITY";
+    businessSubType: string;
     timezone: string;
     slug?: string;
   };

@@ -452,23 +452,6 @@ export function ServicesPage() {
   return (
     <div className="space-y-6">
       <PageCard>
-        <div className="mb-6 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <h1 className="text-2xl font-semibold text-primary">Servicios</h1>
-            <p className="mt-1 text-sm text-primary-light">
-              {canManageServices
-                ? "Gestiona el catálogo de servicios del negocio."
-                : "Vista de solo lectura del catálogo de servicios."}
-            </p>
-          </div>
-          {canManageServices && (
-            <Button size="sm" onClick={() => setShowCreatePanel(true)}>
-              <Plus className="mr-2 size-4" />
-              Nuevo Servicio
-            </Button>
-          )}
-        </div>
-
         <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />
 
         {!canManageServices && (
@@ -477,7 +460,7 @@ export function ServicesPage() {
           </div>
         )}
 
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" aria-hidden="true" />
             <input
@@ -490,24 +473,32 @@ export function ServicesPage() {
             />
           </div>
 
-          <select
-            value={selectedLocation}
-            onChange={(e) => setSelectedLocation(e.target.value)}
-            className="rounded-md border border-neutral-dark bg-white px-4 py-2 text-sm text-primary transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Filtrar por ubicacion"
-          >
-            {locations.map((loc) => (
-              <option key={loc} value={loc}>
-                {loc}
-              </option>
-            ))}
-          </select>
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:ml-auto lg:w-auto lg:items-center">
+            <select
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+              className="h-10 w-full rounded-md border border-neutral-dark bg-white px-4 text-sm text-primary transition-colors focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:w-[220px]"
+              aria-label="Filtrar por ubicacion"
+            >
+              {locations.map((loc) => (
+                <option key={loc} value={loc}>
+                  {loc}
+                </option>
+              ))}
+            </select>
 
-          {canManageServices && (
-            <Button variant="outline" size="sm" aria-label="Filtros adicionales">
-              <SlidersHorizontal className="size-4" />
-            </Button>
-          )}
+            {canManageServices ? (
+              <div className="flex w-full gap-2 sm:w-auto">
+                <Button variant="outline" size="sm" aria-label="Filtros adicionales" className="h-10 px-3">
+                  <SlidersHorizontal className="size-4" />
+                </Button>
+                <Button size="sm" onClick={() => setShowCreatePanel(true)} className="h-10 flex-1 sm:flex-none">
+                  <Plus className="mr-2 size-4" />
+                  Nuevo Servicio
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {servicesQuery.isLoading && <LoadingState message="Cargando servicios..." />}

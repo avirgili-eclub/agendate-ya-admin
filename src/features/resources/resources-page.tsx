@@ -153,8 +153,9 @@ export function ResourcesPage() {
 
   return (
     <div className="space-y-4">
-      <PageCard className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full lg:max-w-xl">
+      <PageCard>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative w-full lg:max-w-xl lg:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-primary-light" />
           <input
             value={search}
@@ -165,33 +166,37 @@ export function ResourcesPage() {
             className="h-11 w-full rounded-lg border border-neutral-dark bg-white pl-10 pr-3 text-sm outline-none ring-primary-light focus:ring-2"
             placeholder="Filtrar por nombre, servicio o ID..."
           />
-        </div>
+          </div>
 
-        <div className="flex w-full gap-2 lg:w-auto">
-          <select
-            value={location}
-            onChange={(e) => {
-              setLocation(e.target.value);
-              setPage(0);
-            }}
-            className="h-11 min-w-56 flex-1 rounded-lg border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          >
-            {locations.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <Button variant="outline" className="h-11 px-3">
-            <SlidersHorizontal className="size-4" />
-          </Button>
-          <Button
-            className="h-11 whitespace-nowrap"
-            onClick={() => setCreating(true)}
-            disabled={locationsQuery.isLoading || supportDataError}
-          >
-            + Nuevo equipo
-          </Button>
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:ml-auto lg:w-auto lg:items-center">
+            <select
+              value={location}
+              onChange={(e) => {
+                setLocation(e.target.value);
+                setPage(0);
+              }}
+              className="h-11 w-full rounded-lg border border-neutral-dark bg-white px-3 text-sm outline-none ring-primary-light focus:ring-2 sm:w-[224px]"
+            >
+              {locations.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex w-full gap-2 sm:w-auto">
+              <Button variant="outline" className="h-11 px-3">
+                <SlidersHorizontal className="size-4" />
+              </Button>
+              <Button
+                className="h-11 flex-1 whitespace-nowrap sm:flex-none"
+                onClick={() => setCreating(true)}
+                disabled={locationsQuery.isLoading || supportDataError}
+              >
+                + Nuevo equipo
+              </Button>
+            </div>
+          </div>
         </div>
       </PageCard>
 
