@@ -9,6 +9,7 @@ import {
   clearOnboardingTokens,
   decodeJwt,
 } from "./session-store";
+import type { PlanId, SignupPlansData } from "@/features/auth/types/signup-plans";
 
 type LoginRequest = {
   email: string;
@@ -44,6 +45,7 @@ type RegisterRequest = {
     password: string;
     fullName: string;
   };
+  selectedPlan?: string;
 };
 
 type RegisterResponseData = LoginResponseData & {
@@ -66,6 +68,7 @@ type OnboardingCompleteRequest = {
     address: string;
     phone: string;
   };
+  selectedPlan?: string;
 };
 
 type OnboardingCompleteResponseData = RegisterResponseData;
@@ -187,6 +190,29 @@ export async function register(payload: RegisterRequest) {
   });
 
   return data;
+}
+
+// Signup plans
+const FALLBACK_SIGNUP_PLANS: SignupPlansData = {
+  defaultPlan: "FREE",
+  trialDays: 30,
+  enabledPlans: ["FREE", "BASIC", "PRO"],
+  trialEligiblePlans: ["BASIC", "PRO"],
+};
+
+export async function fetchSignupPlans(): Promise<SignupPlansData> {
+  try {
+    const response = await httpRequest<{ data: SignupPlansData }>("/auth/signup-plans", {
+      method: "GET",
+      skipAuth: true,
+      skipAuthRefresh: true,
+      timeoutMs: 8000,
+    });
+
+    return unwrapData<SignupPlansData>(response);
+  } catch {
+    return FALLBACK_SIGNUP_PLANS;
+  }
 }
 
 export function configureAuthHandlers(onSessionExpired: () => void) {

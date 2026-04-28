@@ -69,7 +69,7 @@ export function AuthCallbackPage() {
             <Link to="/login">
               <Button size="lg">Volver al login</Button>
             </Link>
-            <Link to="/registro">
+            <Link to="/registro" search={{ plan: undefined }}>
               <Button size="lg" variant="outline">Crear cuenta</Button>
             </Link>
           </div>

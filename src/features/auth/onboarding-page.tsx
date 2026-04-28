@@ -1,13 +1,15 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
 import type { AppError } from "@/core/errors/app-error";
-import { completeOnboarding } from "@/core/auth/auth-service";
+import { completeOnboarding, fetchSignupPlans } from "@/core/auth/auth-service";
 import { clearOnboardingTokens } from "@/core/auth/session-store";
 import { fetchBusinessSubTypes } from "@/shared/lib/business-subtypes";
+import type { PlanId } from "@/features/auth/types/signup-plans";
+import { PlanSelectorCard } from "@/features/auth/components/plan-selector-card";
 import { Button } from "@/shared/ui/button";
 import {
   Select,
@@ -105,6 +107,29 @@ export function OnboardingPage() {
   });
   const businessSubTypeOptions = businessSubTypesQuery.data ?? [];
 
+  const {
+    data: signupPlans,
+    isLoading: isLoadingPlans,
+    refetch: refetchPlans,
+  } = useQuery({
+    queryKey: ["signup-plans"],
+    queryFn: fetchSignupPlans,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!signupPlans) return;
+    setSelectedPlan(signupPlans.defaultPlan);
+  }, [signupPlans]);
+
+  function handlePlanChange(plan: PlanId) {
+    setSelectedPlan(plan);
+    setPlanError(null);
+  }
+
   function validate() {
     const nextErrors: Record<string, string> = {};
     if (!businessName.trim()) {
@@ -163,10 +188,18 @@ export function OnboardingPage() {
           address: locationAddress,
           phone: locationPhone,
         },
+        selectedPlan: selectedPlan ?? undefined,
       });
       await navigate({ to: "/dashboard" });
     } catch (e) {
       const appError = e as AppError;
+
+      if (appError.status === 400 && /plan/i.test(appError.message ?? "")) {
+        setPlanError("El plan seleccionado ya no está disponible. Elegí otro.");
+        setSelectedPlan(null);
+        refetchPlans();
+        return;
+      }
 
       if (appError.status === 400) {
         const nextErrors = toOnboardingFieldErrors(appError);
@@ -328,7 +361,27 @@ export function OnboardingPage() {
               </label>
             </div>
 
-            <Button className="w-full" type="submit" disabled={isLoading} size="lg">
+            <div className="space-y-4 border-t border-neutral-dark pt-6">
+              <header className="space-y-1">
+                <h3 className="text-base font-semibold text-primary">Elegí tu plan</h3>
+                <p className="text-sm text-primary-light/80">
+                  {signupPlans
+                    ? `Empezá con un plan. Los planes ${signupPlans.trialEligiblePlans.join(", ")} incluyen ${signupPlans.trialDays} días de prueba.`
+                    : "Cargando planes..."}
+                </p>
+              </header>
+              <PlanSelectorCard
+                plans={signupPlans?.enabledPlans ?? []}
+                selectedPlan={selectedPlan}
+                trialEligiblePlans={signupPlans?.trialEligiblePlans ?? []}
+                trialDays={signupPlans?.trialDays ?? 30}
+                onChange={handlePlanChange}
+                isLoading={isLoadingPlans}
+                error={planError}
+              />
+            </div>
+
+            <Button className="w-full" type="submit" disabled={isLoading || !selectedPlan} size="lg">
               {isLoading ? "Completando..." : "Completar Onboarding"}
             </Button>
           </form>
