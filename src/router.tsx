@@ -14,6 +14,7 @@ import { LoginPage } from "@/features/auth/login-page";
 import { RegisterPage } from "@/features/auth/register-page";
 import { AuthCallbackPage } from "@/features/auth/auth-callback-page";
 import { OnboardingPage } from "@/features/auth/onboarding-page";
+import { PathSelectionPage } from "@/features/auth/path-selection-page";
 import { ConfirmEmailPage } from "@/features/auth/confirm-email-page";
 import { ForgotPasswordPage } from "@/features/auth/forgot-password-page";
 import { ResetPasswordPage } from "@/features/auth/reset-password-page";
@@ -108,7 +109,19 @@ const loginRoute = createRoute({
 const registerRoute = createRoute({
   getParentRoute: () => publicRoute,
   path: "/registro",
+  validateSearch: (search: Record<string, unknown>) => ({
+    plan: typeof search.plan === "string" ? search.plan : undefined,
+  }),
   component: RegisterPage,
+});
+
+const pathSelectionRoute = createRoute({
+  getParentRoute: () => publicRoute,
+  path: "/crear-cuenta",
+  validateSearch: (search: Record<string, unknown>) => ({
+    plan: typeof search.plan === "string" ? search.plan : undefined,
+  }),
+  component: PathSelectionPage,
 });
 
 const authCallbackRoute = createRoute({
@@ -250,6 +263,7 @@ const routeTree = rootRoute.addChildren([
   publicRoute.addChildren([
     loginRoute,
     registerRoute,
+    pathSelectionRoute,
     authCallbackRoute,
     onboardingRoute,
     confirmEmailRoute,

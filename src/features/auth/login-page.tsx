@@ -190,7 +190,7 @@ export function LoginPage() {
 
             <p className="text-center text-sm text-primary-light">
               ¿Todavía no tienes una cuenta?{" "}
-              <Link to="/registro" className="font-medium text-secondary hover:text-secondary-light transition">
+              <Link to="/crear-cuenta" search={{ plan: undefined }} className="font-medium text-secondary hover:text-secondary-light transition">
                 Regístrate
               </Link>
             </p>
