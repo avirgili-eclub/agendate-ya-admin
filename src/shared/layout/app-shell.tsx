@@ -11,6 +11,7 @@ import {
   type GoogleCalendarAlertStatus,
 } from "@/features/calendar/google-calendar-alert";
 import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
+import { useCurrentProfessionalResource } from "@/features/resources/use-current-professional-resource";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { useNotifications } from "@/shared/notifications/notification-store";
@@ -19,8 +20,14 @@ import { NotificationPanel } from "@/shared/notifications/notification-panel";
 export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const pageMeta = getPageMeta(pathname);
   const session = getSessionState();
+  const professionalResourceQuery = useCurrentProfessionalResource();
+  const professionalResourceName = professionalResourceQuery.data?.name ?? null;
+  const pageMeta = getPageMeta({
+    pathname,
+    role: session.user?.role,
+    professionalResourceName,
+  });
   const navItems = getNavItemsForRole(session.user?.role);
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
@@ -28,6 +35,11 @@ export function AppShell() {
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
   const [googleCalendarAlertStatus, setGoogleCalendarAlertStatus] =
     useState<GoogleCalendarAlertStatus>(() => getGoogleCalendarAlertStatus());
+
+  const isProfessional = session.user?.role?.toUpperCase() === "PROFESSIONAL";
+  const sidebarTitle = isProfessional
+    ? professionalResourceName || session.user?.fullName || "Mi perfil profesional"
+    : "Admin Console";
 
   const canViewGoogleCalendarAlert = canViewGoogleCalendarStatus(session.user?.role);
 
@@ -120,7 +132,7 @@ export function AppShell() {
           >
             <div className="flex items-center justify-between gap-2">
               <div className={`${isDesktopSidebarCollapsed ? "lg:hidden" : ""}`}>
-                <p className="text-sm font-semibold">Admin Console</p>
+                <p className="text-sm font-semibold">{sidebarTitle}</p>
                 <p className="mt-1 truncate text-xs text-white/70">{session.user?.email ?? "Sin sesion"}</p>
               </div>
 
@@ -176,7 +188,7 @@ export function AppShell() {
           )}
 
           <PageCard className="bg-neutral-light">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary-light">Admin / {pageMeta.title}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary-light">{pageMeta.breadcrumb}</p>
             <h1 className="mt-1 text-3xl font-bold text-primary-dark">{pageMeta.title}</h1>
             <p className="mt-1 text-sm text-primary-light">{pageMeta.subtitle}</p>
           </PageCard>

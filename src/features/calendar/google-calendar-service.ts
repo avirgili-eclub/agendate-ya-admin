@@ -17,6 +17,21 @@ type GoogleCalendarAuthUrlData = {
   authUrl: string;
 };
 
+export type GoogleCalendarResourceAccessData = {
+  calendarUrl: string;
+  calendarId?: string;
+  shared?: boolean;
+  sharedWithEmail?: string;
+};
+
+export type GoogleCalendarSyncResult = {
+  status: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  syncedAt?: string;
+};
+
 export type GoogleCalendarConnection = {
   id?: string;
 };
@@ -68,6 +83,30 @@ export async function fetchGoogleCalendarConnections() {
   });
 
   return unwrapData<GoogleCalendarConnection[]>(response);
+}
+
+export async function fetchResourceCalendarAccessUrl(resourceId: string) {
+  const response = await httpRequest<{ data: GoogleCalendarResourceAccessData }>(
+    `/calendar/resources/${resourceId}/access-url`,
+    {
+      method: "GET",
+      timeoutMs: 8000,
+    },
+  );
+
+  return unwrapData<GoogleCalendarResourceAccessData>(response);
+}
+
+export async function syncResourceCalendar(resourceId: string) {
+  const response = await httpRequest<{ data: GoogleCalendarSyncResult }>(
+    `/calendar/sync/${resourceId}`,
+    {
+      method: "POST",
+      timeoutMs: 15_000,
+    },
+  );
+
+  return unwrapData<GoogleCalendarSyncResult>(response);
 }
 
 export async function runSilentGoogleCalendarStatusCheck(role: string | null | undefined) {

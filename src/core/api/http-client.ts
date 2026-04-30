@@ -43,6 +43,31 @@ function normalizeNetworkError(error: unknown) {
   });
 }
 
+function parseRetryAfterSeconds(response: Response, details: unknown): number | undefined {
+  const retryAfterHeader = response.headers.get("Retry-After");
+  if (retryAfterHeader) {
+    const parsed = Number.parseInt(retryAfterHeader, 10);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    const candidate = (details as Record<string, unknown>).retryAfterSeconds;
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+    if (typeof candidate === "string") {
+      const parsed = Number.parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function createRequestSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
   if (!timeoutMs) {
     return { signal, cleanup: () => {} };
@@ -119,11 +144,13 @@ export async function httpRequest<TResponse>(
 
   if (!response.ok) {
     const envelope = (parsed ?? {}) as ErrorEnvelope;
+    const retryAfterSeconds = parseRetryAfterSeconds(response, envelope.error?.details);
     const error: AppError = toAppError({
       status: response.status,
       code: envelope.error?.code,
       message: envelope.error?.message,
       details: envelope.error?.details,
+      retryAfterSeconds,
     });
     throw error;
   }

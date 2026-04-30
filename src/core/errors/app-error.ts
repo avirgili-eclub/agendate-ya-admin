@@ -7,6 +7,13 @@ export type AppErrorCode =
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
   | "SUBSCRIPTION_LIMIT"
+  | "RESOURCE_NOT_ASSIGNED"
+  | "RESOURCE_ACCESS_DENIED"
+  | "RESOURCE_CALENDAR_NOT_CREATED"
+  | "GOOGLE_CALENDAR_NOT_CONNECTED"
+  | "GOOGLE_CALENDAR_NEEDS_REAUTH"
+  | "CALENDAR_SYNC_RATE_LIMITED"
+  | "INVALID_PARAMETER"
   | "REQUEST_TIMEOUT"
   | "SERVICE_UNAVAILABLE"
   | "UNKNOWN_ERROR";
@@ -21,6 +28,7 @@ export type AppError = {
   message: string;
   status: number;
   details?: AppErrorDetail[];
+  retryAfterSeconds?: number;
 };
 
 function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefined {
@@ -54,6 +62,27 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   if (normalized.includes("SUBSCRIPTION_LIMIT")) {
     return "SUBSCRIPTION_LIMIT";
   }
+  if (normalized.includes("RESOURCE_NOT_ASSIGNED")) {
+    return "RESOURCE_NOT_ASSIGNED";
+  }
+  if (normalized.includes("RESOURCE_ACCESS_DENIED")) {
+    return "RESOURCE_ACCESS_DENIED";
+  }
+  if (normalized.includes("RESOURCE_CALENDAR_NOT_CREATED")) {
+    return "RESOURCE_CALENDAR_NOT_CREATED";
+  }
+  if (normalized.includes("GOOGLE_CALENDAR_NOT_CONNECTED")) {
+    return "GOOGLE_CALENDAR_NOT_CONNECTED";
+  }
+  if (normalized.includes("GOOGLE_CALENDAR_NEEDS_REAUTH")) {
+    return "GOOGLE_CALENDAR_NEEDS_REAUTH";
+  }
+  if (normalized.includes("CALENDAR_SYNC_RATE_LIMITED")) {
+    return "CALENDAR_SYNC_RATE_LIMITED";
+  }
+  if (normalized.includes("INVALID_PARAMETER")) {
+    return "INVALID_PARAMETER";
+  }
   if (normalized.includes("REQUEST_TIMEOUT")) {
     return "REQUEST_TIMEOUT";
   }
@@ -83,8 +112,12 @@ function normalizeDetails(details: unknown): AppErrorDetail[] | undefined {
 
   if (typeof details === "object") {
     return Object.entries(details as Record<string, unknown>)
-      .filter(([, message]) => typeof message === "string")
-      .map(([field, message]) => ({ field, message: message as string }));
+      .filter(([, message]) =>
+        typeof message === "string" ||
+        typeof message === "number" ||
+        typeof message === "boolean",
+      )
+      .map(([field, message]) => ({ field, message: String(message) }));
   }
 
   return undefined;
@@ -95,6 +128,7 @@ export function toAppError(input: {
   code?: string;
   message?: string;
   details?: unknown;
+  retryAfterSeconds?: number;
 }): AppError {
   const fallbackByStatus: Record<number, AppErrorCode> = {
     400: "VALIDATION_ERROR",
@@ -116,5 +150,6 @@ export function toAppError(input: {
     message: input.message ?? "Unexpected error",
     status: input.status,
     details: normalizeDetails(input.details),
+    retryAfterSeconds: input.retryAfterSeconds,
   };
 }

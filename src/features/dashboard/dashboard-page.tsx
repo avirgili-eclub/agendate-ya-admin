@@ -75,7 +75,7 @@ export function DashboardPage() {
             <div>
               <p className="text-xs uppercase tracking-wide text-primary-light">{kpi.label}</p>
               <p className="mt-1 text-3xl font-bold text-primary-dark">{kpi.value}</p>
-              {kpi.trend ? <p className="mt-1 text-xs text-success-dark">{kpi.trend} vs semana anterior</p> : null}
+              {kpi.trend ? <p className="mt-1 text-xs text-success-dark">{kpi.trend}</p> : null}
             </div>
             <span className="rounded-full bg-primary/10 p-2 text-primary">
               <Activity className="size-5" />
@@ -144,8 +144,15 @@ export function DashboardPage() {
                 </li>
               ) : (
                 data.alerts.map((alert) => (
-                  <li key={alert} className="rounded-lg bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
-                    {alert}
+                  <li
+                    key={`${alert.code}-${alert.message}`}
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      alert.severity === "warning"
+                        ? "bg-amber-100 text-amber-900"
+                        : "bg-secondary/10 text-secondary-dark"
+                    }`}
+                  >
+                    {alert.message}
                   </li>
                 ))
               )}
