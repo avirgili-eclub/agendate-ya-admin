@@ -102,14 +102,25 @@ export async function httpRequest<TResponse>(
   const accessToken = !options.skipAuth && authHandlers ? authHandlers.getAccessToken() : null;
   const makeRequest = async (bearerToken?: string | null) => {
     const requestSignal = createRequestSignal(options.signal, options.timeoutMs);
+    const headers: Record<string, string> = {
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      ...(options.headers ?? {}),
+    };
+
+    let body: BodyInit | undefined;
+    if (options.body !== undefined && options.body !== null) {
+      if (options.body instanceof FormData) {
+        body = options.body;
+      } else {
+        headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+        body = JSON.stringify(options.body);
+      }
+    }
+
     return fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-        ...(options.headers ?? {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers,
+      body,
       signal: requestSignal.signal,
     }).finally(requestSignal.cleanup);
   };
