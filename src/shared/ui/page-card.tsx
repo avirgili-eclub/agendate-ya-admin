@@ -7,5 +7,5 @@ type PageCardProps = PropsWithChildren<{
 }>;
 
 export function PageCard({ children, className }: PageCardProps) {
-  return <section className={cn("rounded-xl border border-neutral-dark bg-neutral-light p-5 shadow-sm", className)}>{children}</section>;
+  return <section className={cn("rounded-xl border border-neutral-dark bg-neutral-light p-4 shadow-sm", className)}>{children}</section>;
 }
