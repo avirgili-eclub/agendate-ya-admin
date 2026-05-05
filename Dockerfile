@@ -4,6 +4,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_API_BASE_URL=/api/v1
+ARG VITE_BOOKING_SITE_DOMAIN=site.agendateya.app
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_BOOKING_SITE_DOMAIN=$VITE_BOOKING_SITE_DOMAIN
 RUN npm run build
 
 # Stage 2: Serve
