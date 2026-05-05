@@ -6,7 +6,15 @@ export type TenantInfo = {
   id: string;
   name: string;
   slug: string;
-  published?: boolean;
+  sitePublished: boolean;
+  description?: string;
+  tagline?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  websiteUrl?: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
+  youtubeUrl?: string;
   timezone?: string;
   businessType?: string;
   businessSubType?: string;
@@ -28,7 +36,19 @@ export type TenantUpdateInput = {
   name?: string;
   timezone?: string;
   businessSubType?: string;
-  published?: boolean;
+  description?: string;
+  tagline?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  instagramUrl?: string;
+  facebookUrl?: string;
+  youtubeUrl?: string;
+};
+
+export type PublishTenantSiteResult = {
+  published: boolean;
+  siteUrl?: string;
+  warnings: string[];
 };
 
 type DataEnvelope<T> = { data: T };
@@ -37,7 +57,16 @@ type ApiTenant = {
   id: string;
   name: string;
   slug: string;
+  sitePublished?: boolean | null;
   published?: boolean | null;
+  description?: string | null;
+  tagline?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  websiteUrl?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  youtubeUrl?: string | null;
   timezone?: string | null;
   businessSubType?: string | null;
   businessType?: string | null;
@@ -60,7 +89,15 @@ function mapApiTenantToInfo(api: ApiTenant): TenantInfo {
     id: api.id,
     name: api.name,
     slug: api.slug,
-    published: api.published ?? undefined,
+    sitePublished: Boolean(api.sitePublished ?? api.published ?? false),
+    description: api.description ?? undefined,
+    tagline: api.tagline ?? undefined,
+    contactEmail: api.contactEmail ?? undefined,
+    contactPhone: api.contactPhone ?? undefined,
+    websiteUrl: api.websiteUrl ?? undefined,
+    instagramUrl: api.instagramUrl ?? undefined,
+    facebookUrl: api.facebookUrl ?? undefined,
+    youtubeUrl: api.youtubeUrl ?? undefined,
     timezone: api.timezone ?? undefined,
     businessType: api.businessType ?? undefined,
     businessSubType: api.businessSubType ?? undefined,
@@ -92,6 +129,41 @@ export async function updateTenantInfo(input: TenantUpdateInput): Promise<Tenant
   return mapApiTenantToInfo(unwrapData<ApiTenant>(response));
 }
 
+type PublishSiteApiResponse = {
+  published?: boolean | null;
+  siteUrl?: string | null;
+  warnings?: unknown;
+};
+
+function mapWarnings(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter((item): item is string => typeof item === "string");
+}
+
+export async function publishTenantSite(): Promise<PublishTenantSiteResult> {
+  const response = await httpRequest<DataEnvelope<PublishSiteApiResponse>>("/tenant/site/publish", {
+    method: "POST",
+  });
+  const data = unwrapData<PublishSiteApiResponse>(response);
+  return {
+    published: data.published ?? true,
+    siteUrl: data.siteUrl ?? undefined,
+    warnings: mapWarnings(data.warnings),
+  };
+}
+
+export async function unpublishTenantSite(): Promise<PublishTenantSiteResult> {
+  const response = await httpRequest<DataEnvelope<PublishSiteApiResponse>>("/tenant/site/unpublish", {
+    method: "POST",
+  });
+  const data = unwrapData<PublishSiteApiResponse>(response);
+  return {
+    published: data.published ?? false,
+    siteUrl: data.siteUrl ?? undefined,
+    warnings: mapWarnings(data.warnings),
+  };
+}
+
 export function toTenantFriendlyMessage(error: AppError): string {
   if (error.code === "FORBIDDEN") {
     return "No tienes permisos para modificar esta información. Solo administradores pueden acceder.";
@@ -102,6 +174,10 @@ export function toTenantFriendlyMessage(error: AppError): string {
   }
 
   if (error.code === "VALIDATION_ERROR" && error.details) {
+    return error.details.map((d) => d.message).join(" ");
+  }
+
+  if (error.code === "PUBLISH_REQUIREMENTS_NOT_MET" && error.details) {
     return error.details.map((d) => d.message).join(" ");
   }
 

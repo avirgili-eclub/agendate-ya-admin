@@ -217,7 +217,7 @@ export function PreviewTab() {
 
       <p className="text-center text-xs text-primary-light">
         Mostrando la configuración guardada actualmente.{" "}
-        {tenantInfo?.published === false && (
+        {tenantInfo?.sitePublished === false && (
           <span className="font-medium text-secondary">
             El sitio no está publicado — los clientes no pueden acceder todavía.
           </span>

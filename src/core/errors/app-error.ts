@@ -3,6 +3,7 @@ export type AppErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "PUBLISH_REQUIREMENTS_NOT_MET"
   | "RATE_LIMIT_EXCEEDED"
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
@@ -56,6 +57,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   if (normalized.includes("NOT_FOUND")) {
     return "NOT_FOUND";
   }
+  if (normalized.includes("PUBLISH_REQUIREMENTS_NOT_MET")) {
+    return "PUBLISH_REQUIREMENTS_NOT_MET";
+  }
   if (normalized.includes("RATE_LIMIT_EXCEEDED") || normalized.includes("TOO_MANY_REQUESTS")) {
     return "RATE_LIMIT_EXCEEDED";
   }
@@ -100,8 +104,20 @@ function normalizeDetails(details: unknown): AppErrorDetail[] | undefined {
 
   if (Array.isArray(details)) {
     return details
-      .filter((item) => typeof item === "object" && item !== null)
+      .filter((item) =>
+        (typeof item === "object" && item !== null) ||
+        typeof item === "string" ||
+        typeof item === "number" ||
+        typeof item === "boolean",
+      )
       .map((item) => {
+        if (
+          typeof item === "string" ||
+          typeof item === "number" ||
+          typeof item === "boolean"
+        ) {
+          return { message: String(item) };
+        }
         const candidate = item as { field?: unknown; message?: unknown };
         return {
           field: typeof candidate.field === "string" ? candidate.field : undefined,
