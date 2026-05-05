@@ -11,6 +11,7 @@ export type ProfessionalResourceProfile = {
   locationId: string;
   resourceType: "PROFESSIONAL" | "TABLE" | "ROOM" | "EQUIPMENT";
   name: string;
+  imageUrl?: string | null;
   active: boolean;
   calendarConnected?: boolean;
 };

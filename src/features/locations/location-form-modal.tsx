@@ -9,6 +9,7 @@ import {
   type LocationUpsertInput,
 } from "@/features/locations/locations-service";
 import { Button } from "@/shared/ui/button";
+import { ImageUpload } from "@/shared/ui/image-upload";
 import { PhoneField } from "@/shared/ui/phone-field";
 
 const DAY_LABELS = [
@@ -119,7 +120,9 @@ export function LocationFormModal({
   const [name, setName] = useState(initialLocation?.name ?? "");
   const [address, setAddress] = useState(initialLocation?.address ?? "");
   const [phone, setPhone] = useState(initialLocation?.phone ?? "+595");
-  const [imageUrl, setImageUrl] = useState(initialLocation?.imageUrl ?? "");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(initialLocation?.imageUrl ?? "");
+  const [removeImage, setRemoveImage] = useState(false);
   const [timezone, setTimezone] = useState(initialLocation?.businessHours?.timezone ?? "America/Asuncion");
   const [weeklyBusinessHours, setWeeklyBusinessHours] = useState<BusinessHoursDayState[]>(
     mapInitialBusinessHours(initialLocation).weekly,
@@ -158,13 +161,23 @@ export function LocationFormModal({
     setName(initialLocation?.name ?? "");
     setAddress(initialLocation?.address ?? "");
     setPhone(initialLocation?.phone ?? "+595");
-    setImageUrl(initialLocation?.imageUrl ?? "");
+    setImageFile(null);
+    setImagePreviewUrl(initialLocation?.imageUrl ?? "");
+    setRemoveImage(false);
     const initialHours = mapInitialBusinessHours(initialLocation);
     setTimezone(initialHours.timezone);
     setWeeklyBusinessHours(initialHours.weekly);
     setFieldErrors({});
     setFormError(null);
   }, [isOpen, initialLocation]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   useEffect(() => {
     if (!error) {
@@ -220,11 +233,16 @@ export function LocationFormModal({
     }
 
     try {
+      const normalizedImageUrl =
+        imagePreviewUrl && !imagePreviewUrl.startsWith("blob:") ? imagePreviewUrl : "";
+
       await onSubmit({
         name,
         address,
         phone: phone === "+595" ? "" : phone,
-        imageUrl,
+        imageUrl: normalizedImageUrl,
+        imageFile,
+        removeImage,
         businessHours: buildBusinessHoursPayload(timezone, weeklyBusinessHours),
       });
     } catch (submitError) {
@@ -287,21 +305,30 @@ export function LocationFormModal({
         {fieldErrors.phone && <p className="mt-1 text-xs text-red-700">{fieldErrors.phone}</p>}
       </div>
 
-      <div>
-        <label htmlFor="location-image" className="block text-sm font-medium text-primary">
-          URL de imagen
-        </label>
-        <input
-          id="location-image"
-          type="url"
-          value={imageUrl}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setImageUrl(e.target.value)}
-          className="mt-1 h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="https://..."
+      <div className="max-w-sm">
+        <ImageUpload
+          label="Imagen de la sede"
+          description="JPG, PNG, WebP o AVIF. Max. 5MB."
+          currentUrl={imagePreviewUrl || undefined}
+          aspectRatio="wide"
+          onFileSelected={(file) => {
+            if (imagePreviewUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(imagePreviewUrl);
+            }
+            setImageFile(file);
+            setRemoveImage(false);
+            setImagePreviewUrl(URL.createObjectURL(file));
+          }}
+          onRemove={() => {
+            if (imagePreviewUrl.startsWith("blob:")) {
+              URL.revokeObjectURL(imagePreviewUrl);
+            }
+            setImageFile(null);
+            setImagePreviewUrl("");
+            setRemoveImage(true);
+          }}
+          error={fieldErrors.imageUrl}
         />
-        {fieldErrors.imageUrl && (
-          <p className="mt-1 text-xs text-red-700">{fieldErrors.imageUrl}</p>
-        )}
       </div>
 
       <div className="rounded-lg border border-neutral-dark p-4">

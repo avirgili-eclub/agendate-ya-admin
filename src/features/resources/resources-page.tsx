@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, UserRound } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -239,9 +239,26 @@ export function ResourcesPage() {
             {cards.map((resource: ResourceCardItem) => (
               <PageCard key={resource.id}>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-primary-dark">{resource.name}</h3>
-                    <p className="text-sm text-primary-light">{resource.locationName}</p>
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-dark bg-white">
+                      {resource.imageUrl ? (
+                        <img
+                          src={resource.imageUrl}
+                          alt={resource.name}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <UserRound className="size-5 text-primary-light" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-semibold text-primary-dark" title={resource.name}>
+                        {resource.name}
+                      </h3>
+                      <p className="truncate text-sm text-primary-light" title={resource.locationName}>
+                        {resource.locationName}
+                      </p>
+                    </div>
                   </div>
                   <div className="space-y-1 text-right">
                     <StatusChip tone={resource.active ? "success" : "neutral"} label={resource.active ? "Activo" : "Inactivo"} />
