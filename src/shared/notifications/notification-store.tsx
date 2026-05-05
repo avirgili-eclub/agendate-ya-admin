@@ -297,24 +297,17 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    let hasUnreadBackendNotifications = false;
-
     setNotifications((prev) =>
-      prev.map((notification) => {
-        if (!notification.read && notification.source === "backend_event") {
-          hasUnreadBackendNotifications = true;
-        }
-        return { ...notification, read: true };
-      }),
+      prev.map((notification) => ({ ...notification, read: true })),
     );
 
-    if (hasUnreadBackendNotifications) {
+    if (backendUnreadCount > 0) {
       setBackendUnreadCount(0);
       void markAllNotificationsAsRead().catch(() => {
         // Keep optimistic UI to avoid blocking the user on network hiccups.
       });
     }
-  }, []);
+  }, [backendUnreadCount]);
 
   const removeNotification = useCallback((id: string) => {
     let shouldDecrementBackendCount = false;
@@ -340,21 +333,15 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   }, []);
 
   const clearAll = useCallback(() => {
-    let hasUnreadBackendNotifications = false;
-    setNotifications((prev) => {
-      hasUnreadBackendNotifications = prev.some(
-        (notification) => !notification.read && notification.source === "backend_event",
-      );
-      return [];
-    });
+    setNotifications([]);
 
-    if (hasUnreadBackendNotifications) {
+    if (backendUnreadCount > 0) {
       setBackendUnreadCount(0);
       void markAllNotificationsAsRead().catch(() => {
         // Keep optimistic UI to avoid blocking the user on network hiccups.
       });
     }
-  }, []);
+  }, [backendUnreadCount]);
 
   const localUnreadCount = notifications.filter(
     (notification) => !notification.read && notification.source === "user_action",

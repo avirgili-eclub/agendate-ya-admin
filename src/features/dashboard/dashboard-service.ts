@@ -1,7 +1,5 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
-import { getSessionState } from "@/core/auth/session-store";
-import type { AppError } from "@/core/errors/app-error";
 
 export type DashboardKpi = {
   label: string;
@@ -21,68 +19,61 @@ export type UpcomingBooking = {
 export type SourceChannelMetric = {
   channel: "WEB" | "WHATSAPP" | "API" | "MCP" | "ADMIN";
   percentage: number;
+  count: number;
+};
+
+export type DashboardAlert = {
+  code: string;
+  severity: "warning" | "info";
+  message: string;
 };
 
 export type DashboardSnapshot = {
   kpis: DashboardKpi[];
   upcomingBookings: UpcomingBooking[];
   sourceChannels: SourceChannelMetric[];
-  alerts: string[];
+  alerts: DashboardAlert[];
 };
 
 type DataEnvelope<T> = { data: T };
-type PagedEnvelope<T> = {
-  data: T[];
-  meta: {
-    page: number;
-    size: number;
-    total: number;
+
+type ApiDashboardSnapshot = {
+  context: {
+    scope: "RESOURCE" | "TENANT";
+    resource: {
+      id: string;
+      name: string;
+      resourceType: "PROFESSIONAL" | "ROOM" | "EQUIPMENT";
+      locationId: string;
+      active: boolean;
+      calendarConnected?: boolean;
+    } | null;
   };
+  kpis: {
+    todayBookings: number;
+    confirmed: number;
+    pending: number;
+    noShow30d: number;
+    noShowRate30d: number;
+  };
+  upcomingBookings: Array<{
+    id: string;
+    clientName?: string | null;
+    serviceName?: string | null;
+    resourceName?: string | null;
+    startTime: string;
+    status: "CONFIRMED" | "PENDING";
+  }>;
+  sourceChannels: Array<{
+    source: SourceChannelMetric["channel"];
+    count: number;
+  }>;
+  alerts: Array<{
+    code: string;
+    severity: "warning" | "info";
+    message: string;
+  }>;
 };
-
-type ApiBooking = {
-  id: string;
-  resourceId: string;
-  startTime: string;
-  status: "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
-  sourceChannel: SourceChannelMetric["channel"];
-  clientName?: string | null;
-  serviceName?: string | null;
-  resourceName?: string | null;
-};
-
-type ApiLocation = {
-  id: string;
-  name: string;
-};
-
-type ApiResource = {
-  id: string;
-  locationId: string;
-  active: boolean;
-};
-
-type ApiService = {
-  id: string;
-  name: string;
-  active: boolean;
-  requiresResource: boolean;
-};
-
-function percentage(part: number, total: number) {
-  if (!total) {
-    return 0;
-  }
-  return Math.round((part / total) * 100);
-}
-
-function isSameLocalDate(left: Date, right: Date) {
-  return (
-    left.getFullYear() === right.getFullYear() &&
-    left.getMonth() === right.getMonth() &&
-    left.getDate() === right.getDate()
-  );
-}
 
 function formatHourLabel(iso: string) {
   return new Intl.DateTimeFormat("es-AR", {
@@ -92,197 +83,48 @@ function formatHourLabel(iso: string) {
   }).format(new Date(iso));
 }
 
-async function fetchAllBookings(): Promise<ApiBooking[]> {
-  const first = await httpRequest<PagedEnvelope<ApiBooking>>("/bookings?page=0&size=100");
-  const firstPageBookings = first.data;
-  const totalPages = Math.ceil(first.meta.total / first.meta.size);
-
-  if (totalPages <= 1) {
-    return firstPageBookings;
+function percentage(part: number, total: number) {
+  if (!total) {
+    return 0;
   }
-
-  const remaining = await Promise.all(
-    Array.from({ length: totalPages - 1 }).map((_, idx) => {
-      const page = idx + 1;
-      return httpRequest<PagedEnvelope<ApiBooking>>(`/bookings?page=${page}&size=${first.meta.size}`);
-    }),
-  );
-
-  return [
-    ...firstPageBookings,
-    ...remaining.flatMap((page) => page.data),
-  ];
+  return Math.round((part / total) * 100);
 }
 
 export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
-  const session = getSessionState();
-  const currentRole = session.user?.role?.toUpperCase() ?? "";
-  const currentResourceId = session.user?.resourceId;
-  const isProfessional = currentRole === "PROFESSIONAL";
-
-  const bookingsPromise = fetchAllBookings();
-  const servicesPromise: Promise<ApiService[]> = isProfessional
-    ? Promise.resolve([])
-    : httpRequest<DataEnvelope<ApiService[]>>("/services").then((response) =>
-        unwrapData<ApiService[]>(response),
-      );
-
-  const resourcesPromise: Promise<ApiResource[]> = isProfessional
-    ? (async () => {
-        if (!currentResourceId) {
-          return [];
-        }
-
-        try {
-          const response = await httpRequest<DataEnvelope<ApiResource>>(
-            `/resources/${currentResourceId}`,
-          );
-          return [unwrapData<ApiResource>(response)];
-        } catch (error) {
-          const appError = error as AppError;
-          if (appError.status === 404) {
-            return [];
-          }
-          throw error;
-        }
-      })()
-    : (async () => {
-        const locations = await httpRequest<DataEnvelope<ApiLocation[]>>("/locations").then((response) =>
-          unwrapData<ApiLocation[]>(response),
-        );
-
-        const resourcesByLocation = await Promise.all(
-          locations.map(async (location) => {
-            const response = await httpRequest<DataEnvelope<ApiResource[]>>(
-              `/locations/${location.id}/resources`,
-            );
-            return unwrapData<ApiResource[]>(response);
-          }),
-        );
-
-        return resourcesByLocation.flat();
-      })();
-
-  const [bookings, services, resources] = await Promise.all([
-    bookingsPromise,
-    servicesPromise,
-    resourcesPromise,
-  ]);
-
-  const assignedByResource =
-    services.length === 0
-      ? []
-      : await Promise.all(
-          resources.map(async (resource) => {
-            const response = await httpRequest<DataEnvelope<ApiService[]>>(
-              `/resources/${resource.id}/services`,
-            );
-            return {
-              resourceId: resource.id,
-              serviceIds: unwrapData<ApiService[]>(response).map((service) => service.id),
-            };
-          }),
-        );
-
-  const assignedServiceIds = new Set(
-    assignedByResource.flatMap((item) => item.serviceIds),
+  const response = await httpRequest<DataEnvelope<ApiDashboardSnapshot>>(
+    "/dashboard/snapshot?upcomingLimit=8",
   );
-  const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
-  const lookback30d = new Date(now);
-  lookback30d.setDate(lookback30d.getDate() - 30);
-  const next24h = new Date(now);
-  next24h.setHours(next24h.getHours() + 24);
+  const data = unwrapData<ApiDashboardSnapshot>(response);
 
-  const todayBookings = bookings.filter((booking) => {
-    const start = new Date(booking.startTime);
-    return isSameLocalDate(start, now);
-  });
+  const sourceTotal = data.sourceChannels.reduce((acc, item) => acc + item.count, 0);
+  const severityOrder = { warning: 0, info: 1 } as const;
 
-  const confirmedCount = bookings.filter((booking) => booking.status === "CONFIRMED").length;
-  const pendingCount = bookings.filter((booking) => booking.status === "PENDING").length;
-
-  const last30d = bookings.filter((booking) => {
-    const start = new Date(booking.startTime);
-    return start >= lookback30d && start < dayEnd;
-  });
-  const noShowCount = last30d.filter((booking) => booking.status === "NO_SHOW").length;
-  const noShowRate = percentage(noShowCount, last30d.length);
-
-  const bookingsForUpcoming = isProfessional
-    ? currentResourceId
-      ? bookings.filter((booking) => booking.resourceId === currentResourceId)
-      : []
-    : bookings;
-
-  const upcomingBookings = bookingsForUpcoming
-    .filter((booking) => {
-      const start = new Date(booking.startTime);
-      return start >= now && start <= next24h;
-    })
-    .sort((left, right) => +new Date(left.startTime) - +new Date(right.startTime))
-    .slice(0, 8)
-    .map<UpcomingBooking>((booking) => ({
+  return {
+    kpis: [
+      { label: "Turnos hoy", value: String(data.kpis.todayBookings) },
+      { label: "Confirmados", value: String(data.kpis.confirmed) },
+      { label: "Pendientes", value: String(data.kpis.pending) },
+      {
+        label: "No-show (30d)",
+        value: String(data.kpis.noShow30d),
+        trend: `${data.kpis.noShowRate30d.toFixed(2)}% tasa`,
+      },
+    ],
+    upcomingBookings: data.upcomingBookings.map((booking) => ({
       id: booking.id,
       clientName: booking.clientName ?? "Cliente",
       serviceName: booking.serviceName ?? "Servicio",
       resourceName: booking.resourceName ?? "Recurso",
       startsAtLabel: formatHourLabel(booking.startTime),
-      status:
-        booking.status === "CONFIRMED"
-          ? "CONFIRMED"
-          : booking.status === "PENDING"
-            ? "PENDING"
-            : "CANCELLED",
-    }));
-
-  const channels: SourceChannelMetric["channel"][] = ["WEB", "WHATSAPP", "ADMIN", "API", "MCP"];
-  const sourceChannels = channels.map((channel) => {
-    const count = bookings.filter((booking) => booking.sourceChannel === channel).length;
-    return {
-      channel,
-      percentage: percentage(count, bookings.length),
-    };
-  });
-
-  const inactiveResourceIds = new Set(
-    resources.filter((resource) => !resource.active).map((resource) => resource.id),
-  );
-  const inactiveWithFutureBookings = bookings.filter((booking) => {
-    const start = new Date(booking.startTime);
-    return (
-      start >= now &&
-      inactiveResourceIds.has(booking.resourceId) &&
-      (booking.status === "PENDING" || booking.status === "CONFIRMED")
-    );
-  }).length;
-
-  const servicesWithoutResource = services.filter(
-    (service) => service.active && service.requiresResource && !assignedServiceIds.has(service.id),
-  ).length;
-
-  const alerts: string[] = [];
-  if (isProfessional && !currentResourceId) {
-    alerts.push("Tu cuenta PROFESSIONAL no tiene recurso asignado.");
-  }
-  if (inactiveWithFutureBookings > 0) {
-    alerts.push(`${inactiveWithFutureBookings} recursos inactivos tienen turnos futuros.`);
-  }
-  if (servicesWithoutResource > 0) {
-    alerts.push(`${servicesWithoutResource} servicios activos no tienen recursos asignados.`);
-  }
-
-  return {
-    kpis: [
-      { label: "Turnos hoy", value: String(todayBookings.length) },
-      { label: "Confirmados", value: String(confirmedCount) },
-      { label: "Pendientes", value: String(pendingCount) },
-      { label: "No-show (30d)", value: `${noShowRate}%` },
-    ],
-    upcomingBookings,
-    sourceChannels,
-    alerts,
+      status: booking.status === "PENDING" ? "PENDING" : "CONFIRMED",
+    })),
+    sourceChannels: data.sourceChannels.map((item) => ({
+      channel: item.source,
+      count: item.count,
+      percentage: percentage(item.count, sourceTotal),
+    })),
+    alerts: [...data.alerts].sort(
+      (left, right) => severityOrder[left.severity] - severityOrder[right.severity],
+    ),
   };
 }

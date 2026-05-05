@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, type FormEvent } from "react";
-import { MapPin, Users, CalendarDays, ListChecks } from "lucide-react";
+import { MapPin, Users, CalendarDays, ListChecks, Link2, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
 import { PhoneInput } from "react-international-phone";
 import { isValidPhoneNumber } from "libphonenumber-js";
@@ -36,6 +36,10 @@ import {
   getBookingErrorMessage,
   type CreateBookingInput,
 } from "@/features/bookings/bookings-service";
+import {
+  fetchResourceCalendarAccessUrl,
+  syncResourceCalendar,
+} from "@/features/calendar/google-calendar-service";
 import { fetchTenantInfo } from "@/features/tenant/tenant-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
@@ -57,6 +61,8 @@ const STATUS_FILTER_OPTIONS: BookingStatus[] = [
   "NO_SHOW",
   "CANCELLED",
 ];
+
+const SYNC_COOLDOWN_SECONDS = 60;
 
 type AgendaCreateBookingFormProps = {
   initialLocationId?: string;
@@ -411,6 +417,8 @@ export function AgendaPage() {
     "CONFIRMED",
   ]);
   const [showNewBookingPanel, setShowNewBookingPanel] = useState(false);
+  const [syncCooldownUntilMs, setSyncCooldownUntilMs] = useState<number | null>(null);
+  const [currentTimeMs, setCurrentTimeMs] = useState(Date.now());
   const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
 
   const locationsQuery = useLocationsQuery();
@@ -528,6 +536,20 @@ export function AgendaPage() {
     });
   }, [isProfessional, currentResourceId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return () => {};
+    }
+
+    const timer = window.setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+
   const updateStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: BookingStatus }) => updateBookingStatus(id, status),
     onSuccess: () => {
@@ -548,6 +570,45 @@ export function AgendaPage() {
     },
     onError: (error) => {
       const appError = error as unknown as AppError;
+      showFeedback("error", toAgendaFriendlyMessage(appError));
+    },
+  });
+
+  const openCalendarMutation = useMutation({
+    mutationFn: (resourceId: string) => fetchResourceCalendarAccessUrl(resourceId),
+    onSuccess: (result) => {
+      if (typeof window !== "undefined" && result.calendarUrl) {
+        window.open(result.calendarUrl, "_blank", "noopener,noreferrer");
+      }
+      showFeedback("success", "Agenda de Google abierta correctamente.");
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      showFeedback("error", toAgendaFriendlyMessage(appError));
+    },
+  });
+
+  const syncCalendarMutation = useMutation({
+    mutationFn: (resourceId: string) => syncResourceCalendar(resourceId),
+    onSuccess: () => {
+      setSyncCooldownUntilMs(Date.now() + SYNC_COOLDOWN_SECONDS * 1000);
+      showFeedback("success", "Agenda sincronizada correctamente.");
+      void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      const retryAfterFromDetails = Number.parseInt(
+        appError.details?.find((detail) => detail.field === "retryAfterSeconds")?.message ?? "",
+        10,
+      );
+      const retryAfterSeconds = Number.isNaN(retryAfterFromDetails)
+        ? appError.retryAfterSeconds
+        : retryAfterFromDetails;
+
+      if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+        setSyncCooldownUntilMs(Date.now() + retryAfterSeconds * 1000);
+      }
+
       showFeedback("error", toAgendaFriendlyMessage(appError));
     },
   });
@@ -606,6 +667,10 @@ export function AgendaPage() {
   const errorMessage = calendarBookingsQuery.isError
     ? toAgendaFriendlyMessage(calendarBookingsQuery.error as unknown as AppError)
     : null;
+  const remainingSyncSeconds = syncCooldownUntilMs
+    ? Math.max(0, Math.ceil((syncCooldownUntilMs - currentTimeMs) / 1000))
+    : 0;
+  const isSyncCooldownActive = remainingSyncSeconds > 0;
 
   return (
     <div className="space-y-4">
@@ -626,6 +691,49 @@ export function AgendaPage() {
         onViewChange={setViewMode}
         onCreateBooking={() => setShowNewBookingPanel(true)}
         disableCreateBooking={isProfessional && !currentResourceId}
+        extraActions={
+          isProfessional ? (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => {
+                  if (!currentResourceId) {
+                    return;
+                  }
+                  openCalendarMutation.mutate(currentResourceId);
+                }}
+                disabled={!currentResourceId || openCalendarMutation.isPending}
+              >
+                <Link2 className="size-4" />
+                {openCalendarMutation.isPending ? "Abriendo..." : "Obtener agenda"}
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (!currentResourceId) {
+                    return;
+                  }
+                  syncCalendarMutation.mutate(currentResourceId);
+                }}
+                disabled={!currentResourceId || syncCalendarMutation.isPending || isSyncCooldownActive}
+                aria-label="Sincronizar agenda"
+                title={
+                  isSyncCooldownActive
+                    ? `Podras sincronizar de nuevo en ${remainingSyncSeconds}s`
+                    : "Sincronizar agenda"
+                }
+              >
+                <RefreshCw className={`size-4 ${syncCalendarMutation.isPending ? "animate-spin" : ""}`} />
+                <span className="sr-only">Sincronizar agenda</span>
+                {isSyncCooldownActive ? <span className="ml-2 text-xs">{remainingSyncSeconds}s</span> : null}
+              </Button>
+            </div>
+          ) : null
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">

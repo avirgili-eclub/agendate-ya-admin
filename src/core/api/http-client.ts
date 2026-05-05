@@ -43,6 +43,31 @@ function normalizeNetworkError(error: unknown) {
   });
 }
 
+function parseRetryAfterSeconds(response: Response, details: unknown): number | undefined {
+  const retryAfterHeader = response.headers.get("Retry-After");
+  if (retryAfterHeader) {
+    const parsed = Number.parseInt(retryAfterHeader, 10);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  if (details && typeof details === "object" && !Array.isArray(details)) {
+    const candidate = (details as Record<string, unknown>).retryAfterSeconds;
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+    if (typeof candidate === "string") {
+      const parsed = Number.parseInt(candidate, 10);
+      if (!Number.isNaN(parsed) && parsed >= 0) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+}
+
 function createRequestSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
   if (!timeoutMs) {
     return { signal, cleanup: () => {} };
@@ -77,14 +102,25 @@ export async function httpRequest<TResponse>(
   const accessToken = !options.skipAuth && authHandlers ? authHandlers.getAccessToken() : null;
   const makeRequest = async (bearerToken?: string | null) => {
     const requestSignal = createRequestSignal(options.signal, options.timeoutMs);
+    const headers: Record<string, string> = {
+      ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
+      ...(options.headers ?? {}),
+    };
+
+    let body: BodyInit | undefined;
+    if (options.body !== undefined && options.body !== null) {
+      if (options.body instanceof FormData) {
+        body = options.body;
+      } else {
+        headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+        body = JSON.stringify(options.body);
+      }
+    }
+
     return fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        ...(bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}),
-        ...(options.headers ?? {}),
-      },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      headers,
+      body,
       signal: requestSignal.signal,
     }).finally(requestSignal.cleanup);
   };
@@ -119,11 +155,13 @@ export async function httpRequest<TResponse>(
 
   if (!response.ok) {
     const envelope = (parsed ?? {}) as ErrorEnvelope;
+    const retryAfterSeconds = parseRetryAfterSeconds(response, envelope.error?.details);
     const error: AppError = toAppError({
       status: response.status,
       code: envelope.error?.code,
       message: envelope.error?.message,
       details: envelope.error?.details,
+      retryAfterSeconds,
     });
     throw error;
   }

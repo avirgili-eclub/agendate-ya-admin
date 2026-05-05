@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Calendar } from "lucide-react";
 import { TestimonialCarousel } from "./testimonial-carousel";
 
 type AuthLayoutProps = {
@@ -13,7 +14,9 @@ export function AuthLayout({ children, showTestimonial = true }: AuthLayoutProps
       <aside className="hidden w-1/2 bg-primary lg:flex lg:flex-col lg:p-12 lg:relative">
         <div>
           <div className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-lg bg-secondary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+              <Calendar size={22} strokeWidth={2.25} className="text-white" aria-hidden="true" />
+            </div>
             <h2 className="text-2xl font-bold text-white">AgendateYA</h2>
           </div>
           <p className="mt-3 text-lg text-white/90">

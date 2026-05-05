@@ -6,11 +6,13 @@ export type TenantInfo = {
   id: string;
   name: string;
   slug: string;
+  published?: boolean;
   timezone?: string;
   businessType?: string;
   businessSubType?: string;
   subscriptionTier?: string;
   subscriptionStatus?: string;
+  subscriptionTrialEndsAt?: string;
   maxLocations?: number;
   maxResources?: number;
   maxUsers?: number;
@@ -26,6 +28,7 @@ export type TenantUpdateInput = {
   name?: string;
   timezone?: string;
   businessSubType?: string;
+  published?: boolean;
 };
 
 type DataEnvelope<T> = { data: T };
@@ -34,11 +37,13 @@ type ApiTenant = {
   id: string;
   name: string;
   slug: string;
+  published?: boolean | null;
   timezone?: string | null;
   businessSubType?: string | null;
   businessType?: string | null;
   subscriptionTier?: string | null;
   subscriptionStatus?: string | null;
+  subscriptionTrialEndsAt?: string | null;
   maxLocations?: number | null;
   maxResources?: number | null;
   maxUsers?: number | null;
@@ -55,11 +60,13 @@ function mapApiTenantToInfo(api: ApiTenant): TenantInfo {
     id: api.id,
     name: api.name,
     slug: api.slug,
+    published: api.published ?? undefined,
     timezone: api.timezone ?? undefined,
     businessType: api.businessType ?? undefined,
     businessSubType: api.businessSubType ?? undefined,
     subscriptionTier: api.subscriptionTier ?? undefined,
     subscriptionStatus: api.subscriptionStatus ?? undefined,
+    subscriptionTrialEndsAt: api.subscriptionTrialEndsAt ?? undefined,
     maxLocations: api.maxLocations ?? undefined,
     maxResources: api.maxResources ?? undefined,
     maxUsers: api.maxUsers ?? undefined,
@@ -101,6 +108,16 @@ export function toTenantFriendlyMessage(error: AppError): string {
   return error.message ?? "Ocurrió un error inesperado.";
 }
 
+const TIER_ALIASES: Record<string, string> = {
+  pro: "professional",
+  ent: "enterprise",
+};
+
+export function normalizeTier(tier: string): string {
+  const t = tier.toLowerCase();
+  return TIER_ALIASES[t] ?? t;
+}
+
 export function getTierLabel(tier: string): string {
   const tierLabels: Record<string, string> = {
     free: "Gratuito",
@@ -108,7 +125,7 @@ export function getTierLabel(tier: string): string {
     professional: "Profesional",
     enterprise: "Empresarial",
   };
-  return tierLabels[tier.toLowerCase()] ?? tier;
+  return tierLabels[normalizeTier(tier)] ?? tier;
 }
 
 export function getSubscriptionStatusLabel(status: string): string {

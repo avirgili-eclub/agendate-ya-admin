@@ -271,6 +271,45 @@ export function getValidStatusTransitions(currentStatus: BookingStatus): Booking
 }
 
 export function toAgendaFriendlyMessage(error: AppError): string {
+  const retryAfterFromDetails = Number.parseInt(
+    error.details?.find((detail) => detail.field === "retryAfterSeconds")?.message ?? "",
+    10,
+  );
+  const retryAfterSeconds = Number.isNaN(retryAfterFromDetails)
+    ? error.retryAfterSeconds
+    : retryAfterFromDetails;
+
+  if (error.code === "RESOURCE_NOT_ASSIGNED") {
+    return "Tu usuario profesional no tiene un recurso asignado. Contacta al administrador.";
+  }
+
+  if (error.code === "RESOURCE_ACCESS_DENIED") {
+    return "No tienes permisos para operar esta agenda.";
+  }
+
+  if (error.code === "RESOURCE_CALENDAR_NOT_CREATED") {
+    return "Todavia no tienes una agenda creada. Pidele al administrador que la cree.";
+  }
+
+  if (error.code === "GOOGLE_CALENDAR_NOT_CONNECTED") {
+    return "No pudimos conectar con Google Calendar porque la integracion del negocio no esta activa. Contacta al administrador.";
+  }
+
+  if (error.code === "GOOGLE_CALENDAR_NEEDS_REAUTH") {
+    return "La conexion con Google Calendar expiro. Solo el administrador puede reconectarla.";
+  }
+
+  if (error.code === "CALENDAR_SYNC_RATE_LIMITED") {
+    if (typeof retryAfterSeconds === "number" && retryAfterSeconds > 0) {
+      return `Ya sincronizaste recientemente. Espera ${retryAfterSeconds}s e intenta de nuevo.`;
+    }
+    return "Ya sincronizaste recientemente. Espera unos segundos e intenta de nuevo.";
+  }
+
+  if (error.code === "INVALID_PARAMETER") {
+    return "Parametro invalido en la solicitud.";
+  }
+
   if (error.code === "BOOKING_CONFLICT") {
     return "El recurso ya tiene un turno reservado en ese horario. Elegí otro horario o recurso.";
   }

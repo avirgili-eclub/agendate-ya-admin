@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
@@ -13,6 +14,7 @@ type ViewModeSelectorProps = {
   onViewChange: (mode: ViewMode) => void;
   onCreateBooking: () => void;
   disableCreateBooking?: boolean;
+  extraActions?: ReactNode;
 };
 
 const VIEW_OPTIONS: Array<{ value: ViewMode; label: string }> = [
@@ -30,6 +32,7 @@ export function ViewModeSelector({
   onViewChange,
   onCreateBooking,
   disableCreateBooking,
+  extraActions,
 }: ViewModeSelectorProps) {
   return (
     <PageCard className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
@@ -71,6 +74,8 @@ export function ViewModeSelector({
             </button>
           ))}
         </div>
+
+        {extraActions}
 
         <Button size="sm" onClick={onCreateBooking} disabled={disableCreateBooking}>
           <Plus className="mr-1 size-4" />

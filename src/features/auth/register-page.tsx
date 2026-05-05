@@ -1,11 +1,11 @@
-import { FormEvent, useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
 import type { AppError } from "@/core/errors/app-error";
-import { register, startGoogleLogin } from "@/core/auth/auth-service";
+import { fetchSignupPlans, register, startGoogleLogin } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { fetchBusinessSubTypes } from "@/shared/lib/business-subtypes";
@@ -19,10 +19,12 @@ import {
 import { AuthLayout } from "./components/auth-layout";
 import { GoogleButton } from "./components/google-button";
 import { EmailVerificationBanner } from "./components/email-verification-banner";
+import { PlanSelectorCard } from "./components/plan-selector-card";
 import { getRateLimitMessage, isRateLimitError, useRateLimitCooldown } from "./rate-limit";
 import { useGoogleOAuthCallback } from "./use-google-oauth-callback";
+import type { PlanId } from "@/features/auth/types/signup-plans";
 
-type RegisterStep = 1 | 2;
+type RegisterStep = 1 | 2 | 3;
 
 const TIMEZONE_OPTIONS = [
   { value: "America/Asuncion", label: "Asuncion (UTC-3)" },
@@ -109,6 +111,11 @@ export function RegisterPage() {
 
   useGoogleOAuthCallback();
 
+  // Read URL plan param via useRouterState (design constraint: NOT useSearch)
+  const planParamRaw = useRouterState({
+    select: (s) => (s.location.search as Record<string, string | undefined>)?.plan,
+  });
+
   const [step, setStep] = useState<RegisterStep>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,13 +139,42 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordTouched, setPasswordTouched] = useState(false);
 
-  const progressWidth = useMemo(() => (step === 1 ? "50%" : "100%"), [step]);
+  // Plan selection state
+  const [selectedPlan, setSelectedPlan] = useState<PlanId | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  // Progress bar: 3 steps (33% / 66% / 100%)
+  const progressWidth = useMemo(() => {
+    if (step === 1) return "33%";
+    if (step === 2) return "66%";
+    return "100%";
+  }, [step]);
+
   const businessSubTypesQuery = useQuery({
     queryKey: ["business-subtypes"],
     queryFn: fetchBusinessSubTypes,
     staleTime: 5 * 60 * 1000,
   });
   const businessSubTypeOptions = businessSubTypesQuery.data ?? [];
+
+  // Signup plans query — mirror businessSubTypes pattern
+  const {
+    data: signupPlans,
+    isLoading: isLoadingPlans,
+    refetch: refetchPlans,
+  } = useQuery({
+    queryKey: ["signup-plans"],
+    queryFn: fetchSignupPlans,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Resolve initial plan after plans data loads
+  useEffect(() => {
+    if (!signupPlans) return;
+    const normalized = planParamRaw?.toUpperCase() as PlanId | undefined;
+    const isValid = normalized && signupPlans.enabledPlans.includes(normalized);
+    setSelectedPlan(isValid ? normalized : signupPlans.defaultPlan);
+  }, [signupPlans, planParamRaw]);
 
   const passwordRequirementStatus = useMemo(
     () =>
@@ -244,12 +280,25 @@ export function RegisterPage() {
     return nextErrors;
   }
 
+  // Clear planError whenever user selects a new plan
+  function handlePlanChange(plan: PlanId) {
+    setSelectedPlan(plan);
+    setPlanError(null);
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setPasswordTouched(true);
 
-    if (!validateStep2()) {
+    // Only fire register() when on step 3
+    if (step !== 3) {
+      return;
+    }
+
+    // Guard: selectedPlan must be set
+    if (!selectedPlan) {
+      setPlanError("Selecciona un plan para continuar.");
       return;
     }
 
@@ -272,8 +321,9 @@ export function RegisterPage() {
           password,
           fullName,
         },
+        selectedPlan: selectedPlan ?? undefined,
       });
-      
+
       // Show email verification banner
       setShowEmailVerificationBanner(true);
       setUserEmail(email);
@@ -287,6 +337,17 @@ export function RegisterPage() {
         message: typeof appError.message === "string" ? appError.message : "Unexpected error",
         details: Array.isArray(appError.details) ? appError.details : [],
       };
+
+      // 400 "plan not enabled" recovery
+      if (normalizedError.status === 400 && /plan/i.test(normalizedError.message ?? "")) {
+        setPlanError("El plan seleccionado ya no está disponible. Elegí otro.");
+        setSelectedPlan(null);
+        refetchPlans();
+        setStep(3);
+        setIsLoading(false);
+        return;
+      }
+
       if (isRateLimitError(normalizedError)) {
         startCooldown();
       }
@@ -316,7 +377,7 @@ export function RegisterPage() {
           </p>
         </div>
 
-        {/* Barra de progreso */}
+        {/* Barra de progreso — 3 pasos */}
         <div className="mt-6">
           <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-dark">
             <div
@@ -325,8 +386,14 @@ export function RegisterPage() {
             />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs font-medium text-primary-light">
-            <span>Paso {step} de 2</span>
-            <span>{step === 1 ? "Información del negocio" : "Datos de administrador"}</span>
+            <span>Paso {step} de 3</span>
+            <span>
+              {step === 1
+                ? "Información del negocio"
+                : step === 2
+                  ? "Datos de administrador"
+                  : "Elegí tu plan"}
+            </span>
           </div>
         </div>
 
@@ -443,7 +510,7 @@ export function RegisterPage() {
                 </Button>
               </div>
             </div>
-          ) : (
+          ) : step === 2 ? (
             <div className="space-y-4">
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre de la sede</span>
@@ -610,8 +677,21 @@ export function RegisterPage() {
                 <Button type="button" variant="outline" size="lg" onClick={() => setStep(1)}>
                   Volver
                 </Button>
-                <Button type="submit" size="lg" disabled={isLoading || isCoolingDown}>
-                  {isLoading ? "Creando..." : isCoolingDown ? `Espera ${remainingSeconds}s` : "Crear cuenta"}
+                {/* type="button" — prevents form submit; validates step 2 then advances to step 3 */}
+                <Button
+                  type="button"
+                  size="lg"
+                  disabled={isLoading || isCoolingDown}
+                  onClick={() => {
+                    setError(null);
+                    setPasswordTouched(true);
+                    if (!validateStep2()) {
+                      return;
+                    }
+                    setStep(3);
+                  }}
+                >
+                  {isCoolingDown ? `Espera ${remainingSeconds}s` : "Continuar →"}
                 </Button>
               </div>
 
@@ -620,6 +700,37 @@ export function RegisterPage() {
                   Limite temporal alcanzado. Espera {remainingSeconds}s para continuar.
                 </p>
               ) : null}
+            </div>
+          ) : (
+            /* Step 3: Plan selection */
+            <div className="space-y-6">
+              <header className="space-y-2">
+                <h2 className="text-xl font-semibold text-primary">Elegí tu plan</h2>
+                <p className="text-sm text-primary-light/80">
+                  {signupPlans
+                    ? `Empezá con un plan. Los planes ${signupPlans.trialEligiblePlans.join(", ")} incluyen ${signupPlans.trialDays} días de prueba.`
+                    : "Cargando planes..."}
+                </p>
+              </header>
+
+              <PlanSelectorCard
+                plans={signupPlans?.enabledPlans ?? []}
+                selectedPlan={selectedPlan}
+                trialEligiblePlans={signupPlans?.trialEligiblePlans ?? []}
+                trialDays={signupPlans?.trialDays ?? 30}
+                onChange={handlePlanChange}
+                isLoading={isLoadingPlans}
+                error={planError}
+              />
+
+              <div className="flex gap-3">
+                <Button type="button" variant="outline" onClick={() => setStep(2)} disabled={isLoading}>
+                  Volver
+                </Button>
+                <Button type="submit" disabled={!selectedPlan || isLoading} className="flex-1">
+                  {isLoading ? "Creando cuenta..." : "Crear cuenta"}
+                </Button>
+              </div>
             </div>
           )}
         </form>
