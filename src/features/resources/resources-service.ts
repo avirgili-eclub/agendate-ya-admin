@@ -8,6 +8,7 @@ export type ResourceCardItem = {
   locationId: string;
   name: string;
   locationName: string;
+  imageUrl?: string;
   type: "PROFESSIONAL" | "TABLE" | "ROOM" | "EQUIPMENT";
   serviceIds: string[];
   services: string[];
@@ -36,6 +37,9 @@ export type ResourceUpsertInput = {
   description?: string;
   capacity?: number | null;
   active: boolean;
+  imageUrl?: string;
+  imageFile?: File | null;
+  removeImage?: boolean;
 };
 
 export type TransferResourceInput = {
@@ -70,6 +74,8 @@ type ApiResource = {
   name: string;
   description?: string | null;
   capacity?: number | null;
+  imageUrl?: string | null;
+  metadata?: Record<string, unknown> | null;
   active: boolean;
   calendarConnected?: boolean;
 };
@@ -92,11 +98,15 @@ function toCardItem(
   locationName: string,
   assignedServices: ApiService[],
 ): ResourceCardItem {
+  const metadataImageUrl =
+    typeof resource.metadata?.imageUrl === "string" ? resource.metadata.imageUrl : undefined;
+
   return {
     id: resource.id,
     locationId: resource.locationId,
     name: resource.name,
     locationName,
+    imageUrl: resource.imageUrl ?? metadataImageUrl ?? undefined,
     type: resource.resourceType,
     serviceIds: assignedServices.map((service) => service.id),
     services: assignedServices.map((service) => service.name),
@@ -115,14 +125,20 @@ type CreateResourceDTO = {
   name: string;
   description: string | null;
   capacity: number | null;
+  imageUrl?: string;
+  removeImage?: boolean;
 };
 
 function toCreateResourceDTO(input: ResourceUpsertInput): CreateResourceDTO {
+  const normalizedImageUrl = input.imageUrl?.trim();
+
   return {
     resourceType: input.type,
     name: input.name,
     description: input.description || null,
     capacity: input.capacity ?? null,
+    imageUrl: normalizedImageUrl ? normalizedImageUrl : undefined,
+    removeImage: input.removeImage === true ? true : undefined,
   };
 }
 
@@ -134,15 +150,63 @@ type UpdateResourceDetailsDTO = {
   description: string | null;
   capacity: number | null;
   active: boolean;
+  imageUrl?: string;
+  removeImage?: boolean;
 };
 
 function toUpdateResourceDetailsDTO(input: ResourceUpsertInput): UpdateResourceDetailsDTO {
+  const normalizedImageUrl = input.imageUrl?.trim();
+
   return {
     name: input.name,
     description: input.description || null,
     capacity: input.capacity ?? null,
     active: input.active,
+    imageUrl: normalizedImageUrl ? normalizedImageUrl : undefined,
+    removeImage: input.removeImage === true ? true : undefined,
   };
+}
+
+function toCreateResourceRequestBody(input: ResourceUpsertInput): CreateResourceDTO | FormData {
+  const dto = toCreateResourceDTO(input);
+  if (!(input.imageFile instanceof File)) {
+    return dto;
+  }
+
+  const formData = new FormData();
+  formData.append("resourceType", dto.resourceType);
+  formData.append("name", dto.name);
+  formData.append("description", dto.description ?? "");
+  formData.append("capacity", dto.capacity == null ? "" : String(dto.capacity));
+  if (dto.imageUrl) {
+    formData.append("imageUrl", dto.imageUrl);
+  }
+  if (dto.removeImage) {
+    formData.append("removeImage", "true");
+  }
+  formData.append("image", input.imageFile);
+  return formData;
+}
+
+function toUpdateResourceRequestBody(input: ResourceUpsertInput): UpdateResourceDetailsDTO | FormData {
+  const dto = toUpdateResourceDetailsDTO(input);
+  if (!(input.imageFile instanceof File)) {
+    return dto;
+  }
+
+  const formData = new FormData();
+  formData.append("name", dto.name);
+  formData.append("description", dto.description ?? "");
+  formData.append("capacity", dto.capacity == null ? "" : String(dto.capacity));
+  formData.append("active", String(dto.active));
+  if (dto.imageUrl) {
+    formData.append("imageUrl", dto.imageUrl);
+  }
+  if (dto.removeImage) {
+    formData.append("removeImage", "true");
+  }
+  formData.append("image", input.imageFile);
+  return formData;
 }
 
 /**
@@ -178,6 +242,12 @@ export const toResourcesFriendlyMessage = createErrorMapper({
  * Handles edge case not covered by generic mapper.
  */
 export function toResourcesOperationError(error: AppError): string {
+  if (error.status === 413) {
+    return "La imagen es demasiado grande. El tamano maximo permitido es 5MB.";
+  }
+  if (error.status === 415) {
+    return "Formato de imagen no soportado. Usa JPG, PNG, WebP o AVIF.";
+  }
   if (error.status === 402 || error.code === "SUBSCRIPTION_LIMIT") {
     return "Alcanzaste el limite del plan para equipos/profesionales activos.";
   }
@@ -375,7 +445,7 @@ export async function createResource(input: ResourceUpsertInput): Promise<Resour
     `/locations/${locationId}/resources`,
     {
       method: "POST",
-      body: toCreateResourceDTO(input),
+      body: toCreateResourceRequestBody(input),
     },
   );
   let created = unwrapData<ApiResource>(createResponse);
@@ -397,7 +467,7 @@ export async function updateResourceDetails(id: string, input: ResourceUpsertInp
     fetchResourceLocations(),
     httpRequest<DataEnvelope<ApiResource>>(`/resources/${id}`, {
       method: "PUT",
-      body: toUpdateResourceDetailsDTO(input),
+      body: toUpdateResourceRequestBody(input),
     }),
   ]);
 

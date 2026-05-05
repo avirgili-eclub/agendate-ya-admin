@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, Link2, Loader2, RefreshCw, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { AlertTriangle, Link2, Loader2, RefreshCw, UserRound, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -17,6 +17,10 @@ import { useNotifications } from "@/shared/notifications/notification-store";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { Button } from "@/shared/ui/button";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
+
+const MAX_IMAGE_SIZE_MB = 5;
+const MAX_IMAGE_SIZE_BYTES = MAX_IMAGE_SIZE_MB * 1024 * 1024;
+const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
 type ModalShellProps = {
   title: string;
@@ -62,10 +66,15 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
   const [description, setDescription] = useState(initial?.description ?? "");
   const [capacity, setCapacity] = useState(String(initial?.capacity ?? 1));
   const [active, setActive] = useState(initial?.active ?? true);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(initial?.imageUrl ?? "");
+  const [removeImage, setRemoveImage] = useState(false);
+  const [localImageError, setLocalImageError] = useState<string | null>(null);
   const [calendarConnected, setCalendarConnected] = useState(Boolean(initial?.calendarConnected));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("resource");
   const { addNotification } = useNotifications();
 
@@ -74,6 +83,21 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
   useEffect(() => {
     setCalendarConnected(Boolean(initial?.calendarConnected));
   }, [initial?.calendarConnected, initial?.id]);
+
+  useEffect(() => {
+    setImageFile(null);
+    setImagePreviewUrl(initial?.imageUrl ?? "");
+    setRemoveImage(false);
+    setLocalImageError(null);
+  }, [initial?.id, initial?.imageUrl, mode]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreviewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreviewUrl);
+      }
+    };
+  }, [imagePreviewUrl]);
 
   const resourceCalendarStatusQuery = useQuery({
     queryKey: ["resource", resourceId, "calendar-status"],
@@ -155,6 +179,9 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
     setIsSubmitting(true);
 
     try {
+      const normalizedImageUrl =
+        imagePreviewUrl && !imagePreviewUrl.startsWith("blob:") ? imagePreviewUrl : "";
+
       await onSubmit({
         name,
         locationName,
@@ -162,6 +189,9 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
         description,
         capacity: capacity ? Number(capacity) : null,
         active,
+        imageUrl: normalizedImageUrl,
+        imageFile,
+        removeImage,
       });
     } catch (error) {
       const { fieldErrors, formError } = processFormError(error as AppError);
@@ -172,12 +202,101 @@ export function ResourceUpsertModal({ mode, locations, initial, onClose, onSubmi
     }
   }
 
+  function handleImageInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setLocalImageError("Formato no soportado. Usa JPG, PNG, WebP o AVIF.");
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setLocalImageError(`La imagen supera el limite de ${MAX_IMAGE_SIZE_MB}MB.`);
+      return;
+    }
+
+    if (imagePreviewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(imagePreviewUrl);
+    }
+
+    setLocalImageError(null);
+    setImageFile(file);
+    setRemoveImage(false);
+    setImagePreviewUrl(URL.createObjectURL(file));
+  }
+
+  const imageError = fieldErrors.imageUrl ?? localImageError;
+
   return (
     <ModalShell title={title} onClose={onClose}>
       <form className="space-y-4" onSubmit={handleSubmit}>
         {feedback ? <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} /> : null}
 
         {formError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{formError}</p> : null}
+
+        <div>
+          <span className="mb-2 block text-sm text-primary-dark">Foto del profesional/equipo</span>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-neutral-dark bg-white"
+            >
+              {imagePreviewUrl ? (
+                <img
+                  src={imagePreviewUrl}
+                  alt={name || "Foto del equipo"}
+                  className="size-full object-cover object-center"
+                />
+              ) : (
+                <UserRound className="size-10 text-primary-light" />
+              )}
+            </button>
+
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  {imagePreviewUrl ? "Cambiar imagen" : "Subir imagen"}
+                </Button>
+                {imagePreviewUrl ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
+                    onClick={() => {
+                      if (imagePreviewUrl.startsWith("blob:")) {
+                        URL.revokeObjectURL(imagePreviewUrl);
+                      }
+                      setImageFile(null);
+                      setImagePreviewUrl("");
+                      setRemoveImage(true);
+                      setLocalImageError(null);
+                    }}
+                  >
+                    Quitar
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-primary-light">JPG, PNG, WebP o AVIF. Max. 5MB.</p>
+            </div>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES.join(",")}
+            className="sr-only"
+            onChange={handleImageInputChange}
+          />
+
+          {imageError ? <p className="mt-2 text-xs text-red-700">{imageError}</p> : null}
+        </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block">

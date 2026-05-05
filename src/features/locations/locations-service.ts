@@ -47,6 +47,8 @@ export type LocationUpsertInput = {
   address?: string;
   phone?: string;
   imageUrl?: string;
+  imageFile?: File | null;
+  removeImage?: boolean;
   businessHours?: LocationBusinessHoursInput;
 };
 
@@ -211,8 +213,36 @@ function toUpsertPayload(input: LocationUpsertInput) {
     address: normalizeOptionalField(input.address),
     phone: normalizeOptionalField(input.phone),
     imageUrl: normalizeOptionalField(input.imageUrl),
+    removeImage: input.removeImage === true ? true : undefined,
     businessHours,
   };
+}
+
+function toUpsertRequestBody(input: LocationUpsertInput): FormData | ReturnType<typeof toUpsertPayload> {
+  const payload = toUpsertPayload(input);
+  if (!(input.imageFile instanceof File)) {
+    return payload;
+  }
+
+  const formData = new FormData();
+  formData.append("name", payload.name);
+  if (payload.address) {
+    formData.append("address", payload.address);
+  }
+  if (payload.phone) {
+    formData.append("phone", payload.phone);
+  }
+  if (payload.imageUrl) {
+    formData.append("imageUrl", payload.imageUrl);
+  }
+  if (payload.removeImage) {
+    formData.append("removeImage", "true");
+  }
+  if (payload.businessHours) {
+    formData.append("businessHours", JSON.stringify(payload.businessHours));
+  }
+  formData.append("image", input.imageFile);
+  return formData;
 }
 
 export async function fetchLocations(): Promise<LocationItem[]> {
@@ -224,7 +254,7 @@ export async function createLocation(input: LocationUpsertInput): Promise<Locati
   assertLocationInput(input);
   const response = await httpRequest<DataEnvelope<ApiLocation>>("/locations", {
     method: "POST",
-    body: toUpsertPayload(input),
+    body: toUpsertRequestBody(input),
   });
   return mapApiLocationToItem(unwrapData<ApiLocation>(response));
 }
@@ -233,7 +263,7 @@ export async function updateLocation(id: string, input: LocationUpsertInput): Pr
   assertLocationInput(input);
   const response = await httpRequest<DataEnvelope<ApiLocation>>(`/locations/${id}`, {
     method: "PUT",
-    body: toUpsertPayload(input),
+    body: toUpsertRequestBody(input),
   });
   return mapApiLocationToItem(unwrapData<ApiLocation>(response));
 }
@@ -252,6 +282,14 @@ const toLocationsBaseMessage = createErrorMapper({
 export function toLocationsFriendlyMessage(error: AppError): string {
   if (error.status === 403 || error.code === "FORBIDDEN") {
     return "No tienes permisos para gestionar sedes.";
+  }
+
+  if (error.status === 413) {
+    return "La imagen es demasiado grande. El tamaño máximo permitido es 5MB.";
+  }
+
+  if (error.status === 415) {
+    return "Formato de imagen no soportado. Usa JPG, PNG, WebP o AVIF.";
   }
 
   if (error.status === 400 && error.code !== "VALIDATION_ERROR") {

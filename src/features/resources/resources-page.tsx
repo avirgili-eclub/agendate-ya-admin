@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search, SlidersHorizontal, UserRound } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -24,7 +24,7 @@ import { StatusChip } from "@/shared/ui/status-chip";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
-const PAGE_SIZE = 4;
+const PAGE_SIZE = 6;
 
 function ResourceTypeBadge({ type }: { type: ResourceCardItem["type"] }) {
   if (type === "PROFESSIONAL") {
@@ -215,12 +215,12 @@ export function ResourcesPage() {
       ) : null}
 
       {resourcesQuery.isLoading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 4 }).map((_, idx) => (
-            <PageCard key={`resource-skeleton-${idx}`} className="animate-pulse">
+            <PageCard key={`resource-skeleton-${idx}`} className="animate-pulse p-4">
               <div className="h-4 w-40 rounded bg-neutral-dark" />
               <div className="mt-2 h-3 w-28 rounded bg-neutral-dark" />
-              <div className="mt-5 h-10 rounded bg-neutral-dark" />
+              <div className="mt-4 h-8 rounded bg-neutral-dark" />
             </PageCard>
           ))}
         </div>
@@ -235,15 +235,32 @@ export function ResourcesPage() {
 
       {!resourcesQuery.isLoading && !errorMessage && cards.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {cards.map((resource: ResourceCardItem) => (
-              <PageCard key={resource.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-primary-dark">{resource.name}</h3>
-                    <p className="text-sm text-primary-light">{resource.locationName}</p>
+              <PageCard key={resource.id} className="p-4">
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex min-w-0 items-start gap-2.5">
+                    <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-neutral-dark bg-white">
+                      {resource.imageUrl ? (
+                        <img
+                          src={resource.imageUrl}
+                          alt={resource.name}
+                          className="size-full object-cover"
+                        />
+                      ) : (
+                        <UserRound className="size-4.5 text-primary-light" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-base font-semibold text-primary-dark" title={resource.name}>
+                        {resource.name}
+                      </h3>
+                      <p className="truncate text-xs text-primary-light" title={resource.locationName}>
+                        {resource.locationName}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1 text-right">
+                  <div className="origin-top-right scale-[0.92] space-y-1 text-right">
                     <StatusChip tone={resource.active ? "success" : "neutral"} label={resource.active ? "Activo" : "Inactivo"} />
                     <div>
                       <ResourceTypeBadge type={resource.type} />
@@ -256,20 +273,20 @@ export function ResourcesPage() {
                   </div>
                 </div>
 
-                <p className="mt-4 text-[11px] font-semibold uppercase tracking-wide text-primary-light">Servicios asignados</p>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <p className="mt-3 text-[10px] font-semibold uppercase tracking-wide text-primary-light">Servicios asignados</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {resource.services.map((service: string) => (
-                    <span key={service} className="rounded-full bg-primary/10 px-2.5 py-1 text-xs text-primary">
+                    <span key={service} className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
                       {service}
                     </span>
                   ))}
                 </div>
 
-                <div className="mt-5 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-1.5">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="h-8 w-full px-2 text-xs"
                     onClick={() => setEditingResource(resource)}
                   >
                     Editar
@@ -277,7 +294,7 @@ export function ResourcesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="h-8 w-full px-2 text-xs"
                     onClick={() => setTransferingResource(resource)}
                   >
                     Transferir
@@ -285,7 +302,7 @@ export function ResourcesPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full"
+                    className="h-8 w-full px-2 text-xs"
                     onClick={() => setManagingServicesResource(resource)}
                   >
                     Servicios
@@ -295,8 +312,8 @@ export function ResourcesPage() {
                     size="sm"
                     className={
                       resource.active
-                        ? "w-full border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
-                        : "w-full border-emerald-300 text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
+                        ? "h-8 w-full border-red-300 px-2 text-xs text-red-700 hover:border-red-400 hover:bg-red-50"
+                        : "h-8 w-full border-emerald-300 px-2 text-xs text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50"
                     }
                     onClick={() => updateResourceMutation.mutate({ id: resource.id, active: !resource.active })}
                     disabled={updateResourceMutation.isPending}
