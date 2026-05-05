@@ -140,6 +140,7 @@ export function GeneralTab() {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (!tenantInfo) return;
     const nextInstagramUrl = instagramUrl.trim();
     const currentInstagramUrl = tenantInfo.instagramUrl?.trim() ?? "";
     const instagramUrlInput =
