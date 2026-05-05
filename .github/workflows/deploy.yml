@@ -49,6 +49,9 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_BOOKING_SITE_DOMAIN=${{ vars.VITE_BOOKING_SITE_DOMAIN }}
 
   deploy-dev:
     runs-on: ubuntu-latest

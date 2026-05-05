@@ -29,6 +29,7 @@ import {
   formatBusinessTypeLabel,
   formatBusinessSubTypeLabel,
 } from "@/shared/lib/business-subtypes";
+import { getBookingSiteUrl } from "@/shared/lib/booking-site-url";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { PageCard } from "@/shared/ui/page-card";
@@ -218,7 +219,7 @@ export function GeneralTab() {
   const showPublishRequirements =
     (publishError?.code === "PUBLISH_REQUIREMENTS_NOT_MET" || publishError?.status === 422) &&
     publishRequirementDetails.length > 0;
-  const bookingUrl = `https://${tenantInfo.slug}.site.agendateya.app`;
+  const bookingUrl = getBookingSiteUrl(tenantInfo.slug);
 
   return (
     <div className="space-y-5">

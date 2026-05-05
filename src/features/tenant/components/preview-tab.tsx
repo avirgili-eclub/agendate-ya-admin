@@ -4,16 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 
 import { fetchTenantInfo } from "@/features/tenant/tenant-service";
 import { fetchPreviewToken } from "@/features/tenant/tenant-branding-service";
+import { getBookingSiteUrl } from "@/shared/lib/booking-site-url";
 import { Button } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/cn";
 
 type ViewMode = "desktop" | "mobile";
-
-const BOOKING_DOMAIN = (import.meta.env.VITE_BOOKING_SITE_DOMAIN as string | undefined) ?? "site.agendateya.app";
-
-function getBookingUrl(slug: string): string {
-  return `https://${slug}.${BOOKING_DOMAIN}`;
-}
 
 function msUntilExpiry(expiresAt: string): number {
   return new Date(expiresAt).getTime() - Date.now();
@@ -70,7 +65,7 @@ export function PreviewTab() {
   }, []);
 
   const slug = tenantInfo?.slug;
-  const bookingBaseUrl = slug ? getBookingUrl(slug) : null;
+  const bookingBaseUrl = slug ? getBookingSiteUrl(slug) : null;
   const iframeUrl =
     bookingBaseUrl && tokenData?.token && !isExpired
       ? `${bookingBaseUrl}?preview_token=${tokenData.token}`
