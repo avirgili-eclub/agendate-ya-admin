@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { MessageCircle } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -15,9 +16,11 @@ import {
   type BookingListItem,
   type BookingStatus,
 } from "@/features/bookings/bookings-service";
+import { fetchTenantInfo } from "@/features/tenant/tenant-service";
 import { Button } from "@/shared/ui/button";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { useFeedback } from "@/shared/notifications/use-feedback";
+import { createBookingWhatsappUrl } from "@/shared/utils/booking-whatsapp";
 
 export type BookingDetailPanelProps = {
   bookingId: string;
@@ -53,6 +56,11 @@ export function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefre
   const isProfessional = currentRole === "PROFESSIONAL";
 
   const detailQuery = useBookingDetailQuery(bookingId);
+  const tenantQuery = useQuery({
+    queryKey: ["tenant-info"],
+    queryFn: fetchTenantInfo,
+    staleTime: 60_000,
+  });
   const [confirmingAction, setConfirmingAction] = useState<{
     action: "cancel" | "status";
     newStatus?: BookingStatus;
@@ -140,6 +148,9 @@ export function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefre
   );
   const notes = detailQuery.data?.notes ?? bookingSummary?.notes;
   const validTransitions = getValidStatusTransitions(booking.status);
+  const tenantName = tenantQuery.data?.name ?? "AgendateYA";
+  const tenantTimezone = tenantQuery.data?.timezone ?? "America/Asuncion";
+  const whatsappUrl = createBookingWhatsappUrl(booking, clientPhone, tenantName, tenantTimezone);
 
   function handleStatusChange(newStatus: BookingStatus) {
     setConfirmingAction({ action: "status", newStatus });
@@ -177,7 +188,22 @@ export function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefre
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Telefono:</span>
-              <span className="text-sm font-medium text-primary">{clientPhone}</span>
+              <span className="flex items-center gap-1.5 text-sm font-medium text-primary">
+                {clientPhone}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!whatsappUrl) return;
+                    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  disabled={!whatsappUrl}
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded text-green-600 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:text-neutral-dark"
+                  aria-label={`Enviar WhatsApp a ${clientName}`}
+                  title={whatsappUrl ? "Enviar mensaje por WhatsApp" : "Cliente sin telefono"}
+                >
+                  <MessageCircle className="size-3.5" />
+                </button>
+              </span>
             </div>
           </div>
         </section>
