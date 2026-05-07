@@ -66,7 +66,13 @@ type BookingRowProps = {
   onCancel: (booking: BookingListItem) => void;
 };
 
-type BookingSortKey = "startTime" | "clientName" | "serviceName" | "resourceName" | "status" | "sourceChannel";
+type BookingSortKey =
+  | "reservationCode"
+  | "startTime"
+  | "clientName"
+  | "serviceName"
+  | "resourceName"
+  | "status";
 type BookingSortDirection = "asc" | "desc";
 type BookingStatusFilter = "ALL" | BookingListItem["status"];
 type BookingChannelFilter = "ALL" | SourceChannel;
@@ -114,7 +120,10 @@ function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps)
     <div className="rounded-xl border border-neutral-dark bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-primary">{booking.clientName}</p>
+          <p className="text-xs font-semibold uppercase text-primary-light">
+            Cod. {booking.reservationCode || "Sin codigo"}
+          </p>
+          <p className="mt-1 text-sm font-semibold text-primary">{booking.clientName}</p>
           <p className="mt-1 text-xs text-primary-light">{booking.clientPhone || "Sin teléfono"}</p>
         </div>
         <StatusChip tone={getStatusTone(booking.status)} label={getStatusLabel(booking.status)} />
@@ -124,7 +133,6 @@ function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps)
         <p><span className="font-medium text-primary">Servicio:</span> {booking.serviceName}</p>
         <p><span className="font-medium text-primary">Recurso:</span> {booking.resourceName}</p>
         <p><span className="font-medium text-primary">Fecha:</span> {formatDateTime(booking.startTime)}</p>
-        <p><span className="font-medium text-primary">Canal:</span> {getSourceChannelLabel(booking.sourceChannel)}</p>
       </div>
 
       <div className="mt-4 flex items-center justify-end gap-2 border-t border-neutral-dark pt-3">
@@ -522,6 +530,11 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: B
     bookingSummary?.resourceName,
     "Sin asignar",
   );
+  const reservationCode = pickPreferredText(
+    detailQuery.data?.reservationCode,
+    bookingSummary?.reservationCode,
+    "Sin codigo",
+  );
   const notes = detailQuery.data?.notes ?? bookingSummary?.notes;
   const validTransitions = getValidStatusTransitions(booking.status);
 
@@ -571,6 +584,10 @@ function BookingDetailPanel({ bookingId, bookingSummary, onClose, onRefresh }: B
         <section>
           <h3 className="mb-3 text-sm font-semibold text-primary">Detalles del Turno</h3>
           <div className="space-y-2 rounded-md bg-neutral p-4">
+            <div className="flex justify-between">
+              <span className="text-sm text-primary-light">Cod. reserva:</span>
+              <span className="text-sm font-semibold uppercase text-primary">{reservationCode}</span>
+            </div>
             <div className="flex justify-between">
               <span className="text-sm text-primary-light">Servicio:</span>
               <span className="text-sm font-medium text-primary">{serviceName}</span>
@@ -732,6 +749,7 @@ export function BookingsPage() {
         [
           booking.clientName,
           booking.clientPhone,
+          booking.reservationCode,
           booking.serviceName,
           booking.resourceName,
           getSourceChannelLabel(booking.sourceChannel),
@@ -751,6 +769,9 @@ export function BookingsPage() {
       let comparison = 0;
 
       switch (sortKey) {
+        case "reservationCode":
+          comparison = compareText(left.reservationCode, right.reservationCode);
+          break;
         case "startTime":
           comparison = new Date(left.startTime).getTime() - new Date(right.startTime).getTime();
           break;
@@ -765,12 +786,6 @@ export function BookingsPage() {
           break;
         case "status":
           comparison = compareText(getStatusLabel(left.status), getStatusLabel(right.status));
-          break;
-        case "sourceChannel":
-          comparison = compareText(
-            getSourceChannelLabel(left.sourceChannel),
-            getSourceChannelLabel(right.sourceChannel),
-          );
           break;
       }
 
@@ -803,6 +818,23 @@ export function BookingsPage() {
   }
 
   const columns: DataTableColumn<BookingListItem>[] = [
+    {
+      id: "reservation-code",
+      header: (
+        <DataTableSortButton
+          label="Cod"
+          direction={sortKey === "reservationCode" ? sortDirection : null}
+          onClick={() => toggleSort("reservationCode")}
+        />
+      ),
+      cell: (booking) => (
+        <span className="font-semibold uppercase text-primary">
+          {booking.reservationCode || "Sin codigo"}
+        </span>
+      ),
+      className: "w-[96px]",
+      headerClassName: "w-[96px]",
+    },
     {
       id: "client",
       header: (
@@ -866,17 +898,6 @@ export function BookingsPage() {
       ),
     },
     {
-      id: "channel",
-      header: (
-        <DataTableSortButton
-          label="Canal"
-          direction={sortKey === "sourceChannel" ? sortDirection : null}
-          onClick={() => toggleSort("sourceChannel")}
-        />
-      ),
-      cell: (booking) => getSourceChannelLabel(booking.sourceChannel),
-    },
-    {
       id: "actions",
       header: "Acciones",
       cell: (booking) => (
@@ -915,7 +936,7 @@ export function BookingsPage() {
                     type="text"
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Buscar cliente, servicio, recurso o teléfono..."
+                    placeholder="Buscar codigo, cliente, servicio, recurso o telefono..."
                     className="h-11 w-full rounded-md border border-neutral-dark bg-white pl-10 pr-3 text-sm text-primary outline-none ring-primary-light focus:ring-2"
                   />
                 </div>
