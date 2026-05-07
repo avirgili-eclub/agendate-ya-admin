@@ -8,7 +8,8 @@ import {
   type BookingCardItem,
   type BookingStatus,
 } from "@/features/agenda/agenda-service";
-import { formatBookingDateTime, formatTime } from "@/features/agenda/utils/calendar-date";
+import { formatTime } from "@/features/agenda/utils/calendar-date";
+import { createBookingWhatsappUrl, normalizeWhatsappPhone } from "@/shared/utils/booking-whatsapp";
 
 type BookingCardProps = {
   booking: BookingCardItem;
@@ -17,27 +18,6 @@ type BookingCardProps = {
   businessName: string;
   timezone: string;
 };
-
-function normalizeWhatsappPhone(phone: string): string {
-  return phone.replace(/\D/g, "");
-}
-
-function buildWhatsappMessage(
-  booking: BookingCardItem,
-  businessName: string,
-  timezone: string,
-): string {
-  const formattedDateTime = formatBookingDateTime(booking.startTime, timezone);
-
-  return [
-    businessName,
-    `Hola ${booking.clientName}! Esperamos que estes muy bien.`,
-    `Queremos confirmar si asistiras a tu turno del ${formattedDateTime}.`,
-    `Servicio: ${booking.serviceName}`,
-    `Profesional: ${booking.resourceName}`,
-    "Quedamos atentos. Muchas gracias!",
-  ].join("\n");
-}
 
 export function BookingCard({ booking, onStatusChange, onDelete, businessName, timezone }: BookingCardProps) {
   const [showActions, setShowActions] = useState(false);
@@ -63,12 +43,8 @@ export function BookingCard({ booking, onStatusChange, onDelete, businessName, t
   const handleOpenWhatsapp = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
 
-    if (!whatsappPhone) {
-      return;
-    }
-
-    const message = buildWhatsappMessage(booking, businessName, timezone);
-    const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(message)}`;
+    const whatsappUrl = createBookingWhatsappUrl(booking, booking.clientPhone, businessName, timezone);
+    if (!whatsappUrl) return;
 
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };

@@ -13,7 +13,9 @@ import {
 } from "@/features/clients/clients-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
+import { SidePanel } from "@/shared/ui/side-panel";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
+import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 import { ClientDetailPanel } from "@/features/clients/client-detail-panel";
 import { ClientFormModal } from "@/features/clients/client-form-modal";
 import { useFeedback } from "@/shared/notifications/use-feedback";
@@ -25,6 +27,7 @@ export function ClientsPage() {
   const [page, setPage] = useState(0);
   const [pageSize] = useState(20);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("client");
@@ -87,6 +90,11 @@ export function ClientsPage() {
   const handleOpenEdit = (client: ClientItem) => {
     setEditingClient(client);
     setFormMode("edit");
+  };
+
+  const handleOpenBookingDetail = (bookingId: string) => {
+    setSelectedClientId(null);
+    setSelectedBookingId(bookingId);
   };
 
   const handleFormSubmit = async (input: ClientUpsertInput) => {
@@ -258,8 +266,26 @@ export function ClientsPage() {
           isOpen={!!selectedClientId}
           onClose={() => setSelectedClientId(null)}
           onEdit={handleOpenEdit}
+          onBookingSelect={handleOpenBookingDetail}
         />
       )}
+
+      <SidePanel
+        isOpen={!!selectedBookingId}
+        onClose={() => setSelectedBookingId(null)}
+        title="Detalle del Turno"
+      >
+        {selectedBookingId && (
+          <BookingDetailPanel
+            bookingId={selectedBookingId}
+            onClose={() => setSelectedBookingId(null)}
+            onRefresh={() => {
+              void queryClient.invalidateQueries({ queryKey: ["clients"] });
+              void queryClient.invalidateQueries({ queryKey: ["client-bookings-history"] });
+            }}
+          />
+        )}
+      </SidePanel>
 
       {/* Client Form Modal */}
       {formMode && (

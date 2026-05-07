@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Edit, User, Phone, Mail, MessageSquare } from "lucide-react";
+import { Edit, User, Phone, Mail, MessageSquare, MessageCircle } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -9,21 +9,24 @@ import {
   toClientsFriendlyMessage,
   type ClientItem,
 } from "@/features/clients/clients-service";
+import { fetchTenantInfo } from "@/features/tenant/tenant-service";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { Button } from "@/shared/ui/button";
 import { ClientChatHistory } from "@/features/clients/client-chat-history";
 import { ClientBookingHistory } from "@/features/clients/client-booking-history";
+import { createClientWhatsappUrl } from "@/shared/utils/booking-whatsapp";
 
 type ClientDetailPanelProps = {
   clientId: string;
   isOpen: boolean;
   onClose: () => void;
   onEdit: (client: ClientItem) => void;
+  onBookingSelect: (bookingId: string) => void;
 };
 
 type TabKey = "data" | "chat";
 
-export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientDetailPanelProps) {
+export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit, onBookingSelect }: ClientDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("data");
   const session = getSessionState();
   const currentRole = session.user?.role?.toUpperCase() ?? "";
@@ -33,6 +36,12 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
     queryKey: ["client", clientId],
     queryFn: () => fetchClientById(clientId),
     enabled: isOpen,
+  });
+  const { data: tenantInfo } = useQuery({
+    queryKey: ["tenant-info"],
+    queryFn: fetchTenantInfo,
+    enabled: isOpen,
+    staleTime: 60_000,
   });
 
   const clientError = error as unknown as AppError | undefined;
@@ -57,6 +66,10 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
   const cancelledCount = client?.bookingSummary?.cancelledCount ?? 0;
   const completedAndConfirmedTotal = completedCount + confirmedCount;
   const missedRatePct = client?.bookingSummary?.missedRatePct ?? null;
+  const tenantName = tenantInfo?.name ?? "AgendateYA";
+  const whatsappUrl = client
+    ? createClientWhatsappUrl(client.fullName, client.phone, tenantName)
+    : null;
 
   return (
     <SidePanel isOpen={isOpen} onClose={onClose} title="Detalle del Cliente">
@@ -126,6 +139,19 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
                     <p className="mt-1 flex items-center gap-2 text-sm text-primary">
                       <Phone className="size-4" />
                       {client.phone}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!whatsappUrl) return;
+                          window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+                        }}
+                        disabled={!whatsappUrl}
+                        className="inline-flex size-5 shrink-0 items-center justify-center rounded text-green-600 transition hover:bg-green-50 disabled:cursor-not-allowed disabled:text-neutral-dark"
+                        aria-label={`Enviar WhatsApp a ${client.fullName}`}
+                        title={whatsappUrl ? "Enviar mensaje por WhatsApp" : "Cliente sin telefono"}
+                      >
+                        <MessageCircle className="size-3.5" />
+                      </button>
                     </p>
                   </div>
                   {client.email && (
@@ -212,7 +238,11 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit }: ClientD
               {/* Booking History */}
               <section>
                 <h3 className="mb-4 text-lg font-semibold text-primary">Historial de Turnos</h3>
-                <ClientBookingHistory clientId={clientId} isActive={isOpen && activeTab === "data"} />
+                <ClientBookingHistory
+                  clientId={clientId}
+                  isActive={isOpen && activeTab === "data"}
+                  onBookingSelect={onBookingSelect}
+                />
               </section>
             </div>
           )}

@@ -12,6 +12,7 @@ import { StatusChip } from "@/shared/ui/status-chip";
 type ClientBookingHistoryProps = {
   clientId: string;
   isActive: boolean;
+  onBookingSelect?: (bookingId: string) => void;
 };
 
 const PAGE_SIZE = 8;
@@ -45,7 +46,7 @@ function flattenBookings(pages: Array<{ bookings: ClientBookingHistoryItem[] }> 
   return pages.flatMap((page) => page.bookings);
 }
 
-export function ClientBookingHistory({ clientId, isActive }: ClientBookingHistoryProps) {
+export function ClientBookingHistory({ clientId, isActive, onBookingSelect }: ClientBookingHistoryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -133,21 +134,28 @@ export function ClientBookingHistory({ clientId, isActive }: ClientBookingHistor
       {bookings.map((booking) => (
         <article
           key={booking.id}
-          className="rounded-lg border border-neutral-dark bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+          className="rounded-lg border border-neutral-dark bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
         >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate font-semibold text-primary">{booking.serviceName}</p>
-              {booking.resourceName && (
-                <p className="mt-1 text-xs text-primary-light">Con: {booking.resourceName}</p>
-              )}
-              {booking.locationName && (
-                <p className="mt-1 text-xs text-primary-light">Lugar: {booking.locationName}</p>
-              )}
-              <p className="mt-2 text-xs text-primary-light">{formatBookingDateTime(booking.scheduledAt)}</p>
+          <button
+            type="button"
+            onClick={() => onBookingSelect?.(booking.refs.bookingId)}
+            className="w-full p-4 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
+            aria-label={`Ver detalle del turno ${booking.serviceName}`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-primary">{booking.serviceName}</p>
+                {booking.resourceName && (
+                  <p className="mt-1 text-xs text-primary-light">Con: {booking.resourceName}</p>
+                )}
+                {booking.locationName && (
+                  <p className="mt-1 text-xs text-primary-light">Lugar: {booking.locationName}</p>
+                )}
+                <p className="mt-2 text-xs text-primary-light">{formatBookingDateTime(booking.scheduledAt)}</p>
+              </div>
+              <StatusChip label={booking.status} tone={getStatusTone(booking.status)} />
             </div>
-            <StatusChip label={booking.status} tone={getStatusTone(booking.status)} />
-          </div>
+          </button>
         </article>
       ))}
 
