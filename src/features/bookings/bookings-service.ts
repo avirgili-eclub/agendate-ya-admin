@@ -22,6 +22,7 @@ export type SourceChannel = "WEB" | "WHATSAPP" | "API" | "MCP" | "ADMIN";
 
 export type BookingListItem = {
   id: string;
+  reservationCode: string;
   resourceId: string;
   resourceName: string;
   serviceId: string;
@@ -84,6 +85,7 @@ type PagedEnvelope<T> = {
 
 type ApiBooking = {
   id: string;
+  reservationCode?: string | null;
   tenantId: string;
   resourceId: string;
   serviceId: string;
@@ -136,6 +138,7 @@ function pickFirstNonEmptyValue(values: Array<string | null | undefined>, fallba
 function mapApiBookingToListItem(api: ApiBooking): BookingListItem {
   return {
     id: api.id,
+    reservationCode: api.reservationCode?.trim() ?? "",
     resourceId: api.resourceId,
     resourceName: pickFirstNonEmptyValue([api.resourceName, api.resource?.name], "Sin asignar"),
     serviceId: api.serviceId,
