@@ -189,10 +189,17 @@ export async function suggestBrandingColors(input: {
   secondaryColor: string;
   accentColor: string;
 }): Promise<SuggestedColors> {
-  return httpRequest<SuggestedColors>("/tenant/branding/suggest-colors", {
-    method: "POST",
-    body: input,
-  });
+  const response = await httpRequest<DataEnvelope<SuggestedColors> | SuggestedColors>(
+    "/tenant/branding/suggest-colors",
+    {
+      method: "POST",
+      body: input,
+    },
+  );
+  if ("data" in response) {
+    return unwrapData<SuggestedColors>(response);
+  }
+  return response;
 }
 
 export function toBrandingFriendlyMessage(error: AppError): string {

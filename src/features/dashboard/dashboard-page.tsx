@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Activity, AlertTriangle, CalendarClock, RefreshCw } from "lucide-react";
 
 import { useDashboardQuery } from "@/features/dashboard/use-dashboard-query";
+import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
+import { SidePanel } from "@/shared/ui/side-panel";
 
 function DashboardLoading() {
   return (
@@ -56,6 +59,7 @@ function BookingStatusChip({ status }: { status: "CONFIRMED" | "PENDING" | "CANC
 
 export function DashboardPage() {
   const dashboardQuery = useDashboardQuery();
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   if (dashboardQuery.isLoading) {
     return <DashboardLoading />;
@@ -92,6 +96,7 @@ export function DashboardPage() {
               <CalendarClock className="mr-1 inline size-3.5" /> Proximas 24h
             </span>
           </div>
+          <p className="mt-1 text-xs text-primary-light">Toca un turno para ver su detalle.</p>
 
           {data.upcomingBookings.length === 0 ? (
             <div className="mt-3 rounded-lg border border-dashed border-neutral-dark p-6 text-sm text-primary-light">
@@ -100,17 +105,24 @@ export function DashboardPage() {
           ) : (
             <div className="mt-3 space-y-2">
               {data.upcomingBookings.map((booking) => (
-                <article key={booking.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-dark p-3">
-                  <div>
-                    <p className="font-semibold text-primary-dark">{booking.clientName}</p>
-                    <p className="text-sm text-primary-light">
-                      {booking.serviceName} con {booking.resourceName}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-primary">{booking.startsAtLabel}</span>
-                    <BookingStatusChip status={booking.status} />
-                  </div>
+                <article key={booking.id} className="rounded-lg border border-neutral-dark transition-colors hover:border-primary/30">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBookingId(booking.id)}
+                    className="flex w-full flex-wrap items-center justify-between gap-3 p-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
+                    aria-label={`Ver detalle del turno de ${booking.clientName}`}
+                  >
+                    <div>
+                      <p className="font-semibold text-primary-dark">{booking.clientName}</p>
+                      <p className="text-sm text-primary-light">
+                        {booking.serviceName} con {booking.resourceName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-primary">{booking.startsAtLabel}</span>
+                      <BookingStatusChip status={booking.status} />
+                    </div>
+                  </button>
                 </article>
               ))}
             </div>
@@ -160,6 +172,22 @@ export function DashboardPage() {
           </PageCard>
         </div>
       </div>
+
+      <SidePanel
+        isOpen={!!selectedBookingId}
+        onClose={() => setSelectedBookingId(null)}
+        title="Detalle del Turno"
+      >
+        {selectedBookingId && (
+          <BookingDetailPanel
+            bookingId={selectedBookingId}
+            onClose={() => setSelectedBookingId(null)}
+            onRefresh={() => {
+              void dashboardQuery.refetch();
+            }}
+          />
+        )}
+      </SidePanel>
     </div>
   );
 }

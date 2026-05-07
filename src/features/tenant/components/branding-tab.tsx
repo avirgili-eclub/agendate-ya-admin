@@ -257,7 +257,7 @@ export function BrandingTab({ onDraftChange, onUpgradeClick }: BrandingTabProps)
           <h2 className="text-base font-semibold text-primary">Imágenes</h2>
         </div>
         <div className="mt-5 flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-6">
-          <div className="w-full sm:w-44 sm:shrink-0">
+          <div className="mx-auto w-full max-w-[176px] sm:mx-0 sm:w-44 sm:shrink-0">
             <ImageUpload
               label="Logo"
               description="PNG transparente recomendado. Máx. 5MB."
