@@ -49,7 +49,8 @@ function groupMessagesByDay(messages: ChatMessage[]) {
 function mergeOlderMessages(olderMessages: ChatMessage[], currentMessages: ChatMessage[]) {
   const knownIds = new Set(currentMessages.map((message) => message.id));
   const uniqueOlder = olderMessages.filter((message) => !knownIds.has(message.id));
-  return [...uniqueOlder, ...currentMessages];
+  const merged = [...uniqueOlder, ...currentMessages];
+  return merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
 function getMessageTypeLabel(messageType: ChatMessage["messageType"]) {
