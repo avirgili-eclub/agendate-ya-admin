@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquare, Loader2 } from "lucide-react";
 
@@ -8,6 +8,78 @@ import {
   toClientsFriendlyMessage,
   type ChatMessage,
 } from "@/features/clients/clients-service";
+
+const MARKDOWN_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+const RAW_URL_RE = /(https?:\/\/\S+)/g;
+
+function truncateUrl(url: string): string {
+  try {
+    const { hostname, pathname } = new URL(url);
+    return pathname.length > 1 ? `${hostname}/…` : hostname;
+  } catch {
+    return `${url.slice(0, 30)}…`;
+  }
+}
+
+function parseSegmentForRawUrls(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  RAW_URL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = RAW_URL_RE.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const url = m[1];
+    nodes.push(
+      <a
+        key={`${keyPrefix}-${m.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-blue-600 underline"
+        title={url}
+      >
+        {truncateUrl(url)}
+      </a>
+    );
+    last = m.index + url.length;
+  }
+
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes.length > 0 ? nodes : [text];
+}
+
+function renderMessageContent(content: string): ReactNode {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  MARKDOWN_LINK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = MARKDOWN_LINK_RE.exec(content)) !== null) {
+    if (m.index > last) {
+      nodes.push(...parseSegmentForRawUrls(content.slice(last, m.index), `raw-${last}`));
+    }
+    const [, label, url] = m;
+    nodes.push(
+      <a
+        key={`md-${m.index}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-blue-600 underline"
+      >
+        {label}
+      </a>
+    );
+    last = m.index + m[0].length;
+  }
+
+  if (last < content.length) {
+    nodes.push(...parseSegmentForRawUrls(content.slice(last), `raw-${last}`));
+  }
+
+  return nodes.length > 0 ? nodes : content;
+}
 
 type ClientChatHistoryProps = {
   clientId: string;
@@ -219,8 +291,8 @@ export function ClientChatHistory({ clientId }: ClientChatHistoryProps) {
                       </p>
                     )}
 
-                    <p className="text-sm">
-                      {msg.content || "Mensaje sin contenido"}
+                    <p className="whitespace-pre-wrap break-words text-sm">
+                      {msg.content ? renderMessageContent(msg.content) : "Mensaje sin contenido"}
                     </p>
 
                     <p className="mt-1 text-right text-[11px] text-primary-light/80">
