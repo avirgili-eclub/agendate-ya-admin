@@ -10,7 +10,13 @@ import {
 } from "@/features/clients/clients-service";
 
 const MARKDOWN_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g;
+const BOLD_RE = /\*\*([^*]+)\*\*/g;
 const RAW_URL_RE = /(https?:\/\/\S+)/g;
+
+type Token =
+  | { type: "link"; label: string; url: string; start: number; end: number }
+  | { type: "bold"; text: string; start: number; end: number }
+  | { type: "url"; url: string; start: number; end: number };
 
 function truncateUrl(url: string): string {
   try {
@@ -21,62 +27,62 @@ function truncateUrl(url: string): string {
   }
 }
 
-function parseSegmentForRawUrls(text: string, keyPrefix: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  RAW_URL_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-
-  while ((m = RAW_URL_RE.exec(text)) !== null) {
-    if (m.index > last) nodes.push(text.slice(last, m.index));
-    const url = m[1];
-    nodes.push(
-      <a
-        key={`${keyPrefix}-${m.index}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-medium text-blue-600 underline"
-        title={url}
-      >
-        {truncateUrl(url)}
-      </a>
-    );
-    last = m.index + url.length;
-  }
-
-  if (last < text.length) nodes.push(text.slice(last));
-  return nodes.length > 0 ? nodes : [text];
-}
-
 function renderMessageContent(content: string): ReactNode {
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  MARKDOWN_LINK_RE.lastIndex = 0;
+  const tokens: Token[] = [];
   let m: RegExpExecArray | null;
 
+  MARKDOWN_LINK_RE.lastIndex = 0;
   while ((m = MARKDOWN_LINK_RE.exec(content)) !== null) {
-    if (m.index > last) {
-      nodes.push(...parseSegmentForRawUrls(content.slice(last, m.index), `raw-${last}`));
-    }
-    const [, label, url] = m;
-    nodes.push(
-      <a
-        key={`md-${m.index}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="font-medium text-blue-600 underline"
-      >
-        {label}
-      </a>
-    );
-    last = m.index + m[0].length;
+    tokens.push({ type: "link", label: m[1], url: m[2], start: m.index, end: m.index + m[0].length });
   }
 
-  if (last < content.length) {
-    nodes.push(...parseSegmentForRawUrls(content.slice(last), `raw-${last}`));
+  BOLD_RE.lastIndex = 0;
+  while ((m = BOLD_RE.exec(content)) !== null) {
+    tokens.push({ type: "bold", text: m[1], start: m.index, end: m.index + m[0].length });
   }
+
+  RAW_URL_RE.lastIndex = 0;
+  while ((m = RAW_URL_RE.exec(content)) !== null) {
+    tokens.push({ type: "url", url: m[1], start: m.index, end: m.index + m[0].length });
+  }
+
+  tokens.sort((a, b) => a.start - b.start);
+
+  const filtered: Token[] = [];
+  let cursor = 0;
+  for (const token of tokens) {
+    if (token.start >= cursor) {
+      filtered.push(token);
+      cursor = token.end;
+    }
+  }
+
+  const nodes: ReactNode[] = [];
+  let last = 0;
+
+  for (const token of filtered) {
+    if (token.start > last) nodes.push(content.slice(last, token.start));
+
+    if (token.type === "link") {
+      nodes.push(
+        <a key={token.start} href={token.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 underline">
+          {token.label}
+        </a>
+      );
+    } else if (token.type === "bold") {
+      nodes.push(<strong key={token.start}>{token.text}</strong>);
+    } else {
+      nodes.push(
+        <a key={token.start} href={token.url} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 underline" title={token.url}>
+          {truncateUrl(token.url)}
+        </a>
+      );
+    }
+
+    last = token.end;
+  }
+
+  if (last < content.length) nodes.push(content.slice(last));
 
   return nodes.length > 0 ? nodes : content;
 }
