@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { Eye, Search, Users } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { Eye, Plus, Search, Users } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getMembershipError } from "@/features/memberships/membership-errors";
+import { createClientSubscription } from "@/features/memberships/memberships-service";
 import type {
   ClientSubscription,
+  CreateClientSubscriptionInput,
   MembershipBillingStatus,
   MembershipScheduleMode,
   MembershipStatus,
@@ -24,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SidePanel } from "@/shared/ui/side-panel";
 import { StatusChip } from "@/shared/ui/status-chip";
 
+import { MembershipCreatePanel } from "./membership-create-panel";
 import {
   DAY_NAMES,
   MEMBERSHIP_BILLING_STATUS_LABELS,
@@ -182,12 +185,29 @@ export function MembershipSubscriptionsTab() {
   const [planFilter, setPlanFilter] = useState<PlanFilter>("ALL");
   const [clientSearch, setClientSearch] = useState("");
   const [selectedSubscription, setSelectedSubscription] = useState<ClientSubscription | null>(null);
+  const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const subscriptionsQuery = useClientSubscriptionsQuery({
     status: statusFilter,
     planId: planFilter === "ALL" ? undefined : planFilter,
   });
   const plansQuery = useMembershipPlansQuery();
+
+  const createMutation = useMutation({
+    mutationFn: (input: CreateClientSubscriptionInput) => createClientSubscription(input),
+    onSuccess: (createdSubscription) => {
+      queryClient.invalidateQueries({ queryKey: ["client-subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-capabilities"] });
+      queryClient.invalidateQueries({ queryKey: ["membership-occupancy"] });
+      setCreateError(null);
+      setIsCreatePanelOpen(false);
+      setSelectedSubscription(createdSubscription);
+    },
+    onError: (error: AppError) => {
+      setCreateError(getMembershipError(error).message);
+    },
+  });
 
   const subscriptions = subscriptionsQuery.data ?? [];
   const visibleSubscriptions = useMemo(
@@ -315,6 +335,11 @@ export function MembershipSubscriptionsTab() {
                 ))}
               </SelectContent>
             </Select>
+
+            <Button type="button" onClick={() => setIsCreatePanelOpen(true)} className="w-full gap-2 sm:w-auto">
+              <Plus className="size-4" />
+              Nueva membresia
+            </Button>
           </div>
         </div>
 
@@ -354,6 +379,27 @@ export function MembershipSubscriptionsTab() {
             }}
           />
         ) : null}
+      </SidePanel>
+
+      <SidePanel
+        isOpen={isCreatePanelOpen}
+        onClose={() => {
+          if (!createMutation.isPending) {
+            setIsCreatePanelOpen(false);
+            setCreateError(null);
+          }
+        }}
+        title="Nueva membresia"
+      >
+        <MembershipCreatePanel
+          serverError={createError}
+          isSubmitting={createMutation.isPending}
+          onCancel={() => {
+            setIsCreatePanelOpen(false);
+            setCreateError(null);
+          }}
+          onSubmit={(input) => createMutation.mutate(input)}
+        />
       </SidePanel>
     </div>
   );

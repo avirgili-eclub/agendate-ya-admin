@@ -83,13 +83,30 @@ Batch 3 quedo implementado el 2026-05-13:
 - Invalidaciones de `client-subscriptions`, `client-subscription`, `tenant-capabilities` y `membership-occupancy` donde corresponde.
 - Typecheck y build pasaron.
 
+Batch 4 core quedo implementado el 2026-05-13:
+
+- Boton `Nueva membresia` en tab `Suscripciones`.
+- Panel lateral con wizard `Cliente y plan`, `Horarios`, `Revision`.
+- Busqueda/selector de cliente usando el endpoint existente de clientes.
+- Selector de planes activos.
+- Fecha de inicio enviada como `startsAt`.
+- Horarios recurrentes condicionales por `scheduleMode`.
+- Para `FIXED`, exige al menos un slot recurrente.
+- Para `FLEXIBLE`, omite `recurringSlots`.
+- Para `BOTH`, permite elegir si asignar horarios fijos.
+- `dayOfWeek` se envia con convencion lunes=0 a domingo=6.
+- Al crear, invalida `client-subscriptions`, `tenant-capabilities` y `membership-occupancy`, y abre el detalle de la membresia creada.
+- Typecheck y build pasaron.
+
+Nota de contrato: el create endpoint documentado actualmente acepta `planId`, `clientId`, `startsAt` y `recurringSlots`. Por eso el wizard no envia todavia `serviceId`, `locationId` ni `billingStatus` en la creacion. El estado de pago se puede modificar desde el detalle con el PATCH ya implementado.
+
 Proxima accion recomendada:
 
-Implementar fase 4 de `tasks.md`:
+Implementar fase 5 de `tasks.md`:
 
-- Wizard de alta de membresia.
-- Seleccion cliente/plan/servicio/periodo.
-- Horarios condicionales por modalidad.
-- Validaciones de `recurringSlots`.
+- Tab `Cupos` real.
+- Query de occupancy por recurso y fecha.
+- Grilla semanal con ocupacion y disponibilidad.
+- Integracion de occupancy al wizard.
 
 Despues de cada fase, actualizar `tasks.md`, `memory.md` y `state.yaml`.

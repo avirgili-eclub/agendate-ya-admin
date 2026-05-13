@@ -45,14 +45,14 @@ Estado: planning-ready
 
 ## 4. Alta de membresia
 
-- [ ] 4.1 Crear wizard o panel lateral de "Nueva membresia".
-- [ ] 4.2 Paso cliente y plan.
+- [x] 4.1 Crear wizard o panel lateral de "Nueva membresia".
+- [x] 4.2 Paso cliente y plan.
 - [ ] 4.3 Paso servicio, location, periodo y estado de pago.
-- [ ] 4.4 Paso horarios condicionado por `scheduleMode`.
-- [ ] 4.5 Enviar `recurringSlots` solo cuando corresponde.
-- [ ] 4.6 Validar `dayOfWeek` con convencion lunes=0 a domingo=6.
-- [ ] 4.7 Mostrar revision antes de confirmar.
-- [ ] 4.8 Manejar errores `SLOTS_REQUIRED_FOR_FIXED_PLAN` y `SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN`.
+- [x] 4.4 Paso horarios condicionado por `scheduleMode`.
+- [x] 4.5 Enviar `recurringSlots` solo cuando corresponde.
+- [x] 4.6 Validar `dayOfWeek` con convencion lunes=0 a domingo=6.
+- [x] 4.7 Mostrar revision antes de confirmar.
+- [x] 4.8 Manejar errores `SLOTS_REQUIRED_FOR_FIXED_PLAN` y `SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN`.
 
 ## 5. Cupos y occupancy
 
