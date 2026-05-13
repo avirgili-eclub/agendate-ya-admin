@@ -12,23 +12,42 @@ import {
 } from "@/features/calendar/google-calendar-alert";
 import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { useCurrentProfessionalResource } from "@/features/resources/use-current-professional-resource";
+import type { TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
+import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { useNotifications } from "@/shared/notifications/notification-store";
 import { NotificationPanel } from "@/shared/notifications/notification-panel";
+
+function shouldShowMembershipsNav(capabilities?: TenantCapabilities) {
+  if (!capabilities) {
+    return true;
+  }
+
+  const subscriptions = capabilities.modes.subscriptions;
+  return Boolean(
+    capabilities.recommended?.showSubscriptionsUI ||
+      capabilities.recommended?.subscriptionsMode ||
+      subscriptions.anyPlanConfigured ||
+      subscriptions.scheduleModesAvailable.length > 0,
+  );
+}
 
 export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const session = getSessionState();
   const professionalResourceQuery = useCurrentProfessionalResource();
+  const tenantCapabilitiesQuery = useTenantCapabilitiesQuery();
   const professionalResourceName = professionalResourceQuery.data?.name ?? null;
   const pageMeta = getPageMeta({
     pathname,
     role: session.user?.role,
     professionalResourceName,
   });
-  const navItems = getNavItemsForRole(session.user?.role);
+  const navItems = getNavItemsForRole(session.user?.role, {
+    showMemberships: shouldShowMembershipsNav(tenantCapabilitiesQuery.data),
+  });
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

@@ -26,6 +26,7 @@ import { BookingsPage } from "@/features/bookings/bookings-page";
 import { ServicesPage } from "@/features/services/services-page";
 import { AvailabilityPage } from "@/features/availability/availability-page";
 import { ClientsPage } from "@/features/clients/clients-page";
+import { MembershipsPage } from "@/features/memberships/memberships-page";
 import { LocationsPage } from "@/features/locations/locations-page";
 import { UsersPage } from "@/features/users/users-page";
 import { TenantSettingsPage } from "@/features/tenant/tenant-settings-page";
@@ -185,6 +186,13 @@ const clientsRoute = createRoute({
   component: ClientsPage,
 });
 
+const membershipsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/membresias",
+  beforeLoad: blockProfessionalRestrictedRoutes,
+  component: MembershipsPage,
+});
+
 const locationsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/locales",
@@ -276,6 +284,7 @@ const routeTree = rootRoute.addChildren([
     agendaRoute,
     bookingsRoute,
     clientsRoute,
+    membershipsRoute,
     locationsRoute,
     resourcesRoute,
     legacyResourcesRoute,
