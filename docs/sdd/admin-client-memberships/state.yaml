@@ -2,8 +2,8 @@ change_id: admin-client-memberships
 branch: feat/admin-client-memberships
 created_at: 2026-05-13
 updated_at: 2026-05-13
-status: batch-2-complete
-current_phase: subscriptions-next
+status: batch-3-complete
+current_phase: create-flow-next
 engram:
   requested: true
   available_in_session: false
@@ -39,6 +39,13 @@ implementation:
       - src/features/memberships/components/membership-plan-form-panel.tsx
       - src/features/memberships/components/membership-plans-tab.tsx
       - src/features/memberships/memberships-page.tsx
+  batch_3_subscriptions:
+    status: complete
+    completed_at: 2026-05-13
+    files:
+      - src/features/memberships/components/membership-detail-panel.tsx
+      - src/features/memberships/components/membership-subscriptions-tab.tsx
+      - src/features/memberships/memberships-page.tsx
 verification:
   typecheck:
     command: npm run typecheck
@@ -64,6 +71,6 @@ decisions:
   keep_agenda_as_calendar: true
   add_client_detail_membership_tab: true
 next_steps:
-  - Implement subscription list filters.
-  - Add subscription detail panel.
-  - Add billing status, manual override and cancel actions.
+  - Implement create subscription wizard.
+  - Add conditional fixed slot selection.
+  - Wire occupancy into fixed schedule selection.

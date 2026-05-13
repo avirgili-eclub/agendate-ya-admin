@@ -3,6 +3,7 @@ import { CalendarDays, CreditCard, Lock, Plus, RefreshCw, TicketCheck, Users } f
 
 import type { AppError } from "@/core/errors/app-error";
 import { MembershipPlansTab } from "@/features/memberships/components/membership-plans-tab";
+import { MembershipSubscriptionsTab } from "@/features/memberships/components/membership-subscriptions-tab";
 import { getMembershipError } from "@/features/memberships/membership-errors";
 import type { MembershipScheduleMode } from "@/features/memberships/membership-types";
 import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
@@ -188,11 +189,7 @@ export function MembershipsPage() {
       <Tabs tabs={MEMBERSHIP_TABS} activeTab={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === "subscriptions" && (
-        <TabPlaceholder
-          icon={Users}
-          title="Suscripciones de clientes"
-          description="Todavia no hay suscripciones cargadas para mostrar en este tenant."
-        />
+        <MembershipSubscriptionsTab />
       )}
 
       {activeTab === "plans" && (

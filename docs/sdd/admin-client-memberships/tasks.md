@@ -34,14 +34,14 @@ Estado: planning-ready
 
 ## 3. Suscripciones
 
-- [ ] 3.1 Implementar query `GET /api/v1/admin/client-subscriptions` con filtros.
-- [ ] 3.2 Crear filtros por estado, cliente y plan.
-- [ ] 3.3 Implementar tabla de suscripciones.
-- [ ] 3.4 Implementar panel de detalle de suscripcion.
-- [ ] 3.5 Mostrar slots recurrentes, uso del periodo, estado de pago y estado de suscripcion.
-- [ ] 3.6 Implementar actualizar estado de pago.
-- [ ] 3.7 Implementar override de renovacion manual.
-- [ ] 3.8 Implementar cancelar/dar de baja suscripcion.
+- [x] 3.1 Implementar query `GET /api/v1/admin/client-subscriptions` con filtros.
+- [x] 3.2 Crear filtros por estado, cliente y plan.
+- [x] 3.3 Implementar tabla de suscripciones.
+- [x] 3.4 Implementar panel de detalle de suscripcion.
+- [x] 3.5 Mostrar slots recurrentes, uso del periodo, estado de pago y estado de suscripcion.
+- [x] 3.6 Implementar actualizar estado de pago.
+- [x] 3.7 Implementar override de renovacion manual.
+- [x] 3.8 Implementar cancelar/dar de baja suscripcion.
 
 ## 4. Alta de membresia
 

@@ -71,13 +71,25 @@ Batch 2 quedo implementado el 2026-05-13:
 - Empty state inicial conectado al alta del primer plan.
 - Typecheck y build pasaron.
 
+Batch 3 quedo implementado el 2026-05-13:
+
+- Tab `Suscripciones` conectada a `GET /admin/client-subscriptions`.
+- Filtros por estado, plan y busqueda local por cliente/telefono/plan.
+- Tabla responsive con cliente, plan, modalidad, uso, proxima clase, pago, estado y acciones.
+- Panel lateral de detalle con resumen, estado, pago, periodo, horarios recurrentes y proximas clases.
+- Accion para actualizar estado de pago.
+- Accion para activar/desactivar override de renovacion manual.
+- Confirmacion para dar de baja/cancelar membresia.
+- Invalidaciones de `client-subscriptions`, `client-subscription`, `tenant-capabilities` y `membership-occupancy` donde corresponde.
+- Typecheck y build pasaron.
+
 Proxima accion recomendada:
 
-Implementar fase 3 de `tasks.md`:
+Implementar fase 4 de `tasks.md`:
 
-- Listado de suscripciones.
-- Filtros por estado, cliente y plan.
-- Panel de detalle.
-- Acciones de pago, override y baja.
+- Wizard de alta de membresia.
+- Seleccion cliente/plan/servicio/periodo.
+- Horarios condicionales por modalidad.
+- Validaciones de `recurringSlots`.
 
 Despues de cada fase, actualizar `tasks.md`, `memory.md` y `state.yaml`.
