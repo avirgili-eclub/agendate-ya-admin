@@ -11,6 +11,13 @@ interface NotificationPanelProps {
   onClose: () => void;
 }
 
+const defaultNotificationStyles = {
+  bg: "bg-blue-50",
+  border: "border-blue-200",
+  text: "text-blue-800",
+  icon: "text-blue-600",
+};
+
 function getNotificationStyles(type: NotificationType) {
   switch (type) {
     case "success":
@@ -41,6 +48,8 @@ function getNotificationStyles(type: NotificationType) {
         text: "text-blue-800",
         icon: "text-blue-600",
       };
+    default:
+      return defaultNotificationStyles;
   }
 }
 
