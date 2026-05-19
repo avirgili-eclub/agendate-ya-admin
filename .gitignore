@@ -9,6 +9,4 @@ docs/openapi.json
 docs/*
 !docs/sdd/
 docs/sdd/*
-!docs/sdd/admin-client-memberships/
-!docs/sdd/admin-client-memberships/**
 .playwright-mcp/
