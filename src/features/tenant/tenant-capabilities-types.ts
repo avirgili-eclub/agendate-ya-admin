@@ -2,6 +2,8 @@ import type { MembershipScheduleMode } from "@/features/memberships/membership-t
 
 export type TenantSubscriptionCapabilities = {
   tierAllows: boolean;
+  enabledByTenant: boolean;
+  enabled: boolean;
   anyPlanConfigured: boolean;
   activeSubscriptionPlans: number;
   scheduleModesAvailable: MembershipScheduleMode[];

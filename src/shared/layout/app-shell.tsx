@@ -7,6 +7,7 @@ import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import {
   getGoogleCalendarAlertStatus,
+  setGoogleCalendarAlertStatus,
   subscribeGoogleCalendarAlertStatus,
   type GoogleCalendarAlertStatus,
 } from "@/features/calendar/google-calendar-alert";
@@ -21,16 +22,11 @@ import { NotificationPanel } from "@/shared/notifications/notification-panel";
 
 function shouldShowMembershipsNav(capabilities?: TenantCapabilities) {
   if (!capabilities) {
-    return true;
+    return false;
   }
 
   const subscriptions = capabilities.modes.subscriptions;
-  return Boolean(
-    capabilities.recommended?.showSubscriptionsUI ||
-      capabilities.recommended?.subscriptionsMode ||
-      subscriptions.anyPlanConfigured ||
-      subscriptions.scheduleModesAvailable.length > 0,
-  );
+  return Boolean(subscriptions.enabled);
 }
 
 export function AppShell() {
@@ -54,6 +50,7 @@ export function AppShell() {
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
   const [googleCalendarAlertStatus, setGoogleCalendarAlertStatus] =
     useState<GoogleCalendarAlertStatus>(() => getGoogleCalendarAlertStatus());
+  const [isGoogleCalendarAlertMuted, setIsGoogleCalendarAlertMuted] = useState(false);
 
   const isProfessional = session.user?.role?.toUpperCase() === "PROFESSIONAL";
   const sidebarTitle = isProfessional
@@ -72,9 +69,21 @@ export function AppShell() {
     });
   }, []);
 
+  useEffect(() => {
+    if (googleCalendarAlertStatus === "NONE") {
+      setIsGoogleCalendarAlertMuted(false);
+    }
+  }, [googleCalendarAlertStatus]);
+
   async function handleLogout() {
     await logout();
     await navigate({ to: "/login" });
+  }
+
+  async function handleGoToIntegrations() {
+    setIsGoogleCalendarAlertMuted(true);
+    setGoogleCalendarAlertStatus("NONE");
+    await navigate({ to: "/configuracion", search: { tab: "integrations" } as never });
   }
 
   return (
@@ -187,7 +196,9 @@ export function AppShell() {
         </aside>
 
         <main className="min-w-0 space-y-4">
-          {canViewGoogleCalendarAlert && googleCalendarAlertStatus === "NEEDS_REAUTH" && (
+          {canViewGoogleCalendarAlert &&
+            googleCalendarAlertStatus === "NEEDS_REAUTH" &&
+            !isGoogleCalendarAlertMuted && (
             <div
               className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
               role="alert"
@@ -196,12 +207,15 @@ export function AppShell() {
                 <p className="text-sm">
                   Tu conexión con Google Calendar expiró. Ve a Configuración para reconectar.
                 </p>
-                <a
-                  href="/configuracion?tab=integraciones"
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleGoToIntegrations();
+                  }}
                   className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
                 >
                   Ir a Configuración
-                </a>
+                </button>
               </div>
             </div>
           )}
@@ -223,3 +237,4 @@ export function AppShell() {
     </div>
   );
 }
+

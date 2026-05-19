@@ -15,6 +15,7 @@ export type AppErrorCode =
   | "SUBSCRIPTION_QUOTA_EXHAUSTED"
   | "SUBSCRIPTION_NOT_FOUND"
   | "PLAN_HAS_ACTIVE_SUBSCRIPTIONS"
+  | "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS"
   | "RESOURCE_NOT_ASSIGNED"
   | "RESOURCE_ACCESS_DENIED"
   | "RESOURCE_CALENDAR_NOT_CREATED"
@@ -72,6 +73,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("PLAN_HAS_ACTIVE_SUBSCRIPTIONS")) {
     return "PLAN_HAS_ACTIVE_SUBSCRIPTIONS";
+  }
+  if (normalized.includes("TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS")) {
+    return "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS";
   }
   if (normalized.includes("VALIDATION_ERROR")) {
     return "VALIDATION_ERROR";
