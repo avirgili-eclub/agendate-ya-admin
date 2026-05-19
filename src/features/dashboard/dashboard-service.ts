@@ -35,7 +35,24 @@ export type DashboardSnapshot = {
   alerts: DashboardAlert[];
 };
 
+export type UpcomingBookingsPage = {
+  bookings: UpcomingBooking[];
+  total: number;
+  page: number;
+  size: number;
+  hasMore: boolean;
+};
+
 type DataEnvelope<T> = { data: T };
+
+type PagedEnvelope<T> = {
+  data: T[];
+  meta: {
+    page: number;
+    size: number;
+    total: number;
+  };
+};
 
 type ApiDashboardSnapshot = {
   context: {
@@ -75,12 +92,29 @@ type ApiDashboardSnapshot = {
   }>;
 };
 
+type ApiUpcomingBooking = {
+  id: string;
+  clientName?: string | null;
+  serviceName?: string | null;
+  resourceId: string;
+  resourceName?: string | null;
+  startTime: string;
+  endTime: string;
+  status: "CONFIRMED" | "PENDING";
+  sourceChannel: SourceChannelMetric["channel"];
+};
+
 function formatHourLabel(iso: string) {
-  return new Intl.DateTimeFormat("es-AR", {
+  const date = new Date(iso);
+  const weekDays = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"] as const;
+  const dayLabel = weekDays[date.getDay()] ?? "";
+  const hourLabel = new Intl.DateTimeFormat("es-AR", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
-  }).format(new Date(iso));
+  }).format(date);
+
+  return `${dayLabel} ${hourLabel}`.trim();
 }
 
 function percentage(part: number, total: number) {
@@ -90,9 +124,22 @@ function percentage(part: number, total: number) {
   return Math.round((part / total) * 100);
 }
 
+function mapApiUpcomingBooking(
+  booking: Pick<ApiUpcomingBooking, "id" | "clientName" | "serviceName" | "resourceName" | "startTime" | "status">,
+): UpcomingBooking {
+  return {
+    id: booking.id,
+    clientName: booking.clientName ?? "Cliente",
+    serviceName: booking.serviceName ?? "Servicio",
+    resourceName: booking.resourceName ?? "Recurso",
+    startsAtLabel: formatHourLabel(booking.startTime),
+    status: booking.status === "PENDING" ? "PENDING" : "CONFIRMED",
+  };
+}
+
 export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
   const response = await httpRequest<DataEnvelope<ApiDashboardSnapshot>>(
-    "/dashboard/snapshot?upcomingLimit=8",
+    "/dashboard/snapshot",
   );
   const data = unwrapData<ApiDashboardSnapshot>(response);
 
@@ -110,14 +157,7 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
         trend: `${data.kpis.noShowRate30d.toFixed(2)}% tasa`,
       },
     ],
-    upcomingBookings: data.upcomingBookings.map((booking) => ({
-      id: booking.id,
-      clientName: booking.clientName ?? "Cliente",
-      serviceName: booking.serviceName ?? "Servicio",
-      resourceName: booking.resourceName ?? "Recurso",
-      startsAtLabel: formatHourLabel(booking.startTime),
-      status: booking.status === "PENDING" ? "PENDING" : "CONFIRMED",
-    })),
+    upcomingBookings: data.upcomingBookings.map(mapApiUpcomingBooking),
     sourceChannels: data.sourceChannels.map((item) => ({
       channel: item.source,
       count: item.count,
@@ -126,5 +166,31 @@ export async function fetchDashboardSnapshot(): Promise<DashboardSnapshot> {
     alerts: [...data.alerts].sort(
       (left, right) => severityOrder[left.severity] - severityOrder[right.severity],
     ),
+  };
+}
+
+export async function fetchUpcomingBookingsPage(params?: {
+  page?: number;
+  size?: number;
+}): Promise<UpcomingBookingsPage> {
+  const page = params?.page ?? 0;
+  const size = params?.size ?? 20;
+
+  const response = await httpRequest<PagedEnvelope<ApiUpcomingBooking>>(
+    `/dashboard/upcoming-bookings?page=${page}&size=${size}`,
+  );
+
+  const safeData = Array.isArray(response.data) ? response.data : [];
+  const safePage = typeof response.meta?.page === "number" ? response.meta.page : page;
+  const safeSize = typeof response.meta?.size === "number" ? response.meta.size : size;
+  const total = typeof response.meta?.total === "number" ? response.meta.total : safeData.length;
+  const loadedUntil = safePage * safeSize + safeData.length;
+
+  return {
+    bookings: safeData.map(mapApiUpcomingBooking),
+    total,
+    page: safePage,
+    size: safeSize,
+    hasMore: loadedUntil < total,
   };
 }

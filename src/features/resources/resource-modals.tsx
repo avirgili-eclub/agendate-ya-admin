@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { AlertTriangle, Link2, Loader2, RefreshCw, UserRound, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -29,8 +30,8 @@ type ModalShellProps = {
 };
 
 function ModalShell({ title, children, onClose }: ModalShellProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/50 p-4">
+  const content = (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-primary-dark/50 p-4">
       <div className="w-full max-w-2xl rounded-xl border border-neutral-dark bg-neutral-light p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-primary">{title}</h2>
@@ -42,6 +43,12 @@ function ModalShell({ title, children, onClose }: ModalShellProps) {
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }
 
 type ResourceUpsertModalProps = {

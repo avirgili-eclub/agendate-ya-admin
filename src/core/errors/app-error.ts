@@ -8,6 +8,14 @@ export type AppErrorCode =
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
   | "SUBSCRIPTION_LIMIT"
+  | "PAYMENT_REQUIRED"
+  | "SLOTS_REQUIRED_FOR_FIXED_PLAN"
+  | "SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN"
+  | "SUBSCRIPTION_SLOT_FULL"
+  | "SUBSCRIPTION_QUOTA_EXHAUSTED"
+  | "SUBSCRIPTION_NOT_FOUND"
+  | "PLAN_HAS_ACTIVE_SUBSCRIPTIONS"
+  | "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS"
   | "RESOURCE_NOT_ASSIGNED"
   | "RESOURCE_ACCESS_DENIED"
   | "RESOURCE_CALENDAR_NOT_CREATED"
@@ -44,6 +52,30 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("INVALID_STATE_TRANSITION")) {
     return "INVALID_STATE_TRANSITION";
+  }
+  if (normalized.includes("PAYMENT_REQUIRED")) {
+    return "PAYMENT_REQUIRED";
+  }
+  if (normalized.includes("SLOTS_REQUIRED_FOR_FIXED_PLAN")) {
+    return "SLOTS_REQUIRED_FOR_FIXED_PLAN";
+  }
+  if (normalized.includes("SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN")) {
+    return "SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN";
+  }
+  if (normalized.includes("SUBSCRIPTION_SLOT_FULL")) {
+    return "SUBSCRIPTION_SLOT_FULL";
+  }
+  if (normalized.includes("SUBSCRIPTION_QUOTA_EXHAUSTED")) {
+    return "SUBSCRIPTION_QUOTA_EXHAUSTED";
+  }
+  if (normalized.includes("SUBSCRIPTION_NOT_FOUND")) {
+    return "SUBSCRIPTION_NOT_FOUND";
+  }
+  if (normalized.includes("PLAN_HAS_ACTIVE_SUBSCRIPTIONS")) {
+    return "PLAN_HAS_ACTIVE_SUBSCRIPTIONS";
+  }
+  if (normalized.includes("TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS")) {
+    return "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS";
   }
   if (normalized.includes("VALIDATION_ERROR")) {
     return "VALIDATION_ERROR";

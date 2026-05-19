@@ -1,5 +1,6 @@
 import { useEffect, type PropsWithChildren } from "react";
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { cn } from "@/shared/lib/cn";
 
 type SidePanelProps = PropsWithChildren<{
@@ -29,11 +30,11 @@ export function SidePanel({ isOpen, onClose, title, children, className }: SideP
     return null;
   }
 
-  return (
+  const content = (
     <>
       {/* Backdrop with blur */}
       <div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity duration-300"
+        className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm transition-opacity duration-300"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -41,7 +42,7 @@ export function SidePanel({ isOpen, onClose, title, children, className }: SideP
       {/* Side panel */}
       <aside
         className={cn(
-          "fixed right-0 top-0 z-50 h-full w-full max-w-2xl transform overflow-y-auto bg-white shadow-2xl transition-transform duration-300 ease-in-out",
+          "fixed inset-y-0 right-0 z-[70] h-screen w-full max-w-2xl transform overflow-y-auto bg-white shadow-2xl transition-transform duration-300 ease-in-out",
           "animate-in slide-in-from-right",
           className
         )}
@@ -68,4 +69,10 @@ export function SidePanel({ isOpen, onClose, title, children, className }: SideP
       </aside>
     </>
   );
+
+  if (typeof document === "undefined") {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }

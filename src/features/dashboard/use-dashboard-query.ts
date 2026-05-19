@@ -7,5 +7,6 @@ export function useDashboardQuery() {
     queryKey: ["dashboard", "snapshot"],
     queryFn: fetchDashboardSnapshot,
     staleTime: 60_000,
+    refetchOnMount: "always",
   });
 }

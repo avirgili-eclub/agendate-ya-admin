@@ -8,6 +8,7 @@ import {
   type LocationItem,
   type LocationUpsertInput,
 } from "@/features/locations/locations-service";
+import { LocationMapPicker, type LocationCoordinates } from "@/features/locations/location-map-field";
 import { Button } from "@/shared/ui/button";
 import { ImageUpload } from "@/shared/ui/image-upload";
 import { PhoneField } from "@/shared/ui/phone-field";
@@ -98,6 +99,17 @@ function buildBusinessHoursPayload(
   };
 }
 
+function getInitialCoordinates(location?: LocationItem): LocationCoordinates | null {
+  if (typeof location?.latitude !== "number" || typeof location.longitude !== "number") {
+    return null;
+  }
+
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
 type LocationFormModalProps = {
   mode: "create" | "edit";
   initialLocation?: LocationItem;
@@ -124,6 +136,8 @@ export function LocationFormModal({
   const [imagePreviewUrl, setImagePreviewUrl] = useState(initialLocation?.imageUrl ?? "");
   const [removeImage, setRemoveImage] = useState(false);
   const [timezone, setTimezone] = useState(initialLocation?.businessHours?.timezone ?? "America/Asuncion");
+  const [coordinates, setCoordinates] = useState<LocationCoordinates | null>(getInitialCoordinates(initialLocation));
+  const [coordinatesTouched, setCoordinatesTouched] = useState(false);
   const [weeklyBusinessHours, setWeeklyBusinessHours] = useState<BusinessHoursDayState[]>(
     mapInitialBusinessHours(initialLocation).weekly,
   );
@@ -164,6 +178,8 @@ export function LocationFormModal({
     setImageFile(null);
     setImagePreviewUrl(initialLocation?.imageUrl ?? "");
     setRemoveImage(false);
+    setCoordinates(getInitialCoordinates(initialLocation));
+    setCoordinatesTouched(false);
     const initialHours = mapInitialBusinessHours(initialLocation);
     setTimezone(initialHours.timezone);
     setWeeklyBusinessHours(initialHours.weekly);
@@ -243,6 +259,12 @@ export function LocationFormModal({
         imageUrl: normalizedImageUrl,
         imageFile,
         removeImage,
+        ...(coordinatesTouched
+          ? {
+              latitude: coordinates?.latitude ?? null,
+              longitude: coordinates?.longitude ?? null,
+            }
+          : {}),
         businessHours: buildBusinessHoursPayload(timezone, weeklyBusinessHours),
       });
     } catch (submitError) {
@@ -330,6 +352,18 @@ export function LocationFormModal({
           error={fieldErrors.imageUrl}
         />
       </div>
+
+      <LocationMapPicker
+        value={coordinates}
+        onChange={(nextCoordinates) => {
+          setCoordinates(nextCoordinates);
+          setCoordinatesTouched(true);
+        }}
+        onClear={() => {
+          setCoordinates(null);
+          setCoordinatesTouched(true);
+        }}
+      />
 
       <div className="rounded-lg border border-neutral-dark p-4">
         <h3 className="text-sm font-semibold text-primary">Horario de atención</h3>

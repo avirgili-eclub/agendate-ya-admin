@@ -7,34 +7,50 @@ import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import {
   getGoogleCalendarAlertStatus,
+  setGoogleCalendarAlertStatus,
   subscribeGoogleCalendarAlertStatus,
   type GoogleCalendarAlertStatus,
 } from "@/features/calendar/google-calendar-alert";
 import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { useCurrentProfessionalResource } from "@/features/resources/use-current-professional-resource";
+import type { TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
+import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { useNotifications } from "@/shared/notifications/notification-store";
 import { NotificationPanel } from "@/shared/notifications/notification-panel";
+
+function shouldShowMembershipsNav(capabilities?: TenantCapabilities) {
+  if (!capabilities) {
+    return false;
+  }
+
+  const subscriptions = capabilities.modes.subscriptions;
+  return Boolean(subscriptions.enabled);
+}
 
 export function AppShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const session = getSessionState();
   const professionalResourceQuery = useCurrentProfessionalResource();
+  const tenantCapabilitiesQuery = useTenantCapabilitiesQuery();
   const professionalResourceName = professionalResourceQuery.data?.name ?? null;
   const pageMeta = getPageMeta({
     pathname,
     role: session.user?.role,
     professionalResourceName,
   });
-  const navItems = getNavItemsForRole(session.user?.role);
+  const navItems = getNavItemsForRole(session.user?.role, {
+    showMemberships: shouldShowMembershipsNav(tenantCapabilitiesQuery.data),
+  });
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
   const [googleCalendarAlertStatus, setGoogleCalendarAlertStatus] =
     useState<GoogleCalendarAlertStatus>(() => getGoogleCalendarAlertStatus());
+  const [isGoogleCalendarAlertMuted, setIsGoogleCalendarAlertMuted] = useState(false);
 
   const isProfessional = session.user?.role?.toUpperCase() === "PROFESSIONAL";
   const sidebarTitle = isProfessional
@@ -53,9 +69,21 @@ export function AppShell() {
     });
   }, []);
 
+  useEffect(() => {
+    if (googleCalendarAlertStatus === "NONE") {
+      setIsGoogleCalendarAlertMuted(false);
+    }
+  }, [googleCalendarAlertStatus]);
+
   async function handleLogout() {
     await logout();
     await navigate({ to: "/login" });
+  }
+
+  async function handleGoToIntegrations() {
+    setIsGoogleCalendarAlertMuted(true);
+    setGoogleCalendarAlertStatus("NONE");
+    await navigate({ to: "/configuracion", search: { tab: "integrations" } as never });
   }
 
   return (
@@ -168,7 +196,9 @@ export function AppShell() {
         </aside>
 
         <main className="min-w-0 space-y-4">
-          {canViewGoogleCalendarAlert && googleCalendarAlertStatus === "NEEDS_REAUTH" && (
+          {canViewGoogleCalendarAlert &&
+            googleCalendarAlertStatus === "NEEDS_REAUTH" &&
+            !isGoogleCalendarAlertMuted && (
             <div
               className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900"
               role="alert"
@@ -177,12 +207,15 @@ export function AppShell() {
                 <p className="text-sm">
                   Tu conexión con Google Calendar expiró. Ve a Configuración para reconectar.
                 </p>
-                <a
-                  href="/configuracion?tab=integraciones"
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleGoToIntegrations();
+                  }}
                   className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-amber-700"
                 >
                   Ir a Configuración
-                </a>
+                </button>
               </div>
             </div>
           )}
@@ -204,3 +237,4 @@ export function AppShell() {
     </div>
   );
 }
+
