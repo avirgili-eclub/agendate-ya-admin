@@ -10,6 +10,8 @@ export type LocationItem = {
   address?: string;
   phone?: string;
   imageUrl?: string;
+  latitude?: number;
+  longitude?: number;
   metadata?: Record<string, unknown>;
   businessHoursSummary: string | null;
   businessHours?: {
@@ -49,6 +51,8 @@ export type LocationUpsertInput = {
   imageUrl?: string;
   imageFile?: File | null;
   removeImage?: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
   businessHours?: LocationBusinessHoursInput;
 };
 
@@ -61,6 +65,8 @@ type ApiLocation = {
   address?: string | null;
   phone?: string | null;
   imageUrl?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   metadata?: Record<string, unknown> | null;
   businessHoursSummary?: string | null;
   businessHours?: {
@@ -127,6 +133,8 @@ function mapApiLocationToItem(api: ApiLocation): LocationItem {
     address: api.address ?? undefined,
     phone: api.phone ?? undefined,
     imageUrl: api.imageUrl ?? undefined,
+    latitude: typeof api.latitude === "number" ? api.latitude : undefined,
+    longitude: typeof api.longitude === "number" ? api.longitude : undefined,
     metadata: api.metadata ?? undefined,
     businessHoursSummary:
       typeof api.businessHoursSummary === "string" && api.businessHoursSummary.trim()
@@ -142,6 +150,48 @@ function mapApiLocationToItem(api: ApiLocation): LocationItem {
 function normalizeOptionalField(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function hasOwnInputProperty<K extends keyof LocationUpsertInput>(
+  input: LocationUpsertInput,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(input, key);
+}
+
+function normalizeCoordinateInput(
+  value: number | null | undefined,
+  field: "latitude" | "longitude",
+): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null) {
+    return null;
+  }
+
+  const min = field === "latitude" ? -90 : -180;
+  const max = field === "latitude" ? 90 : 180;
+
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw toAppError({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Errores de validación",
+      details: [
+        {
+          field,
+          message:
+            field === "latitude"
+              ? "La latitud debe estar entre -90 y 90."
+              : "La longitud debe estar entre -180 y 180.",
+        },
+      ],
+    });
+  }
+
+  return Number(value.toFixed(6));
 }
 
 function normalizeBusinessHoursInput(
@@ -208,7 +258,16 @@ function assertLocationInput(input: LocationUpsertInput) {
 function toUpsertPayload(input: LocationUpsertInput) {
   const businessHours = normalizeBusinessHoursInput(input.businessHours);
 
-  return {
+  const payload: {
+    name: string;
+    address?: string;
+    phone?: string;
+    imageUrl?: string;
+    removeImage?: boolean;
+    latitude?: number | null;
+    longitude?: number | null;
+    businessHours?: LocationBusinessHoursInput;
+  } = {
     name: input.name.trim(),
     address: normalizeOptionalField(input.address),
     phone: normalizeOptionalField(input.phone),
@@ -216,6 +275,16 @@ function toUpsertPayload(input: LocationUpsertInput) {
     removeImage: input.removeImage === true ? true : undefined,
     businessHours,
   };
+
+  if (hasOwnInputProperty(input, "latitude")) {
+    payload.latitude = normalizeCoordinateInput(input.latitude, "latitude");
+  }
+
+  if (hasOwnInputProperty(input, "longitude")) {
+    payload.longitude = normalizeCoordinateInput(input.longitude, "longitude");
+  }
+
+  return payload;
 }
 
 function toUpsertRequestBody(input: LocationUpsertInput): FormData | ReturnType<typeof toUpsertPayload> {
@@ -240,6 +309,12 @@ function toUpsertRequestBody(input: LocationUpsertInput): FormData | ReturnType<
   }
   if (payload.businessHours) {
     formData.append("businessHours", JSON.stringify(payload.businessHours));
+  }
+  if (typeof payload.latitude === "number") {
+    formData.append("latitude", String(payload.latitude));
+  }
+  if (typeof payload.longitude === "number") {
+    formData.append("longitude", String(payload.longitude));
   }
   formData.append("image", input.imageFile);
   return formData;

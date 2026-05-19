@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Building2, Search, MapPin, Phone, Calendar, ImageIcon, Clock3 } from "lucide-react";
+import { Building2, Search, MapPin, Phone, Calendar, ImageIcon, Clock3, ExternalLink } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -14,6 +14,7 @@ import {
   type LocationUpsertInput,
 } from "@/features/locations/locations-service";
 import { LocationFormModal } from "@/features/locations/location-form-modal";
+import { LocationMapPreview, type LocationCoordinates } from "@/features/locations/location-map-field";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -245,6 +246,8 @@ export function LocationsPage() {
     });
   }, [locationsQuery.data, search]);
 
+  const selectedLocationCoordinates = selectedLocation ? getLocationCoordinates(selectedLocation) : null;
+
   return (
     <div className="space-y-4">
       <PageCard className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -294,7 +297,10 @@ export function LocationsPage() {
 
       {locationsQuery.isSuccess && locations.length > 0 && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {locations.map((location) => (
+          {locations.map((location) => {
+            const coordinates = getLocationCoordinates(location);
+
+            return (
             <PageCard key={location.id}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -313,6 +319,17 @@ export function LocationsPage() {
                   <MapPin className="mr-2 inline size-4" />
                   {location.address ?? "Sin dirección"}
                 </p>
+                {coordinates && (
+                  <a
+                    href={getGoogleMapsUrl(coordinates)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 text-primary underline"
+                  >
+                    <ExternalLink className="size-4" />
+                    Ver en mapa
+                  </a>
+                )}
                 <p className="truncate" title={location.phone ?? "Sin teléfono"}>
                   <Phone className="mr-2 inline size-4" />
                   {location.phone ?? "Sin teléfono"}
@@ -349,7 +366,8 @@ export function LocationsPage() {
                 )}
               </div>
             </PageCard>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -412,6 +430,29 @@ export function LocationsPage() {
               <p className="text-xs uppercase tracking-wide text-primary-light">Teléfono</p>
               <p className="text-sm text-primary">{selectedLocation.phone ?? "No informado"}</p>
             </div>
+
+            {selectedLocationCoordinates && (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-primary-light">Ubicación</p>
+                <div className="mt-2">
+                  <LocationMapPreview value={selectedLocationCoordinates} />
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-primary">
+                  <span>
+                    {selectedLocationCoordinates.latitude}, {selectedLocationCoordinates.longitude}
+                  </span>
+                  <a
+                    href={getGoogleMapsUrl(selectedLocationCoordinates)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 underline"
+                  >
+                    <ExternalLink className="size-4" />
+                    Ver en mapa
+                  </a>
+                </div>
+              </div>
+            )}
 
             <div>
               <p className="text-xs uppercase tracking-wide text-primary-light">Imagen</p>
@@ -491,4 +532,19 @@ export function LocationsPage() {
       </ConfirmDialog>
     </div>
   );
+}
+
+function getLocationCoordinates(location: LocationItem): LocationCoordinates | null {
+  if (typeof location.latitude !== "number" || typeof location.longitude !== "number") {
+    return null;
+  }
+
+  return {
+    latitude: location.latitude,
+    longitude: location.longitude,
+  };
+}
+
+function getGoogleMapsUrl(coordinates: LocationCoordinates): string {
+  return `https://www.google.com/maps?q=${coordinates.latitude},${coordinates.longitude}`;
 }
