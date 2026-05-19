@@ -246,6 +246,18 @@ export async function fetchBookingServicesCatalog(): Promise<BookingServiceCatal
   }));
 }
 
+export async function fetchBookingServicesByResource(
+  resourceId: string,
+): Promise<BookingServiceCatalogItem[]> {
+  const response = await httpRequest<DataEnvelope<ApiService[]>>(`/resources/${resourceId}/services`);
+  return unwrapData<ApiService[]>(response).map((service) => ({
+    id: service.id,
+    name: service.name,
+    durationMinutes: service.durationMinutes,
+    active: service.active,
+  }));
+}
+
 export function getSourceChannelLabel(channel: SourceChannel): string {
   const labels: Record<SourceChannel, string> = {
     WEB: "Web",

@@ -9,7 +9,7 @@ import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useBookingsQuery } from "@/features/bookings/use-bookings-query";
 import {
   createBooking,
-  fetchBookingServicesCatalog,
+  fetchBookingServicesByResource,
   deleteBooking,
   getStatusLabel,
   getStatusTone,
@@ -182,8 +182,9 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
   });
 
   const servicesQuery = useQuery({
-    queryKey: ["bookings", "services"],
-    queryFn: fetchBookingServicesCatalog,
+    queryKey: ["bookings", "services-by-resource", resourceId],
+    queryFn: () => fetchBookingServicesByResource(resourceId),
+    enabled: !!resourceId,
     staleTime: 60_000,
   });
 
@@ -310,6 +311,7 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
           <Select value={locationId} onValueChange={(value) => {
             setLocationId(value);
             setResourceId(""); // Reset resource when location changes
+            setServiceId(""); // Reset service when location changes
           }}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar local" />
@@ -329,7 +331,10 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
-          <Select value={resourceId} onValueChange={setResourceId} disabled={!locationId}>
+          <Select value={resourceId} onValueChange={(value) => {
+            setResourceId(value);
+            setServiceId(""); // Reset service when resource changes
+          }} disabled={!locationId}>
             <SelectTrigger>
               <SelectValue placeholder="Seleccionar recurso" />
             </SelectTrigger>
@@ -349,9 +354,19 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
 
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-primary-dark">Servicio *</span>
-        <Select value={serviceId} onValueChange={setServiceId}>
+        <Select value={serviceId} onValueChange={setServiceId} disabled={!resourceId || servicesQuery.isLoading}>
           <SelectTrigger>
-            <SelectValue placeholder="Seleccionar servicio" />
+            <SelectValue
+              placeholder={
+                !resourceId
+                  ? "Seleccionar recurso primero"
+                  : servicesQuery.isLoading
+                    ? "Cargando servicios..."
+                    : services.length === 0
+                      ? "Sin servicios asignados"
+                      : "Seleccionar servicio"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             {services.map((service) => (
@@ -363,6 +378,16 @@ function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
         </Select>
         {fieldErrors.serviceId && (
           <span className="mt-1 block text-xs text-red-700">{fieldErrors.serviceId}</span>
+        )}
+        {!fieldErrors.serviceId && resourceId && servicesQuery.isError && (
+          <span className="mt-1 block text-xs text-red-700">
+            No pudimos cargar los servicios del recurso seleccionado.
+          </span>
+        )}
+        {!fieldErrors.serviceId && resourceId && !servicesQuery.isLoading && !servicesQuery.isError && services.length === 0 && (
+          <span className="mt-1 block text-xs text-primary-light">
+            Este recurso no tiene servicios asignados.
+          </span>
         )}
       </label>
 

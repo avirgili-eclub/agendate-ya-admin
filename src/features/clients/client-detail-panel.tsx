@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Edit, User, Phone, Mail, MessageSquare, MessageCircle } from "lucide-react";
+import { BadgeCheck, Edit, User, Phone, Mail, MessageSquare, MessageCircle } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -14,6 +14,7 @@ import { SidePanel } from "@/shared/ui/side-panel";
 import { Button } from "@/shared/ui/button";
 import { ClientChatHistory } from "@/features/clients/client-chat-history";
 import { ClientBookingHistory } from "@/features/clients/client-booking-history";
+import { ClientMembershipSummary } from "@/features/clients/client-membership-summary";
 import { createClientWhatsappUrl } from "@/shared/utils/booking-whatsapp";
 
 type ClientDetailPanelProps = {
@@ -22,11 +23,19 @@ type ClientDetailPanelProps = {
   onClose: () => void;
   onEdit: (client: ClientItem) => void;
   onBookingSelect: (bookingId: string) => void;
+  onCreateMembership: (client: ClientItem) => void;
 };
 
-type TabKey = "data" | "chat";
+type TabKey = "data" | "membership" | "chat";
 
-export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit, onBookingSelect }: ClientDetailPanelProps) {
+export function ClientDetailPanel({
+  clientId,
+  isOpen,
+  onClose,
+  onEdit,
+  onBookingSelect,
+  onCreateMembership,
+}: ClientDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("data");
   const session = getSessionState();
   const currentRole = session.user?.role?.toUpperCase() ?? "";
@@ -97,6 +106,17 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit, onBooking
             >
               <User className="mr-2 inline-block size-4" />
               Datos
+            </button>
+            <button
+              onClick={() => setActiveTab("membership")}
+              className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "membership"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-primary-light hover:text-primary"
+              }`}
+            >
+              <BadgeCheck className="mr-2 inline-block size-4" />
+              Membresia
             </button>
             <button
               onClick={() => setActiveTab("chat")}
@@ -245,6 +265,15 @@ export function ClientDetailPanel({ clientId, isOpen, onClose, onEdit, onBooking
                 />
               </section>
             </div>
+          )}
+
+          {/* Membership Tab */}
+          {activeTab === "membership" && (
+            <ClientMembershipSummary
+              client={client}
+              isActive={isOpen && activeTab === "membership"}
+              onCreateMembership={onCreateMembership}
+            />
           )}
 
           {/* Chat Tab */}

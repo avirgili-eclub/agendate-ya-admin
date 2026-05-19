@@ -29,7 +29,7 @@ export interface BackendNotification {
   id: string;
   tenantId?: string;
   type: string;
-  severity: NotificationSeverity;
+  severity?: string | null;
   title?: string;
   message: string;
   createdAt: string;
@@ -72,15 +72,32 @@ export interface NotificationInput {
   actionUrl?: string;
 }
 
-export function mapSeverityToNotificationType(severity: NotificationSeverity): NotificationType {
-  if (severity === "critical") {
+export function normalizeNotificationSeverity(severity: unknown): NotificationSeverity {
+  const normalized = typeof severity === "string" ? severity.trim().toLowerCase() : "";
+
+  if (normalized === "critical" || normalized === "error" || normalized === "danger") {
+    return "critical";
+  }
+
+  if (normalized === "warning" || normalized === "warn") {
+    return "warning";
+  }
+
+  return "info";
+}
+
+export function mapSeverityToNotificationType(severity: unknown): NotificationType {
+  const normalizedSeverity = normalizeNotificationSeverity(severity);
+
+  if (normalizedSeverity === "critical") {
     return "error";
   }
 
-  return severity;
+  return normalizedSeverity;
 }
 
 export function mapBackendNotification(input: BackendNotification): Notification {
+  const severity = normalizeNotificationSeverity(input.severity);
   const actionUrl =
     input.action?.kind === "OPEN_ROUTE" || input.action?.kind === "OPEN_URL"
       ? input.action.target ?? undefined
@@ -88,9 +105,9 @@ export function mapBackendNotification(input: BackendNotification): Notification
 
   return {
     id: input.id,
-    type: mapSeverityToNotificationType(input.severity),
+    type: mapSeverityToNotificationType(severity),
     backendType: input.type,
-    severity: input.severity,
+    severity,
     title: input.title,
     message: input.message,
     source: "backend_event",

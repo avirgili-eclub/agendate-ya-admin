@@ -1,5 +1,6 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest, setAuthSessionHandlers } from "@/core/api/http-client";
+import { clearAppQueryCache } from "@/app/query-client";
 import {
   clearSessionState,
   getSessionState,
@@ -171,6 +172,7 @@ export async function login(payload: LoginRequest) {
 
 export async function logout() {
   clearSessionState();
+  clearAppQueryCache();
 }
 
 export async function register(payload: RegisterRequest) {

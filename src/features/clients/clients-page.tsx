@@ -18,6 +18,10 @@ import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 import { ClientDetailPanel } from "@/features/clients/client-detail-panel";
 import { ClientFormModal } from "@/features/clients/client-form-modal";
+import { MembershipCreatePanel } from "@/features/memberships/components/membership-create-panel";
+import { getMembershipError } from "@/features/memberships/membership-errors";
+import { createClientSubscription } from "@/features/memberships/memberships-service";
+import type { CreateClientSubscriptionInput } from "@/features/memberships/membership-types";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
 export function ClientsPage() {
@@ -30,6 +34,8 @@ export function ClientsPage() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [formMode, setFormMode] = useState<"create" | "edit" | null>(null);
   const [editingClient, setEditingClient] = useState<ClientItem | null>(null);
+  const [membershipClient, setMembershipClient] = useState<ClientItem | null>(null);
+  const [membershipCreateError, setMembershipCreateError] = useState<string | null>(null);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("client");
 
   useEffect(() => {
@@ -81,6 +87,21 @@ export function ClientsPage() {
     },
   });
 
+  const createMembershipMutation = useMutation({
+    mutationFn: (input: CreateClientSubscriptionInput) => createClientSubscription(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["tenant-capabilities"] });
+      queryClient.invalidateQueries({ queryKey: ["membership-occupancy"] });
+      setMembershipCreateError(null);
+      setMembershipClient(null);
+      showFeedback("success", "Membresia creada correctamente.");
+    },
+    onError: (mutationError: AppError) => {
+      setMembershipCreateError(getMembershipError(mutationError).message);
+    },
+  });
+
   const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchTerm(value);
@@ -97,6 +118,13 @@ export function ClientsPage() {
     setSelectedBookingId(bookingId);
   };
 
+  const handleOpenCreateMembership = (client: ClientItem) => {
+    setSelectedClientId(null);
+    setMembershipCreateError(null);
+    createMembershipMutation.reset();
+    setMembershipClient(client);
+  };
+
   const handleFormSubmit = async (input: ClientUpsertInput) => {
     if (formMode === "create") {
       await createMutation.mutateAsync(input);
@@ -110,6 +138,15 @@ export function ClientsPage() {
     setEditingClient(null);
     createMutation.reset();
     updateMutation.reset();
+  };
+
+  const handleCloseMembershipPanel = () => {
+    if (createMembershipMutation.isPending) {
+      return;
+    }
+    setMembershipClient(null);
+    setMembershipCreateError(null);
+    createMembershipMutation.reset();
   };
 
   const clients = isShortSearch ? [] : (data?.clients ?? []);
@@ -267,6 +304,7 @@ export function ClientsPage() {
           onClose={() => setSelectedClientId(null)}
           onEdit={handleOpenEdit}
           onBookingSelect={handleOpenBookingDetail}
+          onCreateMembership={handleOpenCreateMembership}
         />
       )}
 
@@ -285,6 +323,27 @@ export function ClientsPage() {
             }}
           />
         )}
+      </SidePanel>
+
+      <SidePanel
+        isOpen={Boolean(membershipClient)}
+        onClose={handleCloseMembershipPanel}
+        title="Nueva membresia"
+      >
+        {membershipClient ? (
+          <MembershipCreatePanel
+            initialClient={{
+              id: membershipClient.id,
+              fullName: membershipClient.fullName,
+              phone: membershipClient.phone,
+              email: membershipClient.email,
+            }}
+            serverError={membershipCreateError}
+            isSubmitting={createMembershipMutation.isPending}
+            onCancel={handleCloseMembershipPanel}
+            onSubmit={(input) => createMembershipMutation.mutate(input)}
+          />
+        ) : null}
       </SidePanel>
 
       {/* Client Form Modal */}

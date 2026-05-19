@@ -166,11 +166,11 @@ export async function unpublishTenantSite(): Promise<PublishTenantSiteResult> {
 
 export function toTenantFriendlyMessage(error: AppError): string {
   if (error.code === "FORBIDDEN") {
-    return "No tienes permisos para modificar esta información. Solo administradores pueden acceder.";
+    return "No tienes permisos para modificar esta informacion. Solo administradores pueden acceder.";
   }
 
   if (error.code === "NOT_FOUND") {
-    return "No se encontró información del tenant.";
+    return "No se encontro informacion del tenant.";
   }
 
   if (error.code === "VALIDATION_ERROR" && error.details) {
@@ -181,7 +181,11 @@ export function toTenantFriendlyMessage(error: AppError): string {
     return error.details.map((d) => d.message).join(" ");
   }
 
-  return error.message ?? "Ocurrió un error inesperado.";
+  if (error.code === "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS") {
+    return "Tu plan actual no incluye el modulo de membresias. Actualiza a PRO o superior para activarlo.";
+  }
+
+  return error.message ?? "Ocurrio un error inesperado.";
 }
 
 const TIER_ALIASES: Record<string, string> = {
@@ -214,3 +218,5 @@ export function getSubscriptionStatusLabel(status: string): string {
   };
   return statusLabels[status.toLowerCase()] ?? status;
 }
+
+

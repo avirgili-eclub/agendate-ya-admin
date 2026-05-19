@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { createPortal } from "react-dom";
 
 import type { AppError } from "@/core/errors/app-error";
 import { toUsersFriendlyMessage, fetchUserRoles, type UserCreateInput } from "@/features/users/users-service";
@@ -90,18 +91,18 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
     return null;
   }
 
-  return (
+  const content = (
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+        className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal */}
       <div
-        className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 transform rounded-xl border border-neutral-dark bg-white shadow-2xl"
+        className="fixed left-1/2 top-1/2 z-[70] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 transform rounded-xl border border-neutral-dark bg-white shadow-2xl"
         role="dialog"
         aria-modal="true"
       >
@@ -274,4 +275,10 @@ export function UserFormModal({ isOpen, onClose, onSubmit, error, isLoading }: U
       </div>
     </>
   );
+
+  if (typeof document === "undefined") {
+    return content;
+  }
+
+  return createPortal(content, document.body);
 }

@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   Briefcase,
   CalendarDays,
   ClipboardList,
@@ -24,6 +25,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { label: "Agenda", to: "/agenda", icon: CalendarDays, description: "Turnos y calendario" },
   { label: "Turnos", to: "/turnos", icon: ClipboardList, description: "Gestion de reservas" },
   { label: "Clientes", to: "/clientes", icon: Users, description: "Directorio de clientes" },
+  { label: "Membresias", to: "/membresias", icon: BadgeCheck, description: "Planes y clientes suscriptos" },
   { label: "Locales", to: "/locales", icon: MapPin, description: "Sucursales y sedes" },
   { label: "Equipos", to: "/equipos", icon: UserSquare2, description: "Profesionales y equipos" },
   { label: "Servicios", to: "/servicios", icon: Briefcase, description: "Catalogo de servicios" },
@@ -33,17 +35,32 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { label: "Configuracion", to: "/configuracion", icon: Settings, description: "Ajustes del negocio" },
 ];
 
-const PROFESSIONAL_HIDDEN_ROUTES = new Set(["/clientes", "/equipos", "/equipo", "/configuracion"]);
+const PROFESSIONAL_HIDDEN_ROUTES = new Set(["/clientes", "/membresias", "/equipos", "/equipo", "/configuracion"]);
 const PROFESSIONAL_ONLY_ROUTES = new Set(["/perfil"]);
 
-export function getNavItemsForRole(role?: string) {
+type GetNavItemsOptions = {
+  showMemberships?: boolean;
+};
+
+export function getNavItemsForRole(role?: string, options: GetNavItemsOptions = {}) {
   const normalizedRole = role?.toUpperCase() ?? "";
+  const showMemberships = options.showMemberships ?? true;
 
   if (normalizedRole === "PROFESSIONAL") {
-    return APP_NAV_ITEMS.filter((item) => !PROFESSIONAL_HIDDEN_ROUTES.has(item.to));
+    return APP_NAV_ITEMS.filter((item) => {
+      if (!showMemberships && item.to === "/membresias") {
+        return false;
+      }
+      return !PROFESSIONAL_HIDDEN_ROUTES.has(item.to);
+    });
   }
 
-  return APP_NAV_ITEMS.filter((item) => !PROFESSIONAL_ONLY_ROUTES.has(item.to));
+  return APP_NAV_ITEMS.filter((item) => {
+    if (!showMemberships && item.to === "/membresias") {
+      return false;
+    }
+    return !PROFESSIONAL_ONLY_ROUTES.has(item.to);
+  });
 }
 
 type BasePageMeta = {
@@ -61,6 +78,7 @@ export const PAGE_META: Record<string, BasePageMeta> = {
   "/agenda": { title: "Agenda", subtitle: "Gestion semanal de turnos y disponibilidad." },
   "/turnos": { title: "Turnos", subtitle: "Gestion completa de reservas y turnos del negocio" },
   "/clientes": { title: "Clientes", subtitle: "Gestiona tu base de clientes, historial de turnos y comunicaciones." },
+  "/membresias": { title: "Membresias", subtitle: "Planes, suscripciones de clientes y cupos recurrentes." },
   "/locales": { title: "Locales", subtitle: "Administracion de sedes y sucursales." },
   "/equipos": { title: "Equipos", subtitle: "Profesionales, salas y equipamiento operativo." },
   "/servicios": { title: "Servicios", subtitle: "Gestiona el catalogo de servicios del negocio." },
