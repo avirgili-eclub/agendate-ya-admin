@@ -28,6 +28,7 @@ export function useDashboardUpcomingBookingsQuery(pageSize: number = DEFAULT_PAG
       }),
     initialPageParam: 0,
     staleTime: 60_000,
+    refetchOnMount: "always",
     getNextPageParam: (lastPage) => {
       if (!lastPage.hasMore) {
         return undefined;
