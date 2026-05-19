@@ -6,10 +6,10 @@ import type { AppError } from "@/core/errors/app-error";
 import { getMembershipError } from "@/features/memberships/membership-errors";
 import { createClientSubscription } from "@/features/memberships/memberships-service";
 import type {
+  ClientSubscriptionScheduleMode,
   ClientSubscription,
   CreateClientSubscriptionInput,
   MembershipBillingStatus,
-  MembershipScheduleMode,
   MembershipStatus,
 } from "@/features/memberships/membership-types";
 import {
@@ -30,8 +30,8 @@ import { MembershipCreatePanel } from "./membership-create-panel";
 import {
   DAY_NAMES,
   MEMBERSHIP_BILLING_STATUS_LABELS,
-  MEMBERSHIP_SCHEDULE_MODE_LABELS,
   MEMBERSHIP_STATUS_LABELS,
+  getMembershipScheduleModeLabel,
   MembershipDetailPanel,
 } from "./membership-detail-panel";
 
@@ -50,14 +50,22 @@ function getStatusTone(status: MembershipStatus) {
 function getBillingTone(status?: MembershipBillingStatus) {
   if (status === "PAID") return "success";
   if (status === "OVERDUE") return "danger";
-  if (status === "PENDING") return "warning";
+  if (status === "PENDING_PAYMENT") return "warning";
   return "neutral";
 }
 
-function getModeTone(mode: MembershipScheduleMode) {
+function getModeTone(mode: ClientSubscriptionScheduleMode) {
   if (mode === "FIXED") return "success";
-  if (mode === "BOTH") return "warning";
   return "neutral";
+}
+
+function ScheduleModeCell({ mode }: { mode: ClientSubscriptionScheduleMode }) {
+  const label = getMembershipScheduleModeLabel(mode);
+  if (!label) {
+    return <span className="text-sm text-primary-light">-</span>;
+  }
+
+  return <StatusChip tone={getModeTone(mode)} label={label} />;
 }
 
 function formatDateTime(value?: string) {
@@ -147,10 +155,7 @@ function SubscriptionMobileCard({
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
           <p className="text-xs font-semibold uppercase text-primary-light">Modalidad</p>
-          <StatusChip
-            tone={getModeTone(subscription.scheduleMode)}
-            label={MEMBERSHIP_SCHEDULE_MODE_LABELS[subscription.scheduleMode]}
-          />
+          <ScheduleModeCell mode={subscription.scheduleMode} />
         </div>
         <div>
           <p className="text-xs font-semibold uppercase text-primary-light">Uso</p>
@@ -193,6 +198,8 @@ export function MembershipSubscriptionsTab() {
     planId: planFilter === "ALL" ? undefined : planFilter,
   });
   const plansQuery = useMembershipPlansQuery();
+  const activePlans = useMemo(() => (plansQuery.data ?? []).filter((plan) => plan.active), [plansQuery.data]);
+  const canCreateMembership = activePlans.length > 0;
 
   const createMutation = useMutation({
     mutationFn: (input: CreateClientSubscriptionInput) => createClientSubscription(input),
@@ -236,12 +243,7 @@ export function MembershipSubscriptionsTab() {
     {
       id: "mode",
       header: "Modalidad",
-      cell: (subscription) => (
-        <StatusChip
-          tone={getModeTone(subscription.scheduleMode)}
-          label={MEMBERSHIP_SCHEDULE_MODE_LABELS[subscription.scheduleMode]}
-        />
-      ),
+      cell: (subscription) => <ScheduleModeCell mode={subscription.scheduleMode} />,
     },
     {
       id: "usage",
@@ -336,7 +338,17 @@ export function MembershipSubscriptionsTab() {
               </SelectContent>
             </Select>
 
-            <Button type="button" onClick={() => setIsCreatePanelOpen(true)} className="w-full gap-2 sm:w-auto">
+            <Button
+              type="button"
+              onClick={() => {
+                if (canCreateMembership) {
+                  setIsCreatePanelOpen(true);
+                }
+              }}
+              className="w-full gap-2 sm:w-auto"
+              disabled={plansQuery.isLoading || !canCreateMembership}
+              title={!canCreateMembership ? "Crea un plan activo antes de dar de alta membresias." : undefined}
+            >
               <Plus className="size-4" />
               Nueva membresia
             </Button>

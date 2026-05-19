@@ -10,6 +10,7 @@ import {
   updateClientSubscriptionManualRenewalOverride,
 } from "@/features/memberships/memberships-service";
 import type {
+  ClientSubscriptionScheduleMode,
   ClientSubscription,
   MembershipBillingStatus,
   MembershipRecurringSlot,
@@ -33,8 +34,9 @@ export const MEMBERSHIP_STATUS_LABELS: Record<MembershipStatus, string> = {
 
 export const MEMBERSHIP_BILLING_STATUS_LABELS: Record<MembershipBillingStatus, string> = {
   PAID: "Pagada",
-  PENDING: "Pendiente",
+  PENDING_PAYMENT: "Pendiente",
   OVERDUE: "Vencida",
+  REFUNDED: "Reembolsada",
 };
 
 export const MEMBERSHIP_SCHEDULE_MODE_LABELS: Record<MembershipScheduleMode, string> = {
@@ -42,6 +44,10 @@ export const MEMBERSHIP_SCHEDULE_MODE_LABELS: Record<MembershipScheduleMode, str
   FLEXIBLE: "Flexible",
   BOTH: "Mixta",
 };
+
+export function getMembershipScheduleModeLabel(mode?: ClientSubscriptionScheduleMode | null) {
+  return mode ? MEMBERSHIP_SCHEDULE_MODE_LABELS[mode] : "";
+}
 
 export const DAY_NAMES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"];
 
@@ -85,19 +91,19 @@ function getStatusTone(status: MembershipStatus) {
 function getBillingTone(status?: MembershipBillingStatus) {
   if (status === "PAID") return "success";
   if (status === "OVERDUE") return "danger";
-  if (status === "PENDING") return "warning";
+  if (status === "PENDING_PAYMENT") return "warning";
   return "neutral";
 }
 
 function getSlotLabel(slot: MembershipRecurringSlot) {
   const day = DAY_NAMES[slot.dayOfWeek] ?? "Dia";
-  const resource = slot.resourceName ? ` · ${slot.resourceName}` : "";
+  const resource = slot.resourceName ? ` - ${slot.resourceName}` : "";
   return `${day} ${slot.startTime}${resource}`;
 }
 
 function getUsageLabel(subscription: ClientSubscription) {
   if (subscription.classesPerPeriod == null) {
-    return `${subscription.classesUsed} usadas · ilimitado`;
+    return `${subscription.classesUsed} usadas - ilimitado`;
   }
 
   return `${subscription.classesUsed} de ${subscription.classesPerPeriod}`;
@@ -122,7 +128,7 @@ export function MembershipDetailPanel({
   const { showFeedback } = useFeedback("system");
   const detailQuery = useClientSubscriptionDetailQuery(subscriptionId);
   const [billingStatus, setBillingStatus] = useState<MembershipBillingStatus>(
-    subscriptionSummary?.billingStatus ?? "PENDING",
+    subscriptionSummary?.billingStatus ?? "PENDING_PAYMENT",
   );
   const [pendingCancel, setPendingCancel] = useState(false);
 
@@ -133,7 +139,7 @@ export function MembershipDetailPanel({
     mutationFn: (nextStatus: MembershipBillingStatus) =>
       updateClientSubscriptionBillingStatus(subscriptionId, nextStatus),
     onSuccess: (updated) => {
-      setBillingStatus(updated.billingStatus ?? "PENDING");
+      setBillingStatus(updated.billingStatus ?? "PENDING_PAYMENT");
       queryClient.invalidateQueries({ queryKey: ["client-subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["client-subscription", subscriptionId] });
       showFeedback("success", "Estado de pago actualizado.");
@@ -195,9 +201,10 @@ export function MembershipDetailPanel({
     );
   }
 
-  const currentBillingStatus = detailQuery.data?.billingStatus ?? subscription.billingStatus ?? "PENDING";
+  const currentBillingStatus = detailQuery.data?.billingStatus ?? subscription.billingStatus ?? "PENDING_PAYMENT";
   const manualRenewalOverride = Boolean(detailQuery.data?.manualRenewalOverride ?? subscription.manualRenewalOverride);
   const canCancel = subscription.status !== "CANCELLED" && subscription.status !== "EXPIRED";
+  const scheduleModeLabel = getMembershipScheduleModeLabel(subscription.scheduleMode);
 
   return (
     <div className="space-y-6">
@@ -228,7 +235,7 @@ export function MembershipDetailPanel({
         <h3 className="mb-3 text-sm font-semibold text-primary">Resumen</h3>
         <div className="rounded-lg border border-neutral-dark bg-white p-4">
           <DetailRow label="Plan" value={subscription.planName} />
-          <DetailRow label="Modalidad" value={MEMBERSHIP_SCHEDULE_MODE_LABELS[subscription.scheduleMode]} />
+          {scheduleModeLabel ? <DetailRow label="Modalidad" value={scheduleModeLabel} /> : null}
           <DetailRow label="Uso del periodo" value={getUsageLabel(subscription)} />
           <DetailRow label="Inicio" value={formatDate(subscription.startsAt ?? subscription.currentPeriodStart)} />
           <DetailRow label="Fin de periodo" value={formatDate(subscription.currentPeriodEnd ?? subscription.endsAt)} />
@@ -248,8 +255,9 @@ export function MembershipDetailPanel({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PAID">Pagada</SelectItem>
-                  <SelectItem value="PENDING">Pendiente</SelectItem>
+                  <SelectItem value="PENDING_PAYMENT">Pendiente</SelectItem>
                   <SelectItem value="OVERDUE">Vencida</SelectItem>
+                  <SelectItem value="REFUNDED">Reembolsada</SelectItem>
                 </SelectContent>
               </Select>
             </label>
@@ -294,7 +302,7 @@ export function MembershipDetailPanel({
                 <div key={item.bookingId} className="rounded-md bg-neutral px-3 py-2">
                   <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
                   <p className="mt-1 text-xs text-primary-light">
-                    {[item.serviceName, item.resourceName, item.status].filter(Boolean).join(" · ")}
+                    {[item.serviceName, item.resourceName, item.status].filter(Boolean).join(" - ")}
                   </p>
                 </div>
               ))}

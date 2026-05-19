@@ -1,6 +1,7 @@
 import { httpRequest } from "@/core/api/http-client";
 import { toAppError } from "@/core/errors/app-error";
 import type {
+  ClientSubscriptionScheduleMode,
   ClientSubscription,
   ClientSubscriptionListParams,
   CreateClientSubscriptionInput,
@@ -34,10 +35,16 @@ type ApiMembershipPlan = {
 };
 
 type ApiRecurringSlot = {
+  id?: string | null;
   resourceId?: string | null;
   resourceName?: string | null;
+  serviceId?: string | null;
+  serviceName?: string | null;
   dayOfWeek?: number | null;
   startTime?: string | null;
+  active?: boolean | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
 };
 
 type ApiUpcomingClass = {
@@ -48,6 +55,7 @@ type ApiUpcomingClass = {
   startTime?: string | null;
   endTime?: string | null;
   status?: string | null;
+  consumesQuota?: boolean | null;
 };
 
 type ApiClientSubscription = {
@@ -68,18 +76,25 @@ type ApiClientSubscription = {
     scheduleMode?: string | null;
     classesPerPeriod?: number | null;
   } | null;
+  planScheduleMode?: string | null;
   scheduleMode?: string | null;
+  locationId?: string | null;
   status?: string | null;
   billingStatus?: string | null;
   classesPerPeriod?: number | null;
   classesUsed?: number | null;
+  consumedQuota?: number | null;
   currentPeriodStart?: string | null;
   currentPeriodEnd?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
   recurringSlots?: ApiRecurringSlot[] | null;
   upcomingClasses?: ApiUpcomingClass[] | null;
+  upcomingBookings?: ApiUpcomingClass[] | null;
   manualRenewalOverride?: boolean | null;
+  notes?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -116,12 +131,24 @@ function pickString(values: Array<string | null | undefined>, fallback: string) 
   return fallback;
 }
 
-function normalizeScheduleMode(value: string | null | undefined): MembershipScheduleMode {
+function normalizeScheduleMode(value: string | null | undefined): MembershipScheduleMode | undefined {
   if (value === "FIXED" || value === "FLEXIBLE" || value === "BOTH") {
     return value;
   }
 
-  return "FLEXIBLE";
+  return undefined;
+}
+
+function normalizePlanScheduleMode(value: string | null | undefined): MembershipScheduleMode {
+  return normalizeScheduleMode(value) ?? "FLEXIBLE";
+}
+
+function normalizeSubscriptionScheduleMode(value: string | null | undefined): ClientSubscriptionScheduleMode {
+  if (value === "FIXED" || value === "FLEXIBLE") {
+    return value;
+  }
+
+  return "";
 }
 
 function normalizeDurationPeriod(value: string | null | undefined): MembershipDurationPeriod {
@@ -141,7 +168,11 @@ function normalizeMembershipStatus(value: string | null | undefined): Membership
 }
 
 function normalizeBillingStatus(value: string | null | undefined): MembershipBillingStatus | undefined {
-  if (value === "PAID" || value === "PENDING" || value === "OVERDUE") {
+  if (value === "PENDING") {
+    return "PENDING_PAYMENT";
+  }
+
+  if (value === "PAID" || value === "PENDING_PAYMENT" || value === "OVERDUE" || value === "REFUNDED") {
     return value;
   }
 
@@ -166,7 +197,7 @@ function mapApiPlan(api: ApiMembershipPlan): MembershipPlan {
     price: String(api.price ?? "0"),
     currency: pickString([api.currency], "PYG"),
     active: api.active ?? true,
-    scheduleMode: normalizeScheduleMode(api.scheduleMode),
+    scheduleMode: normalizePlanScheduleMode(api.scheduleMode),
     createdAt: api.createdAt ?? undefined,
     updatedAt: api.updatedAt ?? undefined,
   };
@@ -174,10 +205,16 @@ function mapApiPlan(api: ApiMembershipPlan): MembershipPlan {
 
 function mapApiRecurringSlot(api: ApiRecurringSlot): MembershipRecurringSlot {
   return {
+    id: api.id ?? undefined,
     resourceId: pickString([api.resourceId], ""),
     resourceName: api.resourceName ?? undefined,
+    serviceId: api.serviceId ?? undefined,
+    serviceName: api.serviceName ?? undefined,
     dayOfWeek: normalizeDayOfWeek(api.dayOfWeek),
     startTime: pickString([api.startTime], ""),
+    active: api.active ?? undefined,
+    validFrom: api.validFrom ?? undefined,
+    validUntil: api.validUntil ?? undefined,
   };
 }
 
@@ -189,6 +226,7 @@ function mapApiUpcomingClass(api: ApiUpcomingClass): MembershipUpcomingClass {
     startTime: pickString([api.startTime], ""),
     endTime: api.endTime ?? undefined,
     status: api.status ?? undefined,
+    consumesQuota: api.consumesQuota ?? undefined,
   };
 }
 
@@ -200,18 +238,21 @@ function mapApiSubscription(api: ApiClientSubscription): ClientSubscription {
     clientPhone: pickString([api.clientPhone, api.client?.phone], ""),
     planId: pickString([api.planId, api.plan?.id], ""),
     planName: pickString([api.planName, api.plan?.name], "Plan"),
-    scheduleMode: normalizeScheduleMode(api.scheduleMode ?? api.plan?.scheduleMode),
+    planScheduleMode: normalizeScheduleMode(api.planScheduleMode ?? api.plan?.scheduleMode),
+    scheduleMode: normalizeSubscriptionScheduleMode(api.scheduleMode),
+    locationId: api.locationId ?? undefined,
     status: normalizeMembershipStatus(api.status),
     billingStatus: normalizeBillingStatus(api.billingStatus),
     classesPerPeriod: api.classesPerPeriod ?? api.plan?.classesPerPeriod ?? null,
-    classesUsed: api.classesUsed ?? 0,
-    currentPeriodStart: api.currentPeriodStart ?? undefined,
-    currentPeriodEnd: api.currentPeriodEnd ?? undefined,
-    startsAt: api.startsAt ?? undefined,
-    endsAt: api.endsAt ?? undefined,
+    classesUsed: api.consumedQuota ?? api.classesUsed ?? 0,
+    currentPeriodStart: api.currentPeriodStart ?? api.startDate ?? undefined,
+    currentPeriodEnd: api.currentPeriodEnd ?? api.endDate ?? undefined,
+    startsAt: api.startsAt ?? api.startDate ?? undefined,
+    endsAt: api.endsAt ?? api.endDate ?? undefined,
     recurringSlots: (api.recurringSlots ?? []).map(mapApiRecurringSlot),
-    upcomingClasses: (api.upcomingClasses ?? []).map(mapApiUpcomingClass),
+    upcomingClasses: (api.upcomingBookings ?? api.upcomingClasses ?? []).map(mapApiUpcomingClass),
     manualRenewalOverride: api.manualRenewalOverride ?? undefined,
+    notes: api.notes ?? undefined,
     createdAt: api.createdAt ?? undefined,
     updatedAt: api.updatedAt ?? undefined,
   };
@@ -316,8 +357,16 @@ export async function createClientSubscription(
     body: {
       planId: input.planId,
       clientId: input.clientId,
-      startsAt: input.startsAt,
+      serviceId: input.serviceId,
+      clientName: input.clientName,
+      clientPhone: input.clientPhone,
+      clientEmail: input.clientEmail,
+      locationId: input.locationId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      billingStatus: input.billingStatus,
       recurringSlots: input.recurringSlots,
+      notes: input.notes,
     },
   });
   return mapApiSubscription(unwrapMaybeData(response));

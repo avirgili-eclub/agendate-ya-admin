@@ -32,12 +32,16 @@ export function useMembershipPlanDetailQuery(id: string | null) {
   });
 }
 
-export function useClientSubscriptionsQuery(params: ClientSubscriptionListParams = {}) {
+export function useClientSubscriptionsQuery(
+  params: ClientSubscriptionListParams = {},
+  options: { enabled?: boolean; staleTime?: number } = {},
+) {
   return useQuery<ClientSubscription[]>({
     queryKey: ["client-subscriptions", params],
     queryFn: () => fetchClientSubscriptions(params),
+    enabled: options.enabled ?? true,
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
+    staleTime: options.staleTime ?? 30_000,
   });
 }
 

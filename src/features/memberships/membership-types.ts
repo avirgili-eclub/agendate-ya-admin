@@ -1,8 +1,9 @@
 export type MembershipScheduleMode = "FIXED" | "FLEXIBLE" | "BOTH";
+export type ClientSubscriptionScheduleMode = "FIXED" | "FLEXIBLE" | "";
 export type MembershipDurationPeriod = "MONTHLY";
 
 export type MembershipStatus = "ACTIVE" | "PAUSED" | "CANCELLED" | "EXPIRED";
-export type MembershipBillingStatus = "PAID" | "PENDING" | "OVERDUE";
+export type MembershipBillingStatus = "PAID" | "PENDING_PAYMENT" | "OVERDUE" | "REFUNDED";
 
 export type MembershipPlan = {
   id: string;
@@ -30,10 +31,16 @@ export type MembershipPlanInput = {
 };
 
 export type MembershipRecurringSlot = {
+  id?: string;
   resourceId: string;
   resourceName?: string;
+  serviceId?: string;
+  serviceName?: string;
   dayOfWeek: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   startTime: string;
+  active?: boolean;
+  validFrom?: string;
+  validUntil?: string;
 };
 
 export type MembershipUpcomingClass = {
@@ -43,6 +50,7 @@ export type MembershipUpcomingClass = {
   startTime: string;
   endTime?: string;
   status?: string;
+  consumesQuota?: boolean;
 };
 
 export type ClientSubscription = {
@@ -52,7 +60,9 @@ export type ClientSubscription = {
   clientPhone?: string;
   planId: string;
   planName: string;
-  scheduleMode: MembershipScheduleMode;
+  planScheduleMode?: MembershipScheduleMode;
+  scheduleMode: ClientSubscriptionScheduleMode;
+  locationId?: string;
   status: MembershipStatus;
   billingStatus?: MembershipBillingStatus;
   classesPerPeriod: number | null;
@@ -64,6 +74,7 @@ export type ClientSubscription = {
   recurringSlots: MembershipRecurringSlot[];
   upcomingClasses: MembershipUpcomingClass[];
   manualRenewalOverride?: boolean;
+  notes?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -77,8 +88,16 @@ export type ClientSubscriptionListParams = {
 export type CreateClientSubscriptionInput = {
   planId: string;
   clientId: string;
-  startsAt: string;
+  serviceId: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail?: string;
+  locationId?: string;
+  startDate: string;
+  endDate: string;
+  billingStatus?: MembershipBillingStatus;
   recurringSlots?: MembershipRecurringSlot[];
+  notes?: string;
 };
 
 export type MembershipOccupancySlot = {
