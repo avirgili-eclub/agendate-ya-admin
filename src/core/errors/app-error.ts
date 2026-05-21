@@ -13,6 +13,9 @@ export type AppErrorCode =
   | "SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN"
   | "SUBSCRIPTION_SLOT_FULL"
   | "SUBSCRIPTION_QUOTA_EXHAUSTED"
+  | "NO_RECOVERY_CREDIT"
+  | "NO_ACTIVE_SUBSCRIPTION_FOR_CLIENT"
+  | "CLIENT_SUBSCRIPTIONS_NOT_ENABLED"
   | "SUBSCRIPTION_NOT_FOUND"
   | "PLAN_HAS_ACTIVE_SUBSCRIPTIONS"
   | "TIER_DOES_NOT_SUPPORT_SUBSCRIPTIONS"
@@ -64,6 +67,15 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("SUBSCRIPTION_SLOT_FULL")) {
     return "SUBSCRIPTION_SLOT_FULL";
+  }
+  if (normalized.includes("NO_RECOVERY_CREDIT")) {
+    return "NO_RECOVERY_CREDIT";
+  }
+  if (normalized.includes("NO_ACTIVE_SUBSCRIPTION_FOR_CLIENT")) {
+    return "NO_ACTIVE_SUBSCRIPTION_FOR_CLIENT";
+  }
+  if (normalized.includes("CLIENT_SUBSCRIPTIONS_NOT_ENABLED")) {
+    return "CLIENT_SUBSCRIPTIONS_NOT_ENABLED";
   }
   if (normalized.includes("SUBSCRIPTION_QUOTA_EXHAUSTED")) {
     return "SUBSCRIPTION_QUOTA_EXHAUSTED";

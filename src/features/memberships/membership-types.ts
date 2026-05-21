@@ -51,6 +51,7 @@ export type MembershipUpcomingClass = {
   endTime?: string;
   status?: string;
   consumesQuota?: boolean;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY";
 };
 
 export type ClientSubscription = {

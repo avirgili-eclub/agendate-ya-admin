@@ -61,6 +61,7 @@ export function BookingCreateForm({
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
   const [notes, setNotes] = useState("");
+  const [isRecovery, setIsRecovery] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -153,6 +154,9 @@ export function BookingCreateForm({
       onClose();
     },
     onError: (error: AppError) => {
+      if (error.code === "NO_ACTIVE_SUBSCRIPTION_FOR_CLIENT") {
+        void queryClient.invalidateQueries({ queryKey: ["clients"] });
+      }
       setFieldErrors(extractFieldErrors(error));
       setFormError(getBookingErrorMessage(error));
     },
@@ -162,11 +166,13 @@ export function BookingCreateForm({
     setClientId(value);
     const next = clientOptions.find((c) => c.id === value) ?? null;
     setSelectedClient(next);
+    setIsRecovery(false);
   }
 
   function handleClientModeChange(mode: ClientMode) {
     if (mode === clientMode) return;
     setClientMode(mode);
+    setIsRecovery(false);
     setFieldErrors((prev) => {
       const next = { ...prev };
       delete next.clientId;
@@ -227,15 +233,22 @@ export function BookingCreateForm({
       return;
     }
 
+    const resolvedClientId =
+      clientMode === "search" ? selectedClient?.id || undefined : undefined;
+    const recoveryAllowed =
+      clientMode === "search" && Boolean(selectedClient?.hasActiveSubscription);
+
     createMutation.mutate({
       resourceId: isProfessional ? professionalResourceId : resourceId,
       serviceId,
+      clientId: resolvedClientId,
       clientName: resolvedClientName,
       clientPhone: resolvedClientPhone,
       clientEmail: resolvedClientEmail,
       date,
       startTime,
       notes: notes || undefined,
+      isRecovery: recoveryAllowed && isRecovery,
     });
   }
 
@@ -570,6 +583,26 @@ export function BookingCreateForm({
           )}
         </label>
       </div>
+
+      {clientMode === "search" && selectedClient?.hasActiveSubscription ? (
+        <label className="flex items-start gap-3 rounded-lg border border-neutral-dark bg-neutral/30 p-3">
+          <input
+            type="checkbox"
+            checked={isRecovery}
+            onChange={(event) => setIsRecovery(event.target.checked)}
+            className="mt-0.5 size-4 cursor-pointer accent-primary"
+          />
+          <span className="text-sm">
+            <span className="block font-medium text-primary-dark">
+              ¿Es un turno de recuperación?
+            </span>
+            <span className="mt-0.5 block text-xs text-primary-light">
+              Usa un cupo de la membresía activa del cliente. Requiere que tenga clases disponibles
+              (cancelaciones previas con +24hs).
+            </span>
+          </span>
+        </label>
+      ) : null}
 
       <label className="block">
         <span className="mb-1 block text-sm font-medium text-primary-dark">Notas (opcional)</span>

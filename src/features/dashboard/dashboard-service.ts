@@ -1,5 +1,6 @@
 import { unwrapData } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
+import type { BookingKind } from "@/features/agenda/agenda-service";
 
 export type DashboardKpi = {
   label: string;
@@ -14,6 +15,7 @@ export type UpcomingBooking = {
   resourceName: string;
   startsAtLabel: string;
   status: "CONFIRMED" | "PENDING" | "CANCELLED";
+  bookingKind?: BookingKind;
 };
 
 export type SourceChannelMetric = {
@@ -80,6 +82,7 @@ type ApiDashboardSnapshot = {
     resourceName?: string | null;
     startTime: string;
     status: "CONFIRMED" | "PENDING";
+    bookingKind?: BookingKind | null;
   }>;
   sourceChannels: Array<{
     source: SourceChannelMetric["channel"];
@@ -102,6 +105,7 @@ type ApiUpcomingBooking = {
   endTime: string;
   status: "CONFIRMED" | "PENDING";
   sourceChannel: SourceChannelMetric["channel"];
+  bookingKind?: BookingKind | null;
 };
 
 function formatHourLabel(iso: string) {
@@ -125,7 +129,10 @@ function percentage(part: number, total: number) {
 }
 
 function mapApiUpcomingBooking(
-  booking: Pick<ApiUpcomingBooking, "id" | "clientName" | "serviceName" | "resourceName" | "startTime" | "status">,
+  booking: Pick<
+    ApiUpcomingBooking,
+    "id" | "clientName" | "serviceName" | "resourceName" | "startTime" | "status" | "bookingKind"
+  >,
 ): UpcomingBooking {
   return {
     id: booking.id,
@@ -134,6 +141,7 @@ function mapApiUpcomingBooking(
     resourceName: booking.resourceName ?? "Recurso",
     startsAtLabel: formatHourLabel(booking.startTime),
     status: booking.status === "PENDING" ? "PENDING" : "CONFIRMED",
+    bookingKind: booking.bookingKind ?? undefined,
   };
 }
 

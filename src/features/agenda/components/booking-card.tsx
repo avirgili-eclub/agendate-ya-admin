@@ -9,6 +9,7 @@ import {
   type BookingStatus,
 } from "@/features/agenda/agenda-service";
 import { formatTime } from "@/features/agenda/utils/calendar-date";
+import { BookingKindBadge } from "@/features/bookings/components/booking-kind-badge";
 import { createBookingWhatsappUrl, normalizeWhatsappPhone } from "@/shared/utils/booking-whatsapp";
 
 type BookingCardProps = {
@@ -85,6 +86,7 @@ export function BookingCard({ booking, onStatusChange, onDelete, businessName, t
         <p className="truncate text-[11px] text-primary-light" title={booking.resourceName}>
           Prof.: {booking.resourceName}
         </p>
+        <BookingKindBadge kind={booking.bookingKind} />
         {booking.notes && (
           <p className="line-clamp-2 text-[11px] text-primary-light" title={booking.notes}>
             Nota: {booking.notes}

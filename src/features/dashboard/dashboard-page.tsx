@@ -4,6 +4,7 @@ import { Activity, AlertTriangle, CalendarClock, Loader2, RefreshCw } from "luci
 import { useDashboardQuery } from "@/features/dashboard/use-dashboard-query";
 import { useDashboardUpcomingBookingsQuery } from "@/features/dashboard/use-dashboard-upcoming-bookings-query";
 import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
+import { BookingKindBadge } from "@/features/bookings/components/booking-kind-badge";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 import { Button } from "@/shared/ui/button";
@@ -199,6 +200,7 @@ export function DashboardPage() {
                       </div>
                       <div className="flex items-center gap-1.5 pt-0.5 sm:shrink-0 sm:gap-2 sm:pt-0">
                         <span className="text-xs font-semibold text-primary sm:text-sm">{booking.startsAtLabel}</span>
+                        <BookingKindBadge kind={booking.bookingKind} />
                         <BookingStatusChip status={booking.status} />
                       </div>
                     </div>

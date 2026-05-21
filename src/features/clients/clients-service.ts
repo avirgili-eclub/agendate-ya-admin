@@ -19,6 +19,7 @@ export type ClientItem = {
   lastBookingDate?: string;
   totalBookings: number;
   bookingSummary: BookingSummary | null;
+  hasActiveSubscription: boolean;
 };
 
 export type BookingSummary = {
@@ -48,6 +49,7 @@ export type ClientBookingHistoryItem = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY";
   refs: {
     bookingId: string;
     serviceId: string | null;
@@ -115,6 +117,7 @@ type ApiClient = {
     totalCount: number;
     missedRatePct: number | null;
   } | null;
+  hasActiveSubscription?: boolean | null;
 };
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
@@ -153,6 +156,7 @@ type ApiClientBooking = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY" | null;
   refs?: {
     bookingId?: string | null;
     serviceId?: string | null;
@@ -241,6 +245,7 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
     totalBookings:
       bookingSummary?.completedCount ?? api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
     bookingSummary,
+    hasActiveSubscription: api.hasActiveSubscription ?? false,
   };
 }
 
@@ -363,6 +368,7 @@ export async function fetchClientBookingHistory(
       status: b.status,
       scheduledAt: b.scheduledAt,
       createdAt: b.createdAt,
+      bookingKind: b.bookingKind ?? undefined,
       refs: {
         bookingId: b.refs?.bookingId ?? b.id,
         serviceId: b.refs?.serviceId ?? null,

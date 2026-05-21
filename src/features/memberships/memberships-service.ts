@@ -56,6 +56,7 @@ type ApiUpcomingClass = {
   endTime?: string | null;
   status?: string | null;
   consumesQuota?: boolean | null;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY" | null;
 };
 
 type ApiClientSubscription = {
@@ -227,6 +228,7 @@ function mapApiUpcomingClass(api: ApiUpcomingClass): MembershipUpcomingClass {
     endTime: api.endTime ?? undefined,
     status: api.status ?? undefined,
     consumesQuota: api.consumesQuota ?? undefined,
+    bookingKind: api.bookingKind ?? undefined,
   };
 }
 

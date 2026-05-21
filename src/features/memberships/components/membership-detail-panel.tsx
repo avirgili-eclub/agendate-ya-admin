@@ -17,6 +17,7 @@ import type {
   MembershipScheduleMode,
   MembershipStatus,
 } from "@/features/memberships/membership-types";
+import { BookingKindBadge } from "@/features/bookings/components/booking-kind-badge";
 import { useClientSubscriptionDetailQuery } from "@/features/memberships/use-memberships-query";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { Button } from "@/shared/ui/button";
@@ -300,7 +301,10 @@ export function MembershipDetailPanel({
             <div className="space-y-2">
               {upcomingClasses.map((item) => (
                 <div key={item.bookingId} className="rounded-md bg-neutral px-3 py-2">
-                  <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                    <BookingKindBadge kind={item.bookingKind} />
+                  </div>
                   <p className="mt-1 text-xs text-primary-light">
                     {[item.serviceName, item.resourceName, item.status].filter(Boolean).join(" - ")}
                   </p>
