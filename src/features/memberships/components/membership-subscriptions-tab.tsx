@@ -16,6 +16,7 @@ import {
   useClientSubscriptionsQuery,
   useMembershipPlansQuery,
 } from "@/features/memberships/use-memberships-query";
+import { SubscriptionQuotaSummary } from "@/features/memberships/subscription-quota";
 import { Button } from "@/shared/ui/button";
 import { DataTable, type DataTableColumn } from "@/shared/ui/data-table";
 import { EmptyState } from "@/shared/ui/empty-state";
@@ -79,14 +80,6 @@ function formatDateTime(value?: string) {
     minute: "2-digit",
     hour12: false,
   }).format(new Date(value));
-}
-
-function getUsageLabel(subscription: ClientSubscription) {
-  if (subscription.classesPerPeriod == null) {
-    return `${subscription.classesUsed} usadas`;
-  }
-
-  return `${subscription.classesUsed}/${subscription.classesPerPeriod}`;
 }
 
 function getNextClassLabel(subscription: ClientSubscription) {
@@ -158,8 +151,8 @@ function SubscriptionMobileCard({
           <ScheduleModeCell mode={subscription.scheduleMode} />
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase text-primary-light">Uso</p>
-          <p className="font-medium text-primary">{getUsageLabel(subscription)}</p>
+          <p className="text-xs font-semibold uppercase text-primary-light">Cupo</p>
+          <SubscriptionQuotaSummary subscription={subscription} onWarningClick={onOpen} />
         </div>
         <div>
           <p className="text-xs font-semibold uppercase text-primary-light">Pago</p>
@@ -247,8 +240,10 @@ export function MembershipSubscriptionsTab() {
     },
     {
       id: "usage",
-      header: "Uso",
-      cell: (subscription) => <span className="font-medium text-primary">{getUsageLabel(subscription)}</span>,
+      header: "Cupo",
+      cell: (subscription) => (
+        <SubscriptionQuotaSummary subscription={subscription} onWarningClick={setSelectedSubscription} />
+      ),
     },
     {
       id: "next-class",

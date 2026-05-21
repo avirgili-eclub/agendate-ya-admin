@@ -82,6 +82,12 @@ type ApiClientSubscription = {
   locationId?: string | null;
   status?: string | null;
   billingStatus?: string | null;
+  totalIncluded?: number | null;
+  scheduled?: number | null;
+  consumed?: number | null;
+  available?: number | null;
+  overAllocated?: number | null;
+  isUnlimited?: boolean | null;
   classesPerPeriod?: number | null;
   classesUsed?: number | null;
   consumedQuota?: number | null;
@@ -232,7 +238,28 @@ function mapApiUpcomingClass(api: ApiUpcomingClass): MembershipUpcomingClass {
   };
 }
 
+function normalizeQuotaBreakdown(api: ApiClientSubscription) {
+  const totalIncluded = api.totalIncluded ?? api.classesPerPeriod ?? api.plan?.classesPerPeriod ?? null;
+  const isUnlimited = api.isUnlimited ?? totalIncluded == null;
+  const scheduled = api.scheduled ?? 0;
+  const consumed = api.consumed ?? api.consumedQuota ?? api.classesUsed ?? 0;
+  const occupied = scheduled + consumed;
+  const available = api.available ?? (isUnlimited || totalIncluded == null ? null : Math.max(0, totalIncluded - occupied));
+  const overAllocated = api.overAllocated ?? (isUnlimited || totalIncluded == null ? 0 : Math.max(0, occupied - totalIncluded));
+
+  return {
+    totalIncluded,
+    scheduled,
+    consumed,
+    available,
+    overAllocated,
+    isUnlimited,
+  };
+}
+
 function mapApiSubscription(api: ApiClientSubscription): ClientSubscription {
+  const quota = normalizeQuotaBreakdown(api);
+
   return {
     id: api.id,
     clientId: api.clientId ?? undefined,
@@ -245,8 +272,12 @@ function mapApiSubscription(api: ApiClientSubscription): ClientSubscription {
     locationId: api.locationId ?? undefined,
     status: normalizeMembershipStatus(api.status),
     billingStatus: normalizeBillingStatus(api.billingStatus),
-    classesPerPeriod: api.classesPerPeriod ?? api.plan?.classesPerPeriod ?? null,
-    classesUsed: api.consumedQuota ?? api.classesUsed ?? 0,
+    totalIncluded: quota.totalIncluded,
+    scheduled: quota.scheduled,
+    consumed: quota.consumed,
+    available: quota.available,
+    overAllocated: quota.overAllocated,
+    isUnlimited: quota.isUnlimited,
     currentPeriodStart: api.currentPeriodStart ?? api.startDate ?? undefined,
     currentPeriodEnd: api.currentPeriodEnd ?? api.endDate ?? undefined,
     startsAt: api.startsAt ?? api.startDate ?? undefined,
