@@ -17,7 +17,7 @@ import { SidePanel } from "@/shared/ui/side-panel";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 import { ClientDetailPanel } from "@/features/clients/client-detail-panel";
-import { ClientFormModal } from "@/features/clients/client-form-modal";
+import { ClientFormPanel } from "@/features/clients/client-form-panel";
 import { MembershipCreatePanel } from "@/features/memberships/components/membership-create-panel";
 import { getMembershipError } from "@/features/memberships/membership-errors";
 import { createClientSubscription } from "@/features/memberships/memberships-service";
@@ -154,6 +154,15 @@ export function ClientsPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const formError = formMode === "create" ? createMutation.error : updateMutation.error;
   const isFormLoading = formMode === "create" ? createMutation.isPending : updateMutation.isPending;
+  const hasCompleteBillingData = (client: ClientItem) => {
+    if (!client.documentType || !client.documento || !client.dv) {
+      return false;
+    }
+    if (client.documentType === "RUC" && !client.razonSocial) {
+      return false;
+    }
+    return true;
+  };
 
   return (
     <div className="space-y-6">
@@ -237,6 +246,11 @@ export function ClientsPage() {
                     <h3 className="font-semibold text-primary">
                       {client.fullName}
                     </h3>
+                    {hasCompleteBillingData(client) ? (
+                      <span className="mt-1 inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                        Facturacion completa
+                      </span>
+                    ) : null}
                     <div className="mt-1 flex items-center gap-1 text-xs text-primary-light">
                       <Phone className="size-3" />
                       {client.phone}
@@ -346,9 +360,9 @@ export function ClientsPage() {
         ) : null}
       </SidePanel>
 
-      {/* Client Form Modal */}
+      {/* Client Form Panel */}
       {formMode && (
-        <ClientFormModal
+        <ClientFormPanel
           mode={formMode}
           initialClient={editingClient ?? undefined}
           isOpen={!!formMode}

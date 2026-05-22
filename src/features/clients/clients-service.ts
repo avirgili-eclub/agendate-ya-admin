@@ -14,6 +14,12 @@ export type ClientItem = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
   createdAt: string;
   updatedAt: string;
   lastBookingDate?: string;
@@ -21,6 +27,8 @@ export type ClientItem = {
   bookingSummary: BookingSummary | null;
   hasActiveSubscription: boolean;
 };
+
+export type DocumentType = "CI" | "RUC" | "PASSPORT";
 
 export type BookingSummary = {
   completedCount: number;
@@ -39,6 +47,12 @@ export type ClientUpsertInput = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
 };
 
 export type ClientBookingHistoryItem = {
@@ -102,6 +116,12 @@ type ApiClient = {
   phone: string;
   email?: string | null;
   notes?: string | null;
+  documento?: string | null;
+  documentType?: DocumentType | null;
+  dv?: string | null;
+  ruc?: string | null;
+  razonSocial?: string | null;
+  billingEmail?: string | null;
   createdAt: string;
   updatedAt?: string;
   completedBookingsCount?: number;
@@ -146,6 +166,12 @@ type ApiClientRequest = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
 };
 
 type ApiClientBooking = {
@@ -239,6 +265,12 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
     phone: api.phone,
     email: api.email ?? undefined,
     notes: api.notes ?? undefined,
+    documento: api.documento ?? undefined,
+    documentType: api.documentType ?? undefined,
+    dv: api.dv ?? undefined,
+    ruc: api.ruc ?? undefined,
+    razonSocial: api.razonSocial ?? undefined,
+    billingEmail: api.billingEmail ?? undefined,
     createdAt: api.createdAt,
     updatedAt: api.updatedAt ?? api.createdAt,
     lastBookingDate: api.metadata?.lastBookingDate,
@@ -260,6 +292,12 @@ function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
     phone: input.phone.trim(),
     email: input.email?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
+    documento: input.documento?.trim() || undefined,
+    documentType: input.documentType,
+    dv: input.dv?.trim() || undefined,
+    ruc: input.ruc?.trim() || undefined,
+    razonSocial: input.razonSocial?.trim() || undefined,
+    billingEmail: input.billingEmail?.trim() || undefined,
   };
 }
 
@@ -306,6 +344,23 @@ export async function fetchClients(params?: {
 export async function fetchClientById(id: string): Promise<ClientItem> {
   const response = await httpRequest<DataEnvelope<ApiClient>>(`/clients/${id}`);
   return mapApiClientToItem(unwrapData<ApiClient>(response));
+}
+
+export async function fetchBillingDocumentDv(document: string): Promise<number> {
+  const normalizedDocument = document.trim();
+  if (!normalizedDocument) {
+    throw toAppError({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Validation failed",
+      details: [{ field: "documento", message: "Ingresa un numero de documento para calcular el DV." }],
+    });
+  }
+
+  const response = await httpRequest<DataEnvelope<{ dv: number }>>(
+    `/billing/utils/dv?document=${encodeURIComponent(normalizedDocument)}`
+  );
+  return unwrapData<{ dv: number }>(response).dv;
 }
 
 export async function createClient(input: ClientUpsertInput): Promise<ClientItem> {
