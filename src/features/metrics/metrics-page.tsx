@@ -1,4 +1,3 @@
-import { Lock, TrendingUp } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { getSessionState } from "@/core/auth/session-store";
@@ -6,6 +5,18 @@ import { MetricsFilters } from "@/features/metrics/components/metrics-filters";
 import { MetricsKpiGrid } from "@/features/metrics/components/metrics-kpi-grid";
 import { OccupancyChart } from "@/features/metrics/components/occupancy-chart";
 import { RevenueBookingsChart } from "@/features/metrics/components/revenue-bookings-chart";
+import {
+  LiveTodayBadge,
+  LockedMetricsState,
+  MetricsAccessLoadingState,
+  MetricsCapabilityErrorState,
+  MetricsEmptyState,
+  MetricsGenericErrorState,
+  MetricsLoadingState,
+  OccupancyUnknownCallout,
+  ResourceNotAssignedState,
+  UnsupportedMetricsRoleState,
+} from "@/features/metrics/components/metrics-states";
 import { TopClientsCard } from "@/features/metrics/components/top-clients-card";
 import { TopResourcesCard } from "@/features/metrics/components/top-resources-card";
 import { TopServicesCard } from "@/features/metrics/components/top-services-card";
@@ -22,10 +33,6 @@ import {
 } from "@/features/metrics/use-metrics-query";
 import { canUseMetricsDashboard } from "@/features/tenant/tenant-capabilities-types";
 import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
-import { EmptyState } from "@/shared/ui/empty-state";
-import { ErrorState } from "@/shared/ui/error-state";
-import { LoadingState, SkeletonCards } from "@/shared/ui/loading-state";
-import { PageCard } from "@/shared/ui/page-card";
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -67,71 +74,28 @@ function hasMeaningfulMetrics(data: TenantMetricsData | ProfessionalMetricsData)
   );
 }
 
-function LockedMetricsState() {
-  return (
-    <PageCard>
-      <div className="flex flex-col gap-4 py-8 sm:flex-row sm:items-start">
-        <span className="inline-flex size-11 items-center justify-center rounded-lg bg-amber-100 text-amber-700" aria-hidden="true">
-          <Lock className="size-5" />
-        </span>
-        <div className="flex-1">
-          <h2 className="text-xl font-semibold text-primary-dark">Metricas avanzadas no disponibles</h2>
-          <p className="mt-2 text-sm text-primary-light">
-            El modulo de metricas requiere la capacidad METRICS_DASHBOARD. Actualiza el plan o solicita la activacion para ver ingresos realizados y ocupacion.
-          </p>
-          <a
-            href="/configuracion?tab=subscription"
-            className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
-          >
-            Ver suscripcion
-          </a>
-        </div>
-      </div>
-    </PageCard>
-  );
-}
-
-function ResourceNotAssignedState() {
-  return (
-    <ErrorState
-      title="Perfil profesional sin recurso asignado"
-      message="Tu usuario profesional necesita estar vinculado a un recurso para ver sus metricas personales. Pedile a un administrador que complete la asignacion."
-    />
-  );
-}
-
-function LiveTodayBadge({ show }: { show: boolean }) {
-  if (!show) {
-    return null;
-  }
-
-  return (
-    <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-      Hoy en vivo
-    </span>
-  );
-}
-
 function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | ProfessionalMetricsData; showTopResources: boolean }) {
   const currency = getMetricsCurrency(data.meta);
   const granularity = data.meta.granularity;
   const liveToday = data.meta.includesToday && data.meta.todayIsLive;
+  const hasNullOccupancy =
+    data.totals.daysWithNullCapacity > 0 ||
+    data.series.some((bucket) => bucket.occupancyRate === null || bucket.capacityMinutes === null);
+  const unknownOccupancyDays =
+    data.totals.daysWithNullCapacity > 0
+      ? data.totals.daysWithNullCapacity
+      : data.series.filter((bucket) => bucket.occupancyRate === null || bucket.capacityMinutes === null).length;
 
   if (!hasMeaningfulMetrics(data)) {
-    return (
-      <EmptyState
-        icon={TrendingUp}
-        title="Sin actividad completada"
-        description="No hay reservas completadas ni ingresos realizados para los filtros seleccionados."
-      />
-    );
+    return <MetricsEmptyState />;
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <LiveTodayBadge show={liveToday} />
+        {liveToday && <LiveTodayBadge />}
       </div>
+      {hasNullOccupancy && <OccupancyUnknownCallout unknownDays={unknownOccupancyDays} />}
       <MetricsKpiGrid totals={data.totals} currency={currency} />
       <div className="grid gap-4 xl:grid-cols-2">
         <RevenueBookingsChart series={data.series} granularity={granularity} currency={currency} />
@@ -171,16 +135,11 @@ export function MetricsPage() {
   const activeQuery = isProfessional ? professionalMetricsQuery : tenantMetricsQuery;
 
   if (capabilitiesQuery.isLoading) {
-    return <LoadingState message="Validando acceso a metricas..." />;
+    return <MetricsAccessLoadingState />;
   }
 
   if (capabilitiesQuery.isError) {
-    return (
-      <ErrorState
-        message="No pudimos validar si el modulo de metricas esta disponible."
-        onRetry={() => void capabilitiesQuery.refetch()}
-      />
-    );
+    return <MetricsCapabilityErrorState onRetry={() => void capabilitiesQuery.refetch()} />;
   }
 
   if (!canUseMetrics) {
@@ -188,7 +147,7 @@ export function MetricsPage() {
   }
 
   if (!isProfessional && !showTenantMetrics) {
-    return <ErrorState title="Rol no soportado" message="Tu rol no tiene una vista de metricas disponible." />;
+    return <UnsupportedMetricsRoleState />;
   }
 
   if (isMetricsFeatureNotAvailableError(activeQuery.error)) {
@@ -209,13 +168,10 @@ export function MetricsPage() {
         }}
       />
 
-      {activeQuery.isLoading && <SkeletonCards count={6} />}
+      {activeQuery.isLoading && <MetricsLoadingState />}
 
       {activeQuery.isError && !activeQuery.isLoading && (
-        <ErrorState
-          message="No pudimos cargar las metricas para los filtros seleccionados."
-          onRetry={() => void activeQuery.refetch()}
-        />
+        <MetricsGenericErrorState onRetry={() => void activeQuery.refetch()} />
       )}
 
       {activeQuery.data && !activeQuery.isError && (
