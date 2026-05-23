@@ -69,13 +69,13 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
         </label>
 
         <label className="space-y-1 text-sm font-medium text-primary-dark">
-          <span>Granularidad</span>
+          <span>Agrupar por</span>
           <Select
             value={filters.granularity ?? "day"}
             onValueChange={(value) => updateFilters({ granularity: value as MetricsGranularity })}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecciona granularidad" />
+              <SelectValue placeholder="Selecciona agrupación" />
             </SelectTrigger>
             <SelectContent>
               {GRANULARITIES.map((item) => (
