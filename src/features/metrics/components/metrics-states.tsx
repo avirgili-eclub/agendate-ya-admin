@@ -35,9 +35,9 @@ export function LockedMetricsState() {
 
   return (
     <section className="relative overflow-hidden rounded-xl border border-neutral-dark bg-neutral-light shadow-sm">
-      <div className="pointer-events-none select-none space-y-4 p-4 opacity-70 blur-[3px]" aria-hidden="true">
+      <div className="pointer-events-none select-none space-y-3 p-3 opacity-70 blur-[3px]" aria-hidden="true">
         <MetricsKpiGrid totals={LOCKED_METRICS_PREVIEW_DATA.totals} currency={previewCurrency} />
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="grid gap-3 xl:grid-cols-2">
           <RevenueBookingsChart
             series={LOCKED_METRICS_PREVIEW_DATA.series}
             granularity={previewGranularity}
@@ -45,7 +45,7 @@ export function LockedMetricsState() {
           />
           <OccupancyChart series={LOCKED_METRICS_PREVIEW_DATA.series} granularity={previewGranularity} />
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2">
           <TopServicesCard services={LOCKED_METRICS_PREVIEW_DATA.topServices} currency={previewCurrency} />
           <TopClientsCard clients={LOCKED_METRICS_PREVIEW_DATA.topClients} currency={previewCurrency} />
           <TopResourcesCard resources={LOCKED_METRICS_PREVIEW_DATA.topResources} currency={previewCurrency} />
@@ -138,13 +138,13 @@ export function ResourceNotAssignedState() {
 
 export function OccupancyUnknownCallout({ unknownDays }: { unknownDays: number }) {
   return (
-    <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="status">
-      <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+    <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900" role="status">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <div>
         <p className="text-sm font-semibold">Ocupación parcialmente no disponible</p>
-        <p className="mt-1 text-sm">
-          Hay {unknownDays} {unknownDays === 1 ? "día" : "días"} sin capacidad configurada. Esos buckets se muestran como
-          no disponibles y no se convierten a 0%.
+        <p className="mt-1 text-xs">
+          Hay {unknownDays} {unknownDays === 1 ? "día" : "días"} sin disponibilidad configurada. Esos días quedan como
+          "Sin configurar", no se toman como 0% y quedan fuera del promedio de ocupación.
         </p>
       </div>
     </div>

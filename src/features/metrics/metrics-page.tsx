@@ -87,17 +87,17 @@ function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | 
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex justify-end">
         {liveToday && <LiveTodayBadge />}
       </div>
       {hasNullOccupancy && <OccupancyUnknownCallout unknownDays={unknownOccupancyDays} />}
       <MetricsKpiGrid totals={data.totals} currency={currency} />
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         <RevenueBookingsChart series={data.series} granularity={granularity} currency={currency} />
         <OccupancyChart series={data.series} granularity={granularity} />
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <TopServicesCard services={data.topServices} currency={currency} />
         <TopClientsCard clients={data.topClients} currency={currency} />
         {showTopResources && "topResources" in data && (

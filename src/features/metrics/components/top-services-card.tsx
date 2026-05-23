@@ -8,22 +8,22 @@ type TopServicesCardProps = {
 
 export function TopServicesCard({ services, currency }: TopServicesCardProps) {
   return (
-    <section className="rounded-xl border border-neutral-dark bg-neutral-light p-4 shadow-sm">
-      <h2 className="text-lg font-semibold text-primary-dark">Servicios principales</h2>
-      <p className="text-sm text-primary-light">Ordenados por ingresos realizados.</p>
-      <div className="mt-4 space-y-3">
+    <section className="rounded-lg border border-neutral-dark bg-neutral-light p-3 shadow-sm">
+      <h2 className="text-base font-semibold text-primary-dark">Servicios principales</h2>
+      <p className="text-xs text-primary-light">Ordenados por ingresos realizados.</p>
+      <div className="mt-3 space-y-2.5">
         {services.length === 0 ? (
-          <p className="text-sm text-primary-light">No hay servicios con reservas completadas.</p>
+          <p className="text-xs text-primary-light">No hay servicios con reservas completadas.</p>
         ) : services.map((service) => {
           const displayName = service.serviceName ?? "Servicio sin nombre";
           return (
-            <div key={service.serviceId} className="rounded-lg border border-neutral-dark bg-white p-3">
+            <div key={service.serviceId} className="rounded-md border border-neutral-dark bg-white p-2.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-primary-dark">{displayName}</p>
+                  <p className="text-xs font-semibold text-primary-dark">{displayName}</p>
                   <p className="text-xs text-primary-light">{formatInteger(service.bookingsCount)} reservas</p>
                 </div>
-                <p className="text-sm font-semibold text-primary">{formatCurrency(service.revenueCompleted, currency)}</p>
+                <p className="text-xs font-semibold text-primary">{formatCurrency(service.revenueCompleted, currency)}</p>
               </div>
             </div>
           );

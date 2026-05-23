@@ -52,17 +52,17 @@ export function MetricsKpiGrid({ totals, currency }: MetricsKpiGridProps) {
   ];
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-label="Indicadores principales">
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Indicadores principales">
       {cards.map((card) => (
-        <article key={card.label} className="rounded-xl border border-neutral-dark bg-neutral-light p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+        <article key={card.label} className="rounded-lg border border-neutral-dark bg-neutral-light p-3 shadow-sm">
+          <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-primary-light">{card.label}</p>
-              <p className="mt-2 text-2xl font-bold text-primary-dark">{card.value}</p>
-              <p className="mt-1 text-xs text-primary-light">{card.detail}</p>
+              <p className="text-xs font-medium text-primary-light">{card.label}</p>
+              <p className="mt-1.5 text-xl font-bold leading-tight text-primary-dark">{card.value}</p>
+              <p className="mt-1 text-[11px] text-primary-light">{card.detail}</p>
             </div>
-            <span className="rounded-lg bg-primary/10 p-2 text-primary" aria-hidden="true">
-              <card.icon className="size-5" />
+            <span className="rounded-md bg-primary/10 p-1.5 text-primary" aria-hidden="true">
+              <card.icon className="size-4" />
             </span>
           </div>
         </article>

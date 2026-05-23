@@ -8,22 +8,22 @@ type TopClientsCardProps = {
 
 export function TopClientsCard({ clients, currency }: TopClientsCardProps) {
   return (
-    <section className="rounded-xl border border-neutral-dark bg-neutral-light p-4 shadow-sm">
-      <h2 className="text-lg font-semibold text-primary-dark">Clientes principales</h2>
-      <p className="text-sm text-primary-light">Clientes con mayor actividad realizada en el periodo.</p>
-      <div className="mt-4 space-y-3">
+    <section className="rounded-lg border border-neutral-dark bg-neutral-light p-3 shadow-sm">
+      <h2 className="text-base font-semibold text-primary-dark">Clientes principales</h2>
+      <p className="text-xs text-primary-light">Clientes con mayor actividad realizada en el periodo.</p>
+      <div className="mt-3 space-y-2.5">
         {clients.length === 0 ? (
-          <p className="text-sm text-primary-light">No hay clientes con actividad completada.</p>
+          <p className="text-xs text-primary-light">No hay clientes con actividad completada.</p>
         ) : clients.map((client) => {
           const displayName = client.clientName ?? "Cliente sin nombre";
           return (
-            <div key={client.clientId} className="rounded-lg border border-neutral-dark bg-white p-3">
+            <div key={client.clientId} className="rounded-md border border-neutral-dark bg-white p-2.5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-primary-dark">{displayName}</p>
+                  <p className="text-xs font-semibold text-primary-dark">{displayName}</p>
                   <p className="text-xs text-primary-light">{formatInteger(client.visitsCount)} visitas</p>
                 </div>
-                <p className="text-sm font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
+                <p className="text-xs font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
               </div>
             </div>
           );
