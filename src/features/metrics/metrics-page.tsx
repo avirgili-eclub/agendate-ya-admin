@@ -20,10 +20,7 @@ import {
 import { TopClientsCard } from "@/features/metrics/components/top-clients-card";
 import { TopResourcesCard } from "@/features/metrics/components/top-resources-card";
 import { TopServicesCard } from "@/features/metrics/components/top-services-card";
-import {
-  DEFAULT_METRICS_GRANULARITY,
-  getMetricsCurrency,
-} from "@/features/metrics/metrics-formatters";
+import { getMetricsCurrency } from "@/features/metrics/metrics-formatters";
 import type { MetricsFilters as MetricsFiltersValue, ProfessionalMetricsData, TenantMetricsData } from "@/features/metrics/metrics-types";
 import {
   isMetricsFeatureNotAvailableError,
@@ -43,13 +40,12 @@ function toDateInputValue(date: Date) {
 
 function getDefaultFilters(): MetricsFiltersValue {
   const to = new Date();
-  const from = new Date(to);
-  from.setDate(to.getDate() - 29);
+  const from = new Date(to.getFullYear(), to.getMonth(), 1);
 
   return {
     from: toDateInputValue(from),
     to: toDateInputValue(to),
-    granularity: DEFAULT_METRICS_GRANULARITY,
+    granularity: "week",
     locationIds: [],
   };
 }
@@ -117,7 +113,8 @@ export function MetricsPage() {
   const role = session.user?.role;
   const isProfessional = isProfessionalRole(role);
   const showTenantMetrics = isAdminMetricsRole(role);
-  const [filters, setFilters] = useState<MetricsFiltersValue>(() => getDefaultFilters());
+  const [defaultFilters] = useState<MetricsFiltersValue>(() => getDefaultFilters());
+  const [filters, setFilters] = useState<MetricsFiltersValue>(() => defaultFilters);
   const professionalFilters = useMemo(
     () => ({ from: filters.from, to: filters.to, granularity: filters.granularity }),
     [filters.from, filters.to, filters.granularity],
@@ -162,6 +159,7 @@ export function MetricsPage() {
     <div className="space-y-4">
       <MetricsFilters
         filters={filters}
+        defaultFilters={defaultFilters}
         showLocationFilter={showTenantMetrics}
         onApply={(nextFilters) => {
           setFilters(isProfessional ? { ...nextFilters, locationIds: [] } : nextFilters);
