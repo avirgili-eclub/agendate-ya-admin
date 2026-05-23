@@ -47,8 +47,16 @@ export function RevenueBookingsChart({ series, granularity, currency }: RevenueB
             <YAxis yAxisId="revenue" tickFormatter={(value) => formatCurrency(Number(value), currency)} width={88} tick={{ fontSize: 12 }} />
             <YAxis yAxisId="count" orientation="right" tickFormatter={(value) => formatInteger(Number(value))} width={40} tick={{ fontSize: 12 }} />
             <Tooltip
-              formatter={(value, name) => {
-                if (name === "revenueCompleted") {
+              formatter={(value, _name, payloadEntry) => {
+                const dataKey =
+                  typeof payloadEntry === "object" &&
+                  payloadEntry !== null &&
+                  "dataKey" in payloadEntry &&
+                  typeof payloadEntry.dataKey === "string"
+                    ? payloadEntry.dataKey
+                    : "";
+
+                if (dataKey === "revenueCompleted") {
                   return [formatCurrency(Number(value), currency), "Ingresos realizados"];
                 }
                 return [formatInteger(Number(value)), "Reservas completadas"];
