@@ -42,5 +42,5 @@ export type TenantCapabilities = {
 };
 
 export function canUseMetricsDashboard(capabilities?: TenantCapabilities | null): boolean {
-  return capabilities?.features?.METRICS_DASHBOARD?.enabled === true;
+  return capabilities?.features?.metricsDashboard?.enabled === true;
 }
