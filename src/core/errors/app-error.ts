@@ -8,6 +8,7 @@ export type AppErrorCode =
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
   | "SUBSCRIPTION_LIMIT"
+  | "FEATURE_NOT_AVAILABLE"
   | "PAYMENT_REQUIRED"
   | "SLOTS_REQUIRED_FOR_FIXED_PLAN"
   | "SLOTS_NOT_ALLOWED_FOR_FLEXIBLE_PLAN"
@@ -109,6 +110,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("SUBSCRIPTION_LIMIT")) {
     return "SUBSCRIPTION_LIMIT";
+  }
+  if (normalized.includes("FEATURE_NOT_AVAILABLE")) {
+    return "FEATURE_NOT_AVAILABLE";
   }
   if (normalized.includes("RESOURCE_NOT_ASSIGNED")) {
     return "RESOURCE_NOT_ASSIGNED";
