@@ -57,13 +57,15 @@ export type MetricsTotals = {
 
 export type TopServiceMetric = {
   serviceId: string;
+  serviceName: string | null;
   bookingsCount: number;
   revenueCompleted: number;
 };
 
 export type TopResourceMetric = {
   resourceId: string;
-  resourceType: "PROFESSIONAL" | "ROOM" | "EQUIPMENT" | "TABLE" | (string & {});
+  name: string | null;
+  resourceType: "PROFESSIONAL" | "ROOM" | "EQUIPMENT" | "TABLE" | (string & {}) | null;
   bookingsCount: number;
   completedCount: number;
   revenueCompleted: number;
@@ -72,6 +74,7 @@ export type TopResourceMetric = {
 
 export type TopClientMetric = {
   clientId: string;
+  clientName: string | null;
   visitsCount: number;
   revenue: number;
 };

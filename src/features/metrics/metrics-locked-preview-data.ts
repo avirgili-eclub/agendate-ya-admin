@@ -87,13 +87,14 @@ export const LOCKED_METRICS_PREVIEW_DATA: TenantMetricsData = {
     daysWithNullCapacity: 0,
   },
   topServices: [
-    { serviceId: "preview-service-1", bookingsCount: 42, revenueCompleted: 1680000 },
-    { serviceId: "preview-service-2", bookingsCount: 28, revenueCompleted: 980000 },
-    { serviceId: "preview-service-3", bookingsCount: 16, revenueCompleted: 540000 },
+    { serviceId: "preview-service-1", serviceName: "Corte 30 min", bookingsCount: 42, revenueCompleted: 1680000 },
+    { serviceId: "preview-service-2", serviceName: "Barba completa", bookingsCount: 28, revenueCompleted: 980000 },
+    { serviceId: "preview-service-3", serviceName: "Color y tratamiento", bookingsCount: 16, revenueCompleted: 540000 },
   ],
   topResources: [
     {
       resourceId: "preview-resource-1",
+      name: "Juan López",
       resourceType: "PROFESSIONAL",
       bookingsCount: 38,
       completedCount: 33,
@@ -102,6 +103,7 @@ export const LOCKED_METRICS_PREVIEW_DATA: TenantMetricsData = {
     },
     {
       resourceId: "preview-resource-2",
+      name: "María García",
       resourceType: "PROFESSIONAL",
       bookingsCount: 31,
       completedCount: 27,
@@ -110,8 +112,8 @@ export const LOCKED_METRICS_PREVIEW_DATA: TenantMetricsData = {
     },
   ],
   topClients: [
-    { clientId: "preview-client-1", visitsCount: 8, revenue: 320000 },
-    { clientId: "preview-client-2", visitsCount: 6, revenue: 260000 },
+    { clientId: "preview-client-1", clientName: "Ana Martínez", visitsCount: 8, revenue: 320000 },
+    { clientId: "preview-client-2", clientName: "Carlos Duarte", visitsCount: 6, revenue: 260000 },
   ],
   meta: {
     from: "2026-05-18",

@@ -26,15 +26,19 @@ export function TopResourcesCard({ resources, currency }: TopResourcesCardProps)
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-dark">
-              {resources.map((resource) => (
-                <tr key={resource.resourceId} className="text-primary-dark">
-                  <td className="py-3 pr-4 font-medium">Recurso {resource.resourceId}</td>
-                  <td className="px-4 py-3 text-primary-light">{resource.resourceType}</td>
-                  <td className="px-4 py-3">{formatInteger(resource.bookingsCount)}</td>
-                  <td className="px-4 py-3">{formatPercentage(resource.occupancyRate)}</td>
-                  <td className="py-3 pl-4 text-right font-semibold text-primary">{formatCurrency(resource.revenueCompleted, currency)}</td>
-                </tr>
-              ))}
+              {resources.map((resource) => {
+                const displayName = resource.name ?? "Sin nombre";
+                const displayType = resource.resourceType ?? "-";
+                return (
+                  <tr key={resource.resourceId} className="text-primary-dark">
+                    <td className="py-3 pr-4 font-medium">{displayName}</td>
+                    <td className="px-4 py-3 text-primary-light">{displayType}</td>
+                    <td className="px-4 py-3">{formatInteger(resource.bookingsCount)}</td>
+                    <td className="px-4 py-3">{formatPercentage(resource.occupancyRate)}</td>
+                    <td className="py-3 pl-4 text-right font-semibold text-primary">{formatCurrency(resource.revenueCompleted, currency)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

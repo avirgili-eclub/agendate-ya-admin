@@ -14,17 +14,20 @@ export function TopClientsCard({ clients, currency }: TopClientsCardProps) {
       <div className="mt-4 space-y-3">
         {clients.length === 0 ? (
           <p className="text-sm text-primary-light">No hay clientes con actividad completada.</p>
-        ) : clients.map((client) => (
-          <div key={client.clientId} className="rounded-lg border border-neutral-dark bg-white p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-primary-dark">Cliente {client.clientId}</p>
-                <p className="text-xs text-primary-light">{formatInteger(client.visitsCount)} visitas</p>
+        ) : clients.map((client) => {
+          const displayName = client.clientName ?? "Cliente sin nombre";
+          return (
+            <div key={client.clientId} className="rounded-lg border border-neutral-dark bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-primary-dark">{displayName}</p>
+                  <p className="text-xs text-primary-light">{formatInteger(client.visitsCount)} visitas</p>
+                </div>
+                <p className="text-sm font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
               </div>
-              <p className="text-sm font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

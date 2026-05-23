@@ -14,17 +14,20 @@ export function TopServicesCard({ services, currency }: TopServicesCardProps) {
       <div className="mt-4 space-y-3">
         {services.length === 0 ? (
           <p className="text-sm text-primary-light">No hay servicios con reservas completadas.</p>
-        ) : services.map((service) => (
-          <div key={service.serviceId} className="rounded-lg border border-neutral-dark bg-white p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-primary-dark">Servicio {service.serviceId}</p>
-                <p className="text-xs text-primary-light">{formatInteger(service.bookingsCount)} reservas</p>
+        ) : services.map((service) => {
+          const displayName = service.serviceName ?? "Servicio sin nombre";
+          return (
+            <div key={service.serviceId} className="rounded-lg border border-neutral-dark bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-primary-dark">{displayName}</p>
+                  <p className="text-xs text-primary-light">{formatInteger(service.bookingsCount)} reservas</p>
+                </div>
+                <p className="text-sm font-semibold text-primary">{formatCurrency(service.revenueCompleted, currency)}</p>
               </div>
-              <p className="text-sm font-semibold text-primary">{formatCurrency(service.revenueCompleted, currency)}</p>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
