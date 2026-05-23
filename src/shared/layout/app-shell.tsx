@@ -13,7 +13,7 @@ import {
 } from "@/features/calendar/google-calendar-alert";
 import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { useCurrentProfessionalResource } from "@/features/resources/use-current-professional-resource";
-import type { TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
+import { canUseMetricsDashboard, type TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
 import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
@@ -43,6 +43,7 @@ export function AppShell() {
   });
   const navItems = getNavItemsForRole(session.user?.role, {
     showMemberships: shouldShowMembershipsNav(tenantCapabilitiesQuery.data),
+    showMetrics: canUseMetricsDashboard(tenantCapabilitiesQuery.data),
   });
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);

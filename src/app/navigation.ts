@@ -5,6 +5,7 @@ import {
   ClipboardList,
   LayoutDashboard,
   MapPin,
+  BarChart3,
   Settings,
   ShieldCheck,
   User,
@@ -24,6 +25,7 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard, description: "Panel de control" },
   { label: "Agenda", to: "/agenda", icon: CalendarDays, description: "Turnos y calendario" },
   { label: "Turnos", to: "/turnos", icon: ClipboardList, description: "Gestion de reservas" },
+  { label: "Metricas", to: "/metricas", icon: BarChart3, description: "Ingresos realizados y ocupacion" },
   { label: "Clientes", to: "/clientes", icon: Users, description: "Directorio de clientes" },
   { label: "Membresias", to: "/membresias", icon: BadgeCheck, description: "Planes y clientes suscriptos" },
   { label: "Locales", to: "/locales", icon: MapPin, description: "Sucursales y sedes" },
@@ -40,15 +42,20 @@ const PROFESSIONAL_ONLY_ROUTES = new Set(["/perfil"]);
 
 type GetNavItemsOptions = {
   showMemberships?: boolean;
+  showMetrics?: boolean;
 };
 
 export function getNavItemsForRole(role?: string, options: GetNavItemsOptions = {}) {
   const normalizedRole = role?.toUpperCase() ?? "";
   const showMemberships = options.showMemberships ?? true;
+  const showMetrics = options.showMetrics ?? false;
 
   if (normalizedRole === "PROFESSIONAL") {
     return APP_NAV_ITEMS.filter((item) => {
       if (!showMemberships && item.to === "/membresias") {
+        return false;
+      }
+      if (!showMetrics && item.to === "/metricas") {
         return false;
       }
       return !PROFESSIONAL_HIDDEN_ROUTES.has(item.to);
@@ -57,6 +64,9 @@ export function getNavItemsForRole(role?: string, options: GetNavItemsOptions = 
 
   return APP_NAV_ITEMS.filter((item) => {
     if (!showMemberships && item.to === "/membresias") {
+      return false;
+    }
+    if (!showMetrics && item.to === "/metricas") {
       return false;
     }
     return !PROFESSIONAL_ONLY_ROUTES.has(item.to);
@@ -77,6 +87,7 @@ export const PAGE_META: Record<string, BasePageMeta> = {
   "/dashboard": { title: "Dashboard", subtitle: "Vista general operativa del negocio." },
   "/agenda": { title: "Agenda", subtitle: "Gestion semanal de turnos y disponibilidad." },
   "/turnos": { title: "Turnos", subtitle: "Gestion completa de reservas y turnos del negocio" },
+  "/metricas": { title: "Metricas", subtitle: "Analiza ingresos realizados, reservas y ocupacion." },
   "/clientes": { title: "Clientes", subtitle: "Gestiona tu base de clientes, historial de turnos y comunicaciones." },
   "/membresias": { title: "Membresias", subtitle: "Planes, suscripciones de clientes y cupos recurrentes." },
   "/locales": { title: "Locales", subtitle: "Administracion de sedes y sucursales." },
