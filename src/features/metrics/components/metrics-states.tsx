@@ -1,0 +1,123 @@
+import { AlertTriangle, CalendarX2, Lock, UserRoundCheck } from "lucide-react";
+
+import { EmptyState } from "@/shared/ui/empty-state";
+import { ErrorState } from "@/shared/ui/error-state";
+import { LoadingState, SkeletonCards } from "@/shared/ui/loading-state";
+import { PageCard } from "@/shared/ui/page-card";
+
+type MetricsErrorStateProps = {
+  onRetry?: () => void;
+};
+
+export function MetricsAccessLoadingState() {
+  return <LoadingState message="Validando acceso a métricas..." />;
+}
+
+export function MetricsLoadingState() {
+  return (
+    <div className="space-y-3" aria-label="Cargando métricas">
+      <SkeletonCards count={6} />
+    </div>
+  );
+}
+
+export function LockedMetricsState() {
+  return (
+    <PageCard>
+      <div className="flex flex-col gap-4 py-8 sm:flex-row sm:items-start">
+        <span className="inline-flex size-11 items-center justify-center rounded-lg bg-amber-100 text-amber-700" aria-hidden="true">
+          <Lock className="size-5" />
+        </span>
+        <div className="flex-1">
+          <h2 className="text-xl font-semibold text-primary-dark">Métricas avanzadas no disponibles</h2>
+          <p className="mt-2 text-sm text-primary-light">
+            Tu plan todavía no tiene habilitado el módulo de métricas. Activá la suscripción para analizar ingresos realizados,
+            ocupación y rendimiento por filtros.
+          </p>
+          <a
+            href="/configuracion?tab=subscription"
+            className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-3.5 text-sm font-medium text-white transition-colors hover:bg-primary-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
+          >
+            Ver suscripción
+          </a>
+        </div>
+      </div>
+    </PageCard>
+  );
+}
+
+export function MetricsEmptyState() {
+  return (
+    <EmptyState
+      icon={CalendarX2}
+      title="Sin métricas relevantes"
+      description="No encontramos actividad completada, ingresos realizados u otros indicadores relevantes para los filtros seleccionados."
+    />
+  );
+}
+
+export function MetricsGenericErrorState({ onRetry }: MetricsErrorStateProps) {
+  return (
+    <ErrorState
+      title="No pudimos cargar las métricas"
+      message="Revisá los filtros o intentá de nuevo. Si el problema continúa, puede haber una respuesta inesperada del servicio de métricas."
+      onRetry={onRetry}
+    />
+  );
+}
+
+export function MetricsCapabilityErrorState({ onRetry }: MetricsErrorStateProps) {
+  return (
+    <ErrorState
+      title="No pudimos validar el acceso"
+      message="No fue posible confirmar si el módulo de métricas está disponible para tu cuenta."
+      onRetry={onRetry}
+    />
+  );
+}
+
+export function UnsupportedMetricsRoleState() {
+  return <ErrorState title="Rol no soportado" message="Tu rol no tiene una vista de métricas disponible." />;
+}
+
+export function ResourceNotAssignedState() {
+  return (
+    <PageCard>
+      <div className="flex flex-col gap-4 py-8 sm:flex-row sm:items-start">
+        <span className="inline-flex size-11 items-center justify-center rounded-lg bg-blue-100 text-blue-700" aria-hidden="true">
+          <UserRoundCheck className="size-5" />
+        </span>
+        <div>
+          <h2 className="text-xl font-semibold text-primary-dark">Necesitás un recurso asignado</h2>
+          <p className="mt-2 text-sm text-primary-light">
+            Tu usuario profesional todavía no está vinculado a un recurso de agenda. Pedile a un administrador que te asigne
+            como recurso para ver tus métricas personales.
+          </p>
+        </div>
+      </div>
+    </PageCard>
+  );
+}
+
+export function OccupancyUnknownCallout({ unknownDays }: { unknownDays: number }) {
+  return (
+    <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-900" role="status">
+      <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+      <div>
+        <p className="text-sm font-semibold">Ocupación parcialmente no disponible</p>
+        <p className="mt-1 text-sm">
+          Hay {unknownDays} {unknownDays === 1 ? "día" : "días"} sin capacidad configurada. Esos buckets se muestran como
+          no disponibles y no se convierten a 0%.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function LiveTodayBadge() {
+  return (
+    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+      Hoy en vivo
+    </span>
+  );
+}
