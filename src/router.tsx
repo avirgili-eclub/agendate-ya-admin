@@ -5,6 +5,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 
 import { getSessionState, isAuthenticated } from "@/core/auth/session-store";
 import { AppShell } from "@/shared/layout/app-shell";
@@ -48,6 +49,18 @@ function NotFoundPage() {
       <h1 className="text-2xl font-semibold text-primary">404</h1>
       <p className="mt-2 text-sm text-primary-light">Route not found.</p>
     </section>
+  );
+}
+
+const MetricsPage = lazy(() =>
+  import("@/features/metrics/metrics-page").then((module) => ({ default: module.MetricsPage })),
+);
+
+function MetricsRoutePage() {
+  return (
+    <Suspense fallback={null}>
+      <MetricsPage />
+    </Suspense>
   );
 }
 
@@ -193,6 +206,12 @@ const membershipsRoute = createRoute({
   component: MembershipsPage,
 });
 
+const metricsRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/metricas",
+  component: MetricsRoutePage,
+});
+
 const locationsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/locales",
@@ -285,6 +304,7 @@ const routeTree = rootRoute.addChildren([
     bookingsRoute,
     clientsRoute,
     membershipsRoute,
+    metricsRoute,
     locationsRoute,
     resourcesRoute,
     legacyResourcesRoute,
