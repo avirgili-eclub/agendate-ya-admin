@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { fetchLocations } from "@/features/locations/locations-service";
@@ -20,10 +21,11 @@ const GRANULARITIES: Array<{ value: MetricsGranularity; label: string }> = [
 type MetricsFiltersProps = {
   filters: MetricsFilters;
   showLocationFilter: boolean;
-  onChange: (filters: MetricsFilters) => void;
+  onApply: (filters: MetricsFilters) => void;
 };
 
-export function MetricsFilters({ filters, showLocationFilter, onChange }: MetricsFiltersProps) {
+export function MetricsFilters({ filters, showLocationFilter, onApply }: MetricsFiltersProps) {
+  const [draftFilters, setDraftFilters] = useState<MetricsFilters>(filters);
   const locationsQuery = useQuery({
     queryKey: ["metrics", "locations"],
     queryFn: fetchLocations,
@@ -31,18 +33,26 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
     staleTime: 5 * 60_000,
   });
 
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
   function updateFilters(patch: Partial<MetricsFilters>) {
-    onChange({ ...filters, ...patch });
+    setDraftFilters((current) => ({ ...current, ...patch }));
   }
 
   function toggleLocation(locationId: string) {
-    const selected = new Set(filters.locationIds ?? []);
+    const selected = new Set(draftFilters.locationIds ?? []);
     if (selected.has(locationId)) {
       selected.delete(locationId);
     } else {
       selected.add(locationId);
     }
     updateFilters({ locationIds: Array.from(selected) });
+  }
+
+  function applyFilters() {
+    onApply(draftFilters);
   }
 
   return (
@@ -52,7 +62,7 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
           <span>Desde</span>
           <input
             type="date"
-            value={filters.from}
+            value={draftFilters.from}
             onChange={(event) => updateFilters({ from: event.target.value })}
             className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-primary-light"
           />
@@ -62,7 +72,7 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
           <span>Hasta</span>
           <input
             type="date"
-            value={filters.to}
+            value={draftFilters.to}
             onChange={(event) => updateFilters({ to: event.target.value })}
             className="h-11 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-primary-light"
           />
@@ -71,7 +81,7 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
         <label className="space-y-1 text-sm font-medium text-primary-dark">
           <span>Agrupar por</span>
           <Select
-            value={filters.granularity ?? "day"}
+            value={draftFilters.granularity ?? "day"}
             onValueChange={(value) => updateFilters({ granularity: value as MetricsGranularity })}
           >
             <SelectTrigger>
@@ -85,14 +95,21 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
           </Select>
         </label>
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => updateFilters({ locationIds: [] })}
-          disabled={!showLocationFilter || !(filters.locationIds?.length)}
-        >
-          Limpiar locales
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {showLocationFilter && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => updateFilters({ locationIds: [] })}
+              disabled={!(draftFilters.locationIds?.length)}
+            >
+              Limpiar locales
+            </Button>
+          )}
+          <Button type="button" onClick={applyFilters}>
+            Buscar
+          </Button>
+        </div>
       </div>
 
       {showLocationFilter && (
@@ -112,7 +129,7 @@ export function MetricsFilters({ filters, showLocationFilter, onChange }: Metric
           {locationsQuery.data && locationsQuery.data.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {locationsQuery.data.map((location) => {
-                const checked = Boolean(filters.locationIds?.includes(location.id));
+                const checked = Boolean(draftFilters.locationIds?.includes(location.id));
                 return (
                   <label
                     key={location.id}

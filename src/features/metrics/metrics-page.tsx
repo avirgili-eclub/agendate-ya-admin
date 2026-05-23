@@ -163,7 +163,7 @@ export function MetricsPage() {
       <MetricsFilters
         filters={filters}
         showLocationFilter={showTenantMetrics}
-        onChange={(nextFilters) => {
+        onApply={(nextFilters) => {
           setFilters(isProfessional ? { ...nextFilters, locationIds: [] } : nextFilters);
         }}
       />
