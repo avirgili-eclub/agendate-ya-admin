@@ -45,10 +45,20 @@ type GetNavItemsOptions = {
   showMetrics?: boolean;
 };
 
+export function canViewMetricsNavForRole(role?: string) {
+  const normalizedRole = role?.toUpperCase() ?? "";
+  return (
+    normalizedRole === "TENANT_ADMIN" ||
+    normalizedRole === "LOCATION_MANAGER" ||
+    normalizedRole === "SUPER_ADMIN" ||
+    normalizedRole === "PROFESSIONAL"
+  );
+}
+
 export function getNavItemsForRole(role?: string, options: GetNavItemsOptions = {}) {
   const normalizedRole = role?.toUpperCase() ?? "";
   const showMemberships = options.showMemberships ?? true;
-  const showMetrics = options.showMetrics ?? false;
+  const showMetrics = options.showMetrics ?? canViewMetricsNavForRole(role);
 
   if (normalizedRole === "PROFESSIONAL") {
     return APP_NAV_ITEMS.filter((item) => {

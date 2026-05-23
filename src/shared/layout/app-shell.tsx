@@ -2,7 +2,7 @@ import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, MessageSquare, Search, X
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { getNavItemsForRole, getPageMeta } from "@/app/navigation";
+import { canViewMetricsNavForRole, getNavItemsForRole, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import {
@@ -13,7 +13,7 @@ import {
 } from "@/features/calendar/google-calendar-alert";
 import { canViewGoogleCalendarStatus } from "@/features/calendar/google-calendar-service";
 import { useCurrentProfessionalResource } from "@/features/resources/use-current-professional-resource";
-import { canUseMetricsDashboard, type TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
+import type { TenantCapabilities } from "@/features/tenant/tenant-capabilities-types";
 import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
@@ -43,7 +43,7 @@ export function AppShell() {
   });
   const navItems = getNavItemsForRole(session.user?.role, {
     showMemberships: shouldShowMembershipsNav(tenantCapabilitiesQuery.data),
-    showMetrics: canUseMetricsDashboard(tenantCapabilitiesQuery.data),
+    showMetrics: canViewMetricsNavForRole(session.user?.role),
   });
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
