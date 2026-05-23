@@ -41,32 +41,6 @@ export type TenantCapabilities = {
   } | null;
 };
 
-function isCapabilityEnabled(capability?: TenantFeatureCapability): boolean {
-  if (!capability) {
-    return false;
-  }
-
-  if (typeof capability.enabled === "boolean") {
-    return capability.enabled;
-  }
-
-  if (typeof capability.available === "boolean") {
-    return capability.available;
-  }
-
-  if (typeof capability.tierAllows === "boolean") {
-    return capability.tierAllows && (capability.enabledByTenant ?? true);
-  }
-
-  return false;
-}
-
 export function canUseMetricsDashboard(capabilities?: TenantCapabilities | null): boolean {
-  const feature =
-    capabilities?.features?.METRICS_DASHBOARD ??
-    capabilities?.features?.metricsDashboard ??
-    capabilities?.modules?.METRICS_DASHBOARD ??
-    capabilities?.modules?.metricsDashboard;
-
-  return isCapabilityEnabled(feature);
+  return capabilities?.features?.METRICS_DASHBOARD?.enabled === true;
 }
