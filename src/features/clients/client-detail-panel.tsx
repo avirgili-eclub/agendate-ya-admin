@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BadgeCheck, Edit, User, Phone, Mail, MessageSquare, MessageCircle } from "lucide-react";
+import { BadgeCheck, Edit, User, Phone, Mail, MessageSquare, MessageCircle, ReceiptText } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -10,6 +10,7 @@ import {
   type ClientItem,
 } from "@/features/clients/clients-service";
 import { fetchTenantInfo } from "@/features/tenant/tenant-service";
+import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { Button } from "@/shared/ui/button";
 import { ClientChatHistory } from "@/features/clients/client-chat-history";
@@ -52,6 +53,7 @@ export function ClientDetailPanel({
     enabled: isOpen,
     staleTime: 60_000,
   });
+  const capabilitiesQuery = useTenantCapabilitiesQuery();
 
   const clientError = error as unknown as AppError | undefined;
   const isSilentNotFound = isProfessional && clientError?.status === 404;
@@ -76,9 +78,25 @@ export function ClientDetailPanel({
   const completedAndConfirmedTotal = completedCount + confirmedCount;
   const missedRatePct = client?.bookingSummary?.missedRatePct ?? null;
   const tenantName = tenantInfo?.name ?? "AgendateYA";
+  const subscriptions = capabilitiesQuery.data?.modes.subscriptions;
+  const membershipsEnabled = subscriptions?.enabled ?? false;
+  const hasBillingData = Boolean(
+    client?.documentType ||
+      client?.documento ||
+      client?.dv ||
+      client?.ruc ||
+      client?.razonSocial ||
+      client?.billingEmail,
+  );
   const whatsappUrl = client
     ? createClientWhatsappUrl(client.fullName, client.phone, tenantName)
     : null;
+
+  useEffect(() => {
+    if (!membershipsEnabled && activeTab === "membership") {
+      setActiveTab("data");
+    }
+  }, [membershipsEnabled, activeTab]);
 
   return (
     <SidePanel isOpen={isOpen} onClose={onClose} title="Detalle del Cliente">
@@ -107,17 +125,19 @@ export function ClientDetailPanel({
               <User className="mr-2 inline-block size-4" />
               Datos
             </button>
-            <button
-              onClick={() => setActiveTab("membership")}
-              className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === "membership"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-primary-light hover:text-primary"
-              }`}
-            >
-              <BadgeCheck className="mr-2 inline-block size-4" />
-              Membresia
-            </button>
+            {membershipsEnabled ? (
+              <button
+                onClick={() => setActiveTab("membership")}
+                className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "membership"
+                    ? "border-primary text-primary"
+                    : "border-transparent text-primary-light hover:text-primary"
+                }`}
+              >
+                <BadgeCheck className="mr-2 inline-block size-4" />
+                Membresia
+              </button>
+            ) : null}
             <button
               onClick={() => setActiveTab("chat")}
               className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
@@ -127,7 +147,7 @@ export function ClientDetailPanel({
               }`}
             >
               <MessageSquare className="mr-2 inline-block size-4" />
-              Chat histórico
+              Chat
             </button>
           </div>
 
@@ -255,6 +275,66 @@ export function ClientDetailPanel({
                 </div>
               </section>
 
+
+              {/* Billing Info */}
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-primary">Datos de Facturacion</h3>
+                  {hasBillingData ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      Completo o parcial
+                    </span>
+                  ) : null}
+                </div>
+                <div className="rounded-lg bg-neutral p-4">
+                  {hasBillingData ? (
+                    <div className="grid grid-cols-1 gap-3 text-sm text-primary sm:grid-cols-2">
+                      {client.documentType ? (
+                        <div>
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">Tipo</label>
+                          <p className="mt-1">{client.documentType}</p>
+                        </div>
+                      ) : null}
+                      {client.documento ? (
+                        <div>
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">Documento</label>
+                          <p className="mt-1">{client.documento}</p>
+                        </div>
+                      ) : null}
+                      {client.dv ? (
+                        <div>
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">DV</label>
+                          <p className="mt-1">{client.dv}</p>
+                        </div>
+                      ) : null}
+                      {client.ruc ? (
+                        <div>
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">RUC</label>
+                          <p className="mt-1">{client.ruc}</p>
+                        </div>
+                      ) : null}
+                      {client.razonSocial ? (
+                        <div className="sm:col-span-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">Razon social</label>
+                          <p className="mt-1">{client.razonSocial}</p>
+                        </div>
+                      ) : null}
+                      {client.billingEmail ? (
+                        <div className="sm:col-span-2">
+                          <label className="text-xs font-medium uppercase tracking-wide text-primary-light">Email de facturacion</label>
+                          <p className="mt-1">{client.billingEmail}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-3 text-sm text-primary-light">
+                      <ReceiptText className="mt-0.5 size-4 shrink-0" />
+                      <p>Sin datos de facturacion cargados. Usa Editar para completar los datos opcionales del cliente.</p>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {/* Booking History */}
               <section>
                 <h3 className="mb-4 text-lg font-semibold text-primary">Historial de Turnos</h3>
@@ -268,7 +348,7 @@ export function ClientDetailPanel({
           )}
 
           {/* Membership Tab */}
-          {activeTab === "membership" && (
+          {membershipsEnabled && activeTab === "membership" && (
             <ClientMembershipSummary
               client={client}
               isActive={isOpen && activeTab === "membership"}

@@ -51,6 +51,7 @@ export type MembershipUpcomingClass = {
   endTime?: string;
   status?: string;
   consumesQuota?: boolean;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY";
 };
 
 export type ClientSubscription = {
@@ -65,8 +66,12 @@ export type ClientSubscription = {
   locationId?: string;
   status: MembershipStatus;
   billingStatus?: MembershipBillingStatus;
-  classesPerPeriod: number | null;
-  classesUsed: number;
+  totalIncluded: number | null;
+  scheduled: number;
+  consumed: number;
+  available: number | null;
+  overAllocated: number;
+  isUnlimited: boolean;
   currentPeriodStart?: string;
   currentPeriodEnd?: string;
   startsAt?: string;

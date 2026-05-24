@@ -1,28 +1,18 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays, Search } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PhoneInput } from "react-international-phone";
-import { isValidPhoneNumber } from "libphonenumber-js";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
-import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useBookingsQuery } from "@/features/bookings/use-bookings-query";
 import {
-  createBooking,
-  fetchBookingServicesByResource,
   deleteBooking,
   getStatusLabel,
   getStatusTone,
   getSourceChannelLabel,
   getBookingErrorMessage,
   type BookingListItem,
-  type CreateBookingInput,
   type SourceChannel,
 } from "@/features/bookings/bookings-service";
-import {
-  fetchLocations,
-  fetchLocationResources,
-} from "@/features/agenda/agenda-service";
 import { Button } from "@/shared/ui/button";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
@@ -31,11 +21,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { DataTable, DataTableSortButton, type DataTableColumn } from "@/shared/ui/data-table";
+import { BookingCreateForm } from "@/features/bookings/components/booking-create-form";
 import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 
 function formatDateTime(isoString: string): string {
@@ -148,299 +138,6 @@ function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps)
   );
 }
 
-type CreateBookingFormProps = {
-  onClose: () => void;
-  onSuccess: () => void;
-};
-
-function CreateBookingForm({ onClose, onSuccess }: CreateBookingFormProps) {
-  const queryClient = useQueryClient();
-
-  const [locationId, setLocationId] = useState("");
-  const [resourceId, setResourceId] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("+595");
-  const [clientEmail, setClientEmail] = useState("");
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [notes, setNotes] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  const locationsQuery = useQuery({
-    queryKey: ["locations"],
-    queryFn: fetchLocations,
-    staleTime: 60_000,
-  });
-
-  const resourcesQuery = useQuery({
-    queryKey: ["location-resources", locationId],
-    queryFn: () => fetchLocationResources(locationId),
-    enabled: !!locationId,
-    staleTime: 60_000,
-  });
-
-  const servicesQuery = useQuery({
-    queryKey: ["bookings", "services-by-resource", resourceId],
-    queryFn: () => fetchBookingServicesByResource(resourceId),
-    enabled: !!resourceId,
-    staleTime: 60_000,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (input: CreateBookingInput) => createBooking(input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      onSuccess();
-      onClose();
-    },
-    onError: (error: AppError) => {
-      // Use shared extractFieldErrors utility for DRY field error mapping
-      setFieldErrors(extractFieldErrors(error));
-      setFormError(getBookingErrorMessage(error));
-    },
-  });
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-    setFieldErrors({});
-
-    const validationErrors: Record<string, string> = {};
-    if (!locationId) {
-      validationErrors.locationId = "Debes seleccionar un local.";
-    }
-    if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
-      validationErrors.clientPhone = "Ingresa un telefono valido.";
-    }
-
-    if (Object.keys(validationErrors).length > 0) {
-      setFieldErrors(validationErrors);
-      return;
-    }
-
-    createMutation.mutate({
-      resourceId,
-      serviceId,
-      clientName,
-      clientPhone,
-      clientEmail: clientEmail || undefined,
-      date,
-      startTime,
-      notes: notes || undefined,
-    });
-  }
-
-  const locations = locationsQuery.data?.filter((l) => l.active) ?? [];
-  const resources = resourcesQuery.data?.filter((r) => r.active) ?? [];
-  const services = servicesQuery.data?.filter((s) => s.active) ?? [];
-
-  return (
-    <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
-      {formError && (
-        <FeedbackBanner tone="error" message={formError} />
-      )}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre del cliente *</span>
-          <input
-            type="text"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="Juan Pérez"
-          />
-          {fieldErrors.clientName && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientName}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Teléfono *</span>
-          <div className={`register-phone-wrapper ${fieldErrors.clientPhone ? "!border-red-500" : ""}`}>
-            <PhoneInput
-              defaultCountry="py"
-              preferredCountries={["py", "ar", "br", "cl", "uy"]}
-              disableDialCodeAndPrefix
-              showDisabledDialCodeAndPrefix
-              defaultMask="(...) ... - ..."
-              placeholder="(981) 123 - 456"
-              value={clientPhone}
-              onChange={(phone) => setClientPhone(phone)}
-              className="register-phone-root"
-              inputClassName="register-phone-input"
-              inputProps={{
-                name: "clientPhone",
-                autoComplete: "tel",
-              }}
-              countrySelectorStyleProps={{
-                buttonClassName: "register-phone-country-button",
-                flagClassName: "register-phone-flag",
-                dropdownArrowClassName: "register-phone-country-arrow",
-                dropdownStyleProps: {
-                  className: "register-phone-country-dropdown",
-                  listItemClassName: "register-phone-country-item",
-                  listItemSelectedClassName: "register-phone-country-item-selected",
-                  listItemFocusedClassName: "register-phone-country-item-focused",
-                },
-              }}
-            />
-          </div>
-          {fieldErrors.clientPhone && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Email (opcional)</span>
-        <input
-          type="email"
-          value={clientEmail}
-          onChange={(e) => setClientEmail(e.target.value)}
-          className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="cliente@ejemplo.com"
-        />
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Local *</span>
-          <Select value={locationId} onValueChange={(value) => {
-            setLocationId(value);
-            setResourceId(""); // Reset resource when location changes
-            setServiceId(""); // Reset service when location changes
-          }}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccionar local" />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((location) => (
-                <SelectItem key={location.id} value={location.id}>
-                  {location.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {fieldErrors.locationId && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.locationId}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
-          <Select value={resourceId} onValueChange={(value) => {
-            setResourceId(value);
-            setServiceId(""); // Reset service when resource changes
-          }} disabled={!locationId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccionar recurso" />
-            </SelectTrigger>
-            <SelectContent>
-              {resources.map((resource) => (
-                <SelectItem key={resource.id} value={resource.id}>
-                  {resource.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {fieldErrors.resourceId && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.resourceId}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Servicio *</span>
-        <Select value={serviceId} onValueChange={setServiceId} disabled={!resourceId || servicesQuery.isLoading}>
-          <SelectTrigger>
-            <SelectValue
-              placeholder={
-                !resourceId
-                  ? "Seleccionar recurso primero"
-                  : servicesQuery.isLoading
-                    ? "Cargando servicios..."
-                    : services.length === 0
-                      ? "Sin servicios asignados"
-                      : "Seleccionar servicio"
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {services.map((service) => (
-              <SelectItem key={service.id} value={service.id}>
-                {service.name} ({service.durationMinutes} min)
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {fieldErrors.serviceId && (
-          <span className="mt-1 block text-xs text-red-700">{fieldErrors.serviceId}</span>
-        )}
-        {!fieldErrors.serviceId && resourceId && servicesQuery.isError && (
-          <span className="mt-1 block text-xs text-red-700">
-            No pudimos cargar los servicios del recurso seleccionado.
-          </span>
-        )}
-        {!fieldErrors.serviceId && resourceId && !servicesQuery.isLoading && !servicesQuery.isError && services.length === 0 && (
-          <span className="mt-1 block text-xs text-primary-light">
-            Este recurso no tiene servicios asignados.
-          </span>
-        )}
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Fecha *</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          />
-          {fieldErrors.date && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.date}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Hora de inicio *</span>
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          />
-          {fieldErrors.startTime && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.startTime}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Notas (opcional)</span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-neutral-dark px-3 py-2 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="Información adicional sobre el turno"
-        />
-      </label>
-
-      <div className="flex justify-end gap-3 border-t border-neutral-dark pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Guardando..." : "Crear turno"}
-        </Button>
-      </div>
-    </form>
-  );
-}
 
 export function BookingsPage() {
   const [page, setPage] = useState(0);
@@ -794,9 +491,9 @@ export function BookingsPage() {
         onClose={() => setShowCreateForm(false)}
         title="Nuevo Turno"
       >
-        <CreateBookingForm
+        <BookingCreateForm
           onClose={() => setShowCreateForm(false)}
-          onSuccess={() => {
+          onCreated={() => {
             showFeedback("success", "Turno creado correctamente.");
           }}
         />

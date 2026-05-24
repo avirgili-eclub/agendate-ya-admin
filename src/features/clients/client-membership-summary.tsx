@@ -13,6 +13,12 @@ import type {
   MembershipBillingStatus,
   MembershipStatus,
 } from "@/features/memberships/membership-types";
+import {
+  getQuotaHelperLabel,
+  getQuotaUsageLabel,
+  getQuotaUsagePercent,
+  SubscriptionQuotaSummary,
+} from "@/features/memberships/subscription-quota";
 import { useClientSubscriptionsQuery } from "@/features/memberships/use-memberships-query";
 import { Button } from "@/shared/ui/button";
 import { FeedbackBanner } from "@/shared/ui/feedback-banner";
@@ -59,22 +65,6 @@ function getBillingTone(status?: MembershipBillingStatus) {
   if (status === "OVERDUE") return "danger";
   if (status === "PENDING_PAYMENT") return "warning";
   return "neutral";
-}
-
-function getUsageLabel(subscription: ClientSubscription) {
-  if (subscription.classesPerPeriod == null) {
-    return `${subscription.classesUsed} usadas / ilimitado`;
-  }
-
-  return `${subscription.classesUsed} de ${subscription.classesPerPeriod}`;
-}
-
-function getUsagePercent(subscription: ClientSubscription) {
-  if (!subscription.classesPerPeriod || subscription.classesPerPeriod <= 0) {
-    return null;
-  }
-
-  return Math.min(100, Math.round((subscription.classesUsed / subscription.classesPerPeriod) * 100));
 }
 
 function getSlotLabel(slot: ClientSubscription["recurringSlots"][number]) {
@@ -158,7 +148,7 @@ export function ClientMembershipSummary({
     );
   }
 
-  const usagePercent = getUsagePercent(primarySubscription);
+  const usagePercent = getQuotaUsagePercent(primarySubscription);
   const upcomingClasses = primarySubscription.upcomingClasses.slice(0, 3);
   const recurringSlots = primarySubscription.recurringSlots;
   const isActiveSubscription = primarySubscription.status === "ACTIVE";
@@ -190,6 +180,10 @@ export function ClientMembershipSummary({
                   : "Sin pago"
               }
             />
+            {primarySubscription.isUnlimited ? <StatusChip tone="neutral" label="Plan ilimitado" /> : null}
+            {primarySubscription.overAllocated > 0 ? (
+              <StatusChip tone="danger" label={`Sobre-asignada +${primarySubscription.overAllocated}`} />
+            ) : null}
           </div>
         </div>
 
@@ -205,9 +199,18 @@ export function ClientMembershipSummary({
 
       <section className="grid gap-3 sm:grid-cols-2">
         <MetricBox
-          label="Uso del periodo"
-          value={getUsageLabel(primarySubscription)}
-          helper={primarySubscription.classesPerPeriod == null ? "sin limite mensual" : `${usagePercent ?? 0}% usado`}
+          label="Cupo del periodo"
+          value={<SubscriptionQuotaSummary subscription={primarySubscription} />}
+          helper={
+            primarySubscription.isUnlimited
+              ? "sin limite mensual"
+              : `${usagePercent ?? 0}% ocupado por reservas y clases tomadas`
+          }
+        />
+        <MetricBox
+          label="Disponible"
+          value={primarySubscription.isUnlimited ? "Ilimitado" : primarySubscription.available ?? 0}
+          helper={getQuotaHelperLabel(primarySubscription)}
         />
         {scheduleModeLabel ? (
           <MetricBox
@@ -290,7 +293,7 @@ export function ClientMembershipSummary({
                 <div>
                   <p className="text-sm font-semibold text-primary">{subscription.planName}</p>
                   <p className="mt-1 text-xs text-primary-light">
-                    {formatDate(subscription.startsAt ?? subscription.currentPeriodStart)} - {getUsageLabel(subscription)}
+                    {formatDate(subscription.startsAt ?? subscription.currentPeriodStart)} - {getQuotaUsageLabel(subscription)}
                   </p>
                 </div>
                 <StatusChip tone={getStatusTone(subscription.status)} label={MEMBERSHIP_STATUS_LABELS[subscription.status]} />

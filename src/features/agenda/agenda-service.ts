@@ -4,6 +4,8 @@ import { toAppError, type AppError } from "@/core/errors/app-error";
 
 export type BookingStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
 
+export type BookingKind = "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY";
+
 export type BookingCardItem = {
   id: string;
   resourceId: string;
@@ -18,6 +20,9 @@ export type BookingCardItem = {
   status: BookingStatus;
   sourceChannel: "WEB" | "WHATSAPP" | "API" | "MCP" | "ADMIN";
   notes?: string;
+  subscriptionId?: string;
+  consumesQuota?: boolean;
+  bookingKind?: BookingKind;
 };
 
 export type LocationItem = {
@@ -60,6 +65,9 @@ type ApiBooking = {
   resourceId: string;
   serviceId: string;
   clientId?: string | null;
+  subscriptionId?: string | null;
+  consumesQuota?: boolean | null;
+  bookingKind?: BookingKind | null;
   locationId: string;
   startTime: string;
   endTime: string;
@@ -117,6 +125,9 @@ function mapApiBookingToCard(api: ApiBooking): BookingCardItem {
     status: api.status,
     sourceChannel: api.sourceChannel,
     notes: api.notes ?? undefined,
+    subscriptionId: api.subscriptionId ?? undefined,
+    consumesQuota: api.consumesQuota ?? undefined,
+    bookingKind: api.bookingKind ?? undefined,
   };
 }
 

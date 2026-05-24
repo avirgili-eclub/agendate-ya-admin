@@ -17,6 +17,8 @@ import type {
   MembershipScheduleMode,
   MembershipStatus,
 } from "@/features/memberships/membership-types";
+import { BookingKindBadge } from "@/features/bookings/components/booking-kind-badge";
+import { getQuotaPlanLabel } from "@/features/memberships/subscription-quota";
 import { useClientSubscriptionDetailQuery } from "@/features/memberships/use-memberships-query";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { Button } from "@/shared/ui/button";
@@ -99,14 +101,6 @@ function getSlotLabel(slot: MembershipRecurringSlot) {
   const day = DAY_NAMES[slot.dayOfWeek] ?? "Dia";
   const resource = slot.resourceName ? ` - ${slot.resourceName}` : "";
   return `${day} ${slot.startTime}${resource}`;
-}
-
-function getUsageLabel(subscription: ClientSubscription) {
-  if (subscription.classesPerPeriod == null) {
-    return `${subscription.classesUsed} usadas - ilimitado`;
-  }
-
-  return `${subscription.classesUsed} de ${subscription.classesPerPeriod}`;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -215,6 +209,13 @@ export function MembershipDetailPanel({
         />
       ) : null}
 
+      {subscription.overAllocated > 0 ? (
+        <FeedbackBanner
+          tone="warning"
+          message="Esta membresia tiene mas bookings activos que su limite. Revisa la agenda o aumenta el plan."
+        />
+      ) : null}
+
       <section className="rounded-lg border border-neutral-dark bg-neutral/40 p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -236,7 +237,20 @@ export function MembershipDetailPanel({
         <div className="rounded-lg border border-neutral-dark bg-white p-4">
           <DetailRow label="Plan" value={subscription.planName} />
           {scheduleModeLabel ? <DetailRow label="Modalidad" value={scheduleModeLabel} /> : null}
-          <DetailRow label="Uso del periodo" value={getUsageLabel(subscription)} />
+          <DetailRow label="Cupo del plan" value={getQuotaPlanLabel(subscription)} />
+          <DetailRow label="Reservadas" value={subscription.scheduled} />
+          <DetailRow label="Tomadas" value={subscription.consumed} />
+          <DetailRow label="Disponibles" value={subscription.isUnlimited ? "Ilimitado" : subscription.available ?? 0} />
+          <DetailRow
+            label="Sobre-asignacion"
+            value={
+              subscription.overAllocated > 0 ? (
+                <span className="text-red-700">{subscription.overAllocated}</span>
+              ) : (
+                subscription.overAllocated
+              )
+            }
+          />
           <DetailRow label="Inicio" value={formatDate(subscription.startsAt ?? subscription.currentPeriodStart)} />
           <DetailRow label="Fin de periodo" value={formatDate(subscription.currentPeriodEnd ?? subscription.endsAt)} />
           <DetailRow label="Renovacion manual" value={manualRenewalOverride ? "Activada" : "Desactivada"} />
@@ -300,7 +314,10 @@ export function MembershipDetailPanel({
             <div className="space-y-2">
               {upcomingClasses.map((item) => (
                 <div key={item.bookingId} className="rounded-md bg-neutral px-3 py-2">
-                  <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                    <BookingKindBadge kind={item.bookingKind} />
+                  </div>
                   <p className="mt-1 text-xs text-primary-light">
                     {[item.serviceName, item.resourceName, item.status].filter(Boolean).join(" - ")}
                   </p>

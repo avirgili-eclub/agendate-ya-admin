@@ -2,7 +2,7 @@ import { Bell, ChevronLeft, ChevronRight, LogOut, Menu, MessageSquare, Search, X
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
-import { getNavItemsForRole, getPageMeta } from "@/app/navigation";
+import { canViewMetricsNavForRole, getNavItemsForRole, getPageMeta } from "@/app/navigation";
 import { logout } from "@/core/auth/auth-service";
 import { getSessionState } from "@/core/auth/session-store";
 import {
@@ -43,6 +43,7 @@ export function AppShell() {
   });
   const navItems = getNavItemsForRole(session.user?.role, {
     showMemberships: shouldShowMembershipsNav(tenantCapabilitiesQuery.data),
+    showMetrics: canViewMetricsNavForRole(session.user?.role),
   });
   const { unreadCount } = useNotifications();
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);

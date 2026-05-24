@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 import { DAY_NAMES } from "./membership-detail-panel";
 
+const SLOT_STEP_MINUTES = 60;
+
 type OccupancyDisplaySlot = {
   dayOfWeek: number;
   startTime: string;
@@ -35,6 +37,22 @@ export function normalizeOccupancyTime(value: string) {
   return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 }
 
+function timeToMinutes(value: string): number {
+  const [hours = "0", minutes = "0"] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
+}
+
+function minutesToTime(total: number): string {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function snapToStep(value: string, stepMinutes: number): string {
+  const total = timeToMinutes(value);
+  return minutesToTime(Math.floor(total / stepMinutes) * stepMinutes);
+}
+
 export function occupancySlotKey(dayOfWeek: number, startTime: string) {
   return `${dayOfWeek}-${normalizeOccupancyTime(startTime)}`;
 }
@@ -47,45 +65,85 @@ function getCapacity(occupancyCapacity: number, resource?: ResourceCardItem) {
   return occupancyCapacity || resource?.capacity || 0;
 }
 
+function isRuleActiveOn(rule: AvailabilityRule, validOn: string): boolean {
+  if (rule.validFrom && validOn < rule.validFrom) {
+    return false;
+  }
+  if (rule.validUntil && validOn > rule.validUntil) {
+    return false;
+  }
+  return true;
+}
+
+function expandRuleToSlots(rule: AvailabilityRule, stepMinutes: number): string[] {
+  const startMinutes = timeToMinutes(normalizeOccupancyTime(rule.startTime));
+  const endMinutes = timeToMinutes(normalizeOccupancyTime(rule.endTime));
+  const snappedStart = Math.floor(startMinutes / stepMinutes) * stepMinutes;
+  const slots: string[] = [];
+
+  for (let t = snappedStart; t + stepMinutes <= endMinutes; t += stepMinutes) {
+    if (t < startMinutes) continue;
+    slots.push(minutesToTime(t));
+  }
+
+  return slots;
+}
+
 function buildDisplaySlots({
   rules,
   occupancy,
   capacity,
+  validOn,
 }: {
   rules: AvailabilityRule[];
   occupancy: MembershipOccupancySlot[];
   capacity: number;
+  validOn: string;
 }) {
-  const occupancyBySlot = new Map(occupancy.map((slot) => [occupancySlotKey(slot.dayOfWeek, slot.startTime), slot]));
   const displaySlots = new Map<string, OccupancyDisplaySlot>();
 
-  for (const rule of rules) {
+  const activeRules = rules.filter((rule) => isRuleActiveOn(rule, validOn));
+
+  for (const rule of activeRules) {
     const dayOfWeek = normalizeDayOfWeek(rule.dayOfWeek);
-    const startTime = normalizeOccupancyTime(rule.startTime);
-    const key = occupancySlotKey(dayOfWeek, startTime);
-    const occupied = occupancyBySlot.get(key);
-    displaySlots.set(key, {
-      dayOfWeek,
-      startTime,
-      activeSubscriptions: occupied?.activeSubscriptions ?? 0,
-      availableSlots: occupied?.availableSlots ?? capacity,
-      capacity,
-      source: "availability",
-    });
+    const slotStarts = expandRuleToSlots(rule, SLOT_STEP_MINUTES);
+
+    for (const startTime of slotStarts) {
+      const key = occupancySlotKey(dayOfWeek, startTime);
+      if (displaySlots.has(key)) continue;
+      displaySlots.set(key, {
+        dayOfWeek,
+        startTime,
+        activeSubscriptions: 0,
+        availableSlots: capacity,
+        capacity,
+        source: "availability",
+      });
+    }
   }
 
   for (const occupied of occupancy) {
     const dayOfWeek = normalizeDayOfWeek(occupied.dayOfWeek);
-    const startTime = normalizeOccupancyTime(occupied.startTime);
-    const key = occupancySlotKey(dayOfWeek, startTime);
-    if (displaySlots.has(key)) {
+    const normalizedStart = normalizeOccupancyTime(occupied.startTime);
+    const snappedStart = snapToStep(normalizedStart, SLOT_STEP_MINUTES);
+    const key = occupancySlotKey(dayOfWeek, snappedStart);
+    const existing = displaySlots.get(key);
+
+    if (existing) {
+      const totalActive = existing.activeSubscriptions + occupied.activeSubscriptions;
+      const slotCapacity = existing.capacity || capacity;
+      displaySlots.set(key, {
+        ...existing,
+        activeSubscriptions: totalActive,
+        availableSlots: Math.max(slotCapacity - totalActive, 0),
+      });
       continue;
     }
 
     const inferredCapacity = capacity || occupied.activeSubscriptions + occupied.availableSlots;
     displaySlots.set(key, {
       dayOfWeek,
-      startTime,
+      startTime: snappedStart,
       activeSubscriptions: occupied.activeSubscriptions,
       availableSlots: occupied.availableSlots,
       capacity: inferredCapacity,
@@ -150,6 +208,7 @@ export function MembershipOccupancyTab() {
     rules: rulesQuery.data ?? [],
     occupancy: occupancyQuery.data?.occupancy ?? [],
     capacity,
+    validOn,
   });
   const slotsByDay = DAY_NAMES.map((_, dayIndex) =>
     displaySlots.filter((slot) => slot.dayOfWeek === dayIndex),
@@ -283,7 +342,6 @@ export function MembershipOccupancyTab() {
                         </div>
                         <p className="mt-1 text-xs">
                           {slot.availableSlots <= 0 ? "Lleno" : `${slot.availableSlots} libres`}
-                          {slot.source === "occupancy" ? " · fuera de disponibilidad" : ""}
                         </p>
                       </div>
                     ))

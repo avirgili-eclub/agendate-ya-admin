@@ -3,6 +3,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Calendar, Loader2 } from "lucide-react";
 
 import type { AppError } from "@/core/errors/app-error";
+import { BookingKindBadge } from "@/features/bookings/components/booking-kind-badge";
 import {
   fetchClientBookingHistory,
   type ClientBookingHistoryItem,
@@ -153,7 +154,10 @@ export function ClientBookingHistory({ clientId, isActive, onBookingSelect }: Cl
                 )}
                 <p className="mt-2 text-xs text-primary-light">{formatBookingDateTime(booking.scheduledAt)}</p>
               </div>
-              <StatusChip label={booking.status} tone={getStatusTone(booking.status)} />
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <StatusChip label={booking.status} tone={getStatusTone(booking.status)} />
+                <BookingKindBadge kind={booking.bookingKind} />
+              </div>
             </div>
           </button>
         </article>

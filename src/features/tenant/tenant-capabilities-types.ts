@@ -9,6 +9,13 @@ export type TenantSubscriptionCapabilities = {
   scheduleModesAvailable: MembershipScheduleMode[];
 };
 
+export type TenantFeatureCapability = {
+  tierAllows?: boolean;
+  enabledByTenant?: boolean;
+  enabled?: boolean;
+  available?: boolean;
+};
+
 export type TenantCapabilities = {
   tenantId: string;
   tier: string;
@@ -20,8 +27,20 @@ export type TenantCapabilities = {
     };
     subscriptions: TenantSubscriptionCapabilities;
   };
+  features?: {
+    METRICS_DASHBOARD?: TenantFeatureCapability;
+    metricsDashboard?: TenantFeatureCapability;
+  } | null;
+  modules?: {
+    METRICS_DASHBOARD?: TenantFeatureCapability;
+    metricsDashboard?: TenantFeatureCapability;
+  } | null;
   recommended?: {
     subscriptionsMode: MembershipScheduleMode | null;
     showSubscriptionsUI: boolean;
   } | null;
 };
+
+export function canUseMetricsDashboard(capabilities?: TenantCapabilities | null): boolean {
+  return capabilities?.features?.metricsDashboard?.enabled === true;
+}

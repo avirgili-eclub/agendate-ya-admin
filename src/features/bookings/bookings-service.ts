@@ -7,7 +7,10 @@ import { createErrorMapper } from "@/shared/utils/api-error-mapper";
 export type {
   BookingStatus,
   BookingCardItem,
+  BookingKind,
 } from "@/features/agenda/agenda-service";
+
+import type { BookingKind } from "@/features/agenda/agenda-service";
 
 // Reutilizamos helpers del módulo agenda
 export {
@@ -36,6 +39,9 @@ export type BookingListItem = {
   sourceChannel: SourceChannel;
   notes?: string;
   createdAt: string;
+  subscriptionId?: string;
+  consumesQuota?: boolean;
+  bookingKind?: BookingKind;
 };
 
 export type BookingDetail = BookingListItem & {
@@ -43,17 +49,20 @@ export type BookingDetail = BookingListItem & {
   clientId?: string;
   googleEventId?: string;
   updatedAt: string;
+  recurringScheduleId?: string;
 };
 
 export type CreateBookingInput = {
   resourceId: string;
   serviceId: string;
+  clientId?: string;
   clientName: string;
   clientPhone: string;
   clientEmail?: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm
   notes?: string;
+  isRecovery?: boolean;
 };
 
 export type BookingListParams = {
@@ -90,6 +99,10 @@ type ApiBooking = {
   resourceId: string;
   serviceId: string;
   clientId?: string | null;
+  subscriptionId?: string | null;
+  consumesQuota?: boolean | null;
+  bookingKind?: BookingKind | null;
+  recurringScheduleId?: string | null;
   locationId: string;
   startTime: string;
   endTime: string;
@@ -155,6 +168,9 @@ function mapApiBookingToListItem(api: ApiBooking): BookingListItem {
     sourceChannel: api.sourceChannel,
     notes: api.notes ?? undefined,
     createdAt: api.createdAt,
+    subscriptionId: api.subscriptionId ?? undefined,
+    consumesQuota: api.consumesQuota ?? undefined,
+    bookingKind: api.bookingKind ?? undefined,
   };
 }
 
@@ -165,6 +181,7 @@ function mapApiBookingToDetail(api: ApiBooking): BookingDetail {
     clientId: api.clientId ?? undefined,
     googleEventId: api.googleEventId ?? undefined,
     updatedAt: api.updatedAt,
+    recurringScheduleId: api.recurringScheduleId ?? undefined,
   };
 }
 
@@ -224,12 +241,14 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingD
     body: {
       resourceId: input.resourceId,
       serviceId: input.serviceId,
+      clientId: input.clientId?.trim() || null,
       clientName: input.clientName.trim(),
       clientPhone: input.clientPhone.trim(),
       clientEmail: input.clientEmail?.trim() || null,
       date: input.date,
       startTime: input.startTime,
       notes: input.notes?.trim() || null,
+      isRecovery: input.isRecovery ?? false,
     },
   });
 
@@ -285,6 +304,22 @@ export const toBookingsFriendlyMessage = createErrorMapper({
  * Use this when you need custom logic beyond field-based or status-based errors.
  */
 export function handleBookingSpecificErrors(error: AppError): string | null {
+  if (error.code === "NO_RECOVERY_CREDIT") {
+    return "Cliente sin clases a recuperar. Cancelá un turno futuro con más de 24hs para liberar cupo.";
+  }
+
+  if (error.code === "NO_ACTIVE_SUBSCRIPTION_FOR_CLIENT") {
+    return "El cliente no tiene una membresía activa. Desmarcá la opción de recuperación o creá el turno como pago aparte.";
+  }
+
+  if (error.code === "CLIENT_SUBSCRIPTIONS_NOT_ENABLED") {
+    return "Tu plan SaaS no incluye membresías de clientes. Mejorá a PRO.";
+  }
+
+  if (error.code === "SUBSCRIPTION_QUOTA_EXHAUSTED") {
+    return "Cliente sin cupo disponible este periodo. Cancelá un turno futuro con más de 24hs para liberar cupo.";
+  }
+
   if (error.code === "BOOKING_CONFLICT") {
     return "El recurso ya tiene un turno reservado en ese horario. Elegí otro horario o recurso.";
   }

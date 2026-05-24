@@ -1,9 +1,6 @@
-import { useState, useMemo, useEffect, type FormEvent } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { MapPin, Users, CalendarDays, ListChecks, Link2, RefreshCw } from "lucide-react";
 import { useMutation, useQueryClient, useQuery, useQueries } from "@tanstack/react-query";
-import { PhoneInput } from "react-international-phone";
-import { isValidPhoneNumber } from "libphonenumber-js";
-import "react-international-phone/style.css";
 
 import type { AppError } from "@/core/errors/app-error";
 import { getSessionState } from "@/core/auth/session-store";
@@ -17,9 +14,7 @@ import {
   getStatusLabel,
   getStatusTone,
   fetchLocationResources,
-  fetchResourceById,
   type BookingStatus,
-  type ResourceItem,
 } from "@/features/agenda/agenda-service";
 import {
   formatDayLabel,
@@ -30,12 +25,7 @@ import {
   moveDateByView,
   type ViewMode,
 } from "@/features/agenda/utils/calendar-date";
-import {
-  createBooking,
-  fetchBookingServicesCatalog,
-  getBookingErrorMessage,
-  type CreateBookingInput,
-} from "@/features/bookings/bookings-service";
+import { BookingCreateForm } from "@/features/bookings/components/booking-create-form";
 import {
   fetchResourceCalendarAccessUrl,
   syncResourceCalendar,
@@ -48,10 +38,7 @@ import { SidePanel } from "@/shared/ui/side-panel";
 import { LoadingState } from "@/shared/ui/loading-state";
 import { ErrorState } from "@/shared/ui/error-state";
 import { EmptyState } from "@/shared/ui/empty-state";
-import { FeedbackBanner } from "@/shared/ui/feedback-banner";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
-import { extractFieldErrors } from "@/shared/utils/api-error-mapper";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
 const STATUS_FILTER_OPTIONS: BookingStatus[] = [
@@ -64,340 +51,6 @@ const STATUS_FILTER_OPTIONS: BookingStatus[] = [
 
 const SYNC_COOLDOWN_SECONDS = 60;
 
-type AgendaCreateBookingFormProps = {
-  initialLocationId?: string;
-  onClose: () => void;
-  onCreated: () => void;
-};
-
-function AgendaCreateBookingForm({ initialLocationId, onClose, onCreated }: AgendaCreateBookingFormProps) {
-  const queryClient = useQueryClient();
-  const session = getSessionState();
-  const currentRole = session.user?.role?.toUpperCase() ?? "";
-  const isProfessional = currentRole === "PROFESSIONAL";
-  const currentResourceId = session.user?.resourceId ?? "";
-  const professionalResourceName = session.user?.fullName?.trim() || "Mi recurso";
-
-  const [locationId, setLocationId] = useState(initialLocationId ?? "");
-  const [resourceId, setResourceId] = useState(isProfessional ? currentResourceId : "");
-  const [serviceId, setServiceId] = useState("");
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("+595");
-  const [clientEmail, setClientEmail] = useState("");
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [notes, setNotes] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (initialLocationId) {
-      setLocationId(initialLocationId);
-    }
-  }, [initialLocationId]);
-
-  useEffect(() => {
-    if (!isProfessional || !currentResourceId) {
-      return;
-    }
-
-    setResourceId((previous) => (previous === currentResourceId ? previous : currentResourceId));
-  }, [isProfessional, currentResourceId]);
-
-  const locationsQuery = useLocationsQuery();
-
-  const resourcesQuery = useQuery({
-    queryKey: ["agenda", "resources", locationId],
-    queryFn: () => fetchLocationResources(locationId),
-    enabled: !!locationId && !isProfessional,
-    staleTime: 60_000,
-  });
-
-  const professionalResourceQuery = useQuery({
-    queryKey: ["agenda", "resource", currentResourceId],
-    queryFn: () => fetchResourceById(currentResourceId),
-    enabled: isProfessional && !!currentResourceId,
-    staleTime: 60_000,
-  });
-
-  useEffect(() => {
-    if (!isProfessional) {
-      return;
-    }
-
-    const professionalLocationId = professionalResourceQuery.data?.locationId;
-    if (!professionalLocationId) {
-      return;
-    }
-
-    setLocationId((previous) =>
-      previous === professionalLocationId ? previous : professionalLocationId,
-    );
-  }, [isProfessional, professionalResourceQuery.data?.locationId]);
-
-  const servicesQuery = useQuery({
-    queryKey: ["bookings", "services"],
-    queryFn: fetchBookingServicesCatalog,
-    staleTime: 60_000,
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (input: CreateBookingInput) => createBooking(input),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["bookings"] });
-      void queryClient.invalidateQueries({ queryKey: ["bookings", "calendar"] });
-      setFormError(null);
-      setFieldErrors({});
-      onCreated();
-      onClose();
-    },
-    onError: (error: AppError) => {
-      setFieldErrors(extractFieldErrors(error));
-      setFormError(getBookingErrorMessage(error));
-    },
-  });
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormError(null);
-    setFieldErrors({});
-
-    const validationErrors: Record<string, string> = {};
-    if (!isProfessional && !locationId) {
-      validationErrors.locationId = "Debes seleccionar un local.";
-    }
-    if (isProfessional && !currentResourceId) {
-      validationErrors.resourceId = "Tu usuario no tiene recurso asignado.";
-    }
-    if (!clientPhone || clientPhone === "+595" || !isValidPhoneNumber(clientPhone)) {
-      validationErrors.clientPhone = "Ingresa un telefono valido.";
-    }
-
-    if (Object.keys(validationErrors).length > 0) {
-      setFieldErrors(validationErrors);
-      return;
-    }
-
-    createMutation.mutate({
-      resourceId: isProfessional ? currentResourceId : resourceId,
-      serviceId,
-      clientName,
-      clientPhone,
-      clientEmail: clientEmail || undefined,
-      date,
-      startTime,
-      notes: notes || undefined,
-    });
-  }
-
-  const locations = locationsQuery.data?.filter((location) => location.active) ?? [];
-  const resources: ResourceItem[] = isProfessional
-    ? currentResourceId
-      ? [
-          {
-            id: currentResourceId,
-            locationId: professionalResourceQuery.data?.locationId ?? "",
-            name: professionalResourceQuery.data?.name ?? professionalResourceName,
-            type: professionalResourceQuery.data?.type ?? "PROFESSIONAL",
-            active: true,
-          },
-        ]
-      : []
-    : resourcesQuery.data?.filter((resource) => resource.active) ?? [];
-  const services = servicesQuery.data?.filter((service) => service.active) ?? [];
-
-  return (
-    <form className="space-y-4 px-6 py-4" onSubmit={handleSubmit}>
-      {formError && (
-        <FeedbackBanner tone="error" message={formError} />
-      )}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Nombre del cliente *</span>
-          <input
-            type="text"
-            value={clientName}
-            onChange={(e) => setClientName(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-            placeholder="Juan Perez"
-          />
-          {fieldErrors.clientName && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientName}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Telefono *</span>
-          <div className={`register-phone-wrapper ${fieldErrors.clientPhone ? "!border-red-500" : ""}`}>
-            <PhoneInput
-              defaultCountry="py"
-              preferredCountries={["py", "ar", "br", "cl", "uy"]}
-              disableDialCodeAndPrefix
-              showDisabledDialCodeAndPrefix
-              defaultMask="(...) ... - ..."
-              placeholder="(981) 123 - 456"
-              value={clientPhone}
-              onChange={(phone) => setClientPhone(phone)}
-              className="register-phone-root"
-              inputClassName="register-phone-input"
-              inputProps={{
-                name: "clientPhone",
-                autoComplete: "tel",
-              }}
-              countrySelectorStyleProps={{
-                buttonClassName: "register-phone-country-button",
-                flagClassName: "register-phone-flag",
-                dropdownArrowClassName: "register-phone-country-arrow",
-                dropdownStyleProps: {
-                  className: "register-phone-country-dropdown",
-                  listItemClassName: "register-phone-country-item",
-                  listItemSelectedClassName: "register-phone-country-item-selected",
-                  listItemFocusedClassName: "register-phone-country-item-focused",
-                },
-              }}
-            />
-          </div>
-          {fieldErrors.clientPhone && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.clientPhone}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Email (opcional)</span>
-        <input
-          type="email"
-          value={clientEmail}
-          onChange={(e) => setClientEmail(e.target.value)}
-          className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="cliente@ejemplo.com"
-        />
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Local *</span>
-          <Select
-            value={locationId}
-            onValueChange={(value) => {
-              if (isProfessional) {
-                return;
-              }
-              setLocationId(value);
-              setResourceId("");
-            }}
-            disabled={isProfessional}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccionar local" />
-            </SelectTrigger>
-            <SelectContent>
-              {locations.map((location) => (
-                <SelectItem key={location.id} value={location.id}>
-                  {location.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {fieldErrors.locationId && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.locationId}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Recurso *</span>
-          <Select
-            value={resourceId}
-            onValueChange={setResourceId}
-            disabled={isProfessional || (!locationId && !isProfessional)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Seleccionar recurso" />
-            </SelectTrigger>
-            <SelectContent>
-              {resources.map((resource) => (
-                <SelectItem key={resource.id} value={resource.id}>
-                  {resource.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {fieldErrors.resourceId && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.resourceId}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Servicio *</span>
-        <Select value={serviceId} onValueChange={setServiceId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Seleccionar servicio" />
-          </SelectTrigger>
-          <SelectContent>
-            {services.map((service) => (
-              <SelectItem key={service.id} value={service.id}>
-                {service.name} ({service.durationMinutes} min)
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {fieldErrors.serviceId && (
-          <span className="mt-1 block text-xs text-red-700">{fieldErrors.serviceId}</span>
-        )}
-      </label>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Fecha *</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          />
-          {fieldErrors.date && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.date}</span>
-          )}
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-sm font-medium text-primary-dark">Hora de inicio *</span>
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-            className="h-11 w-full rounded-md border border-neutral-dark px-3 text-sm outline-none ring-primary-light focus:ring-2"
-          />
-          {fieldErrors.startTime && (
-            <span className="mt-1 block text-xs text-red-700">{fieldErrors.startTime}</span>
-          )}
-        </label>
-      </div>
-
-      <label className="block">
-        <span className="mb-1 block text-sm font-medium text-primary-dark">Notas (opcional)</span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-neutral-dark px-3 py-2 text-sm outline-none ring-primary-light focus:ring-2"
-          placeholder="Informacion adicional sobre el turno"
-        />
-      </label>
-
-      <div className="flex justify-end gap-3 border-t border-neutral-dark pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Guardando..." : "Crear turno"}
-        </Button>
-      </div>
-    </form>
-  );
-}
 
 export function AgendaPage() {
   const queryClient = useQueryClient();
@@ -915,12 +568,20 @@ export function AgendaPage() {
         onClose={() => setShowNewBookingPanel(false)}
         title="Nuevo Turno"
       >
-        <AgendaCreateBookingForm
+        <BookingCreateForm
           initialLocationId={
             isProfessional
               ? professionalResource?.locationId
               : selectedLocations.length === 1
               ? selectedLocations[0]
+              : undefined
+          }
+          professional={
+            isProfessional && currentResourceId
+              ? {
+                  resourceId: currentResourceId,
+                  resourceName: session.user?.fullName ?? undefined,
+                }
               : undefined
           }
           onClose={() => setShowNewBookingPanel(false)}

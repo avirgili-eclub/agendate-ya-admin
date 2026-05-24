@@ -14,12 +14,21 @@ export type ClientItem = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
   createdAt: string;
   updatedAt: string;
   lastBookingDate?: string;
   totalBookings: number;
   bookingSummary: BookingSummary | null;
+  hasActiveSubscription: boolean;
 };
+
+export type DocumentType = "CI" | "RUC" | "PASSPORT";
 
 export type BookingSummary = {
   completedCount: number;
@@ -38,6 +47,12 @@ export type ClientUpsertInput = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
 };
 
 export type ClientBookingHistoryItem = {
@@ -48,6 +63,7 @@ export type ClientBookingHistoryItem = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY";
   refs: {
     bookingId: string;
     serviceId: string | null;
@@ -100,6 +116,12 @@ type ApiClient = {
   phone: string;
   email?: string | null;
   notes?: string | null;
+  documento?: string | null;
+  documentType?: DocumentType | null;
+  dv?: string | null;
+  ruc?: string | null;
+  razonSocial?: string | null;
+  billingEmail?: string | null;
   createdAt: string;
   updatedAt?: string;
   completedBookingsCount?: number;
@@ -115,6 +137,7 @@ type ApiClient = {
     totalCount: number;
     missedRatePct: number | null;
   } | null;
+  hasActiveSubscription?: boolean | null;
 };
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
@@ -143,6 +166,12 @@ type ApiClientRequest = {
   phone: string;
   email?: string;
   notes?: string;
+  documento?: string;
+  documentType?: DocumentType;
+  dv?: string;
+  ruc?: string;
+  razonSocial?: string;
+  billingEmail?: string;
 };
 
 type ApiClientBooking = {
@@ -153,6 +182,7 @@ type ApiClientBooking = {
   status: string;
   scheduledAt: string;
   createdAt: string;
+  bookingKind?: "WALK_IN" | "SUBSCRIPTION_REGULAR" | "SUBSCRIPTION_RECOVERY" | null;
   refs?: {
     bookingId?: string | null;
     serviceId?: string | null;
@@ -235,12 +265,19 @@ function mapApiClientToItem(api: ApiClient): ClientItem {
     phone: api.phone,
     email: api.email ?? undefined,
     notes: api.notes ?? undefined,
+    documento: api.documento ?? undefined,
+    documentType: api.documentType ?? undefined,
+    dv: api.dv ?? undefined,
+    ruc: api.ruc ?? undefined,
+    razonSocial: api.razonSocial ?? undefined,
+    billingEmail: api.billingEmail ?? undefined,
     createdAt: api.createdAt,
     updatedAt: api.updatedAt ?? api.createdAt,
     lastBookingDate: api.metadata?.lastBookingDate,
     totalBookings:
       bookingSummary?.completedCount ?? api.completedBookingsCount ?? api.metadata?.totalBookings ?? 0,
     bookingSummary,
+    hasActiveSubscription: api.hasActiveSubscription ?? false,
   };
 }
 
@@ -255,6 +292,12 @@ function mapFormInputToApiRequest(input: ClientUpsertInput): ApiClientRequest {
     phone: input.phone.trim(),
     email: input.email?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
+    documento: input.documento?.trim() || undefined,
+    documentType: input.documentType,
+    dv: input.dv?.trim() || undefined,
+    ruc: input.ruc?.trim() || undefined,
+    razonSocial: input.razonSocial?.trim() || undefined,
+    billingEmail: input.billingEmail?.trim() || undefined,
   };
 }
 
@@ -301,6 +344,23 @@ export async function fetchClients(params?: {
 export async function fetchClientById(id: string): Promise<ClientItem> {
   const response = await httpRequest<DataEnvelope<ApiClient>>(`/clients/${id}`);
   return mapApiClientToItem(unwrapData<ApiClient>(response));
+}
+
+export async function fetchBillingDocumentDv(document: string): Promise<number> {
+  const normalizedDocument = document.trim();
+  if (!normalizedDocument) {
+    throw toAppError({
+      status: 400,
+      code: "VALIDATION_ERROR",
+      message: "Validation failed",
+      details: [{ field: "documento", message: "Ingresa un numero de documento para calcular el DV." }],
+    });
+  }
+
+  const response = await httpRequest<DataEnvelope<{ dv: number }>>(
+    `/billing/utils/dv?document=${encodeURIComponent(normalizedDocument)}`
+  );
+  return unwrapData<{ dv: number }>(response).dv;
 }
 
 export async function createClient(input: ClientUpsertInput): Promise<ClientItem> {
@@ -363,6 +423,7 @@ export async function fetchClientBookingHistory(
       status: b.status,
       scheduledAt: b.scheduledAt,
       createdAt: b.createdAt,
+      bookingKind: b.bookingKind ?? undefined,
       refs: {
         bookingId: b.refs?.bookingId ?? b.id,
         serviceId: b.refs?.serviceId ?? null,
