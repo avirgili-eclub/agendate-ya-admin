@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Eye, Trash2, ChevronLeft, ChevronRight, CalendarDays, Search } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import type { AppError } from "@/core/errors/app-error";
 import { useBookingsQuery } from "@/features/bookings/use-bookings-query";
@@ -140,10 +141,16 @@ function BookingMobileCard({ booking, onViewDetail, onCancel }: BookingRowProps)
 
 
 export function BookingsPage() {
+  const navigate = useNavigate();
+  const locationSearch = useRouterState({ select: (state) => state.location.search }) as {
+    bookingId?: string;
+  };
+
   const [page, setPage] = useState(0);
   const [pageSize] = useState(20);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedBooking, setSelectedBooking] = useState<BookingListItem | null>(null);
+  const [selectedBookingIdFromUrl, setSelectedBookingIdFromUrl] = useState<string | null>(null);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("booking");
   const [bookingPendingCancel, setBookingPendingCancel] = useState<BookingListItem | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -154,6 +161,16 @@ export function BookingsPage() {
 
   const bookingsQuery = useBookingsQuery({ page, pageSize });
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const bookingId = locationSearch?.bookingId;
+    if (typeof bookingId === "string" && bookingId.trim().length > 0) {
+      setSelectedBookingIdFromUrl(bookingId.trim());
+      return;
+    }
+
+    setSelectedBookingIdFromUrl(null);
+  }, [locationSearch?.bookingId]);
 
   const cancelBookingMutation = useMutation({
     mutationFn: (id: string) => deleteBooking(id),
@@ -236,6 +253,9 @@ export function BookingsPage() {
   }
 
   function handleOpenDetail(booking: BookingListItem) {
+    if (selectedBookingIdFromUrl) {
+      void navigate({ to: "/turnos", search: {} as never, replace: true });
+    }
     setSelectedBooking(booking);
   }
 
@@ -501,15 +521,23 @@ export function BookingsPage() {
 
       {/* Detail Side Panel */}
       <SidePanel
-        isOpen={!!selectedBooking}
-        onClose={() => setSelectedBooking(null)}
+        isOpen={Boolean(selectedBooking || selectedBookingIdFromUrl)}
+        onClose={() => {
+          setSelectedBooking(null);
+          setSelectedBookingIdFromUrl(null);
+          void navigate({ to: "/turnos", search: {} as never, replace: true });
+        }}
         title="Detalle del Turno"
       >
-        {selectedBooking && (
+        {(selectedBooking || selectedBookingIdFromUrl) && (
           <BookingDetailPanel
-            bookingId={selectedBooking.id}
-            bookingSummary={selectedBooking}
-            onClose={() => setSelectedBooking(null)}
+            bookingId={selectedBooking?.id ?? selectedBookingIdFromUrl!}
+            bookingSummary={selectedBooking ?? undefined}
+            onClose={() => {
+              setSelectedBooking(null);
+              setSelectedBookingIdFromUrl(null);
+              void navigate({ to: "/turnos", search: {} as never, replace: true });
+            }}
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["bookings"] });
             }}

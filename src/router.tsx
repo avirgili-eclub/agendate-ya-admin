@@ -192,6 +192,17 @@ const bookingsRoute = createRoute({
   component: BookingsPage,
 });
 
+const legacyBookingDetailRoute = createRoute({
+  getParentRoute: () => privateRoute,
+  path: "/bookings/$bookingId",
+  beforeLoad: ({ params }) => {
+    throw redirect({
+      to: "/turnos",
+      search: { bookingId: params.bookingId } as never,
+    });
+  },
+});
+
 const clientsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/clientes",
@@ -302,6 +313,7 @@ const routeTree = rootRoute.addChildren([
     dashboardRoute,
     agendaRoute,
     bookingsRoute,
+    legacyBookingDetailRoute,
     clientsRoute,
     membershipsRoute,
     metricsRoute,
