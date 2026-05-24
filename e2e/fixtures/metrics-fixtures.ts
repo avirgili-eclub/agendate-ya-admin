@@ -13,6 +13,15 @@ type MetricsBucket = {
   isLive: boolean;
 };
 
+type RevenueComparisonPoint = {
+  index: number;
+  label: string;
+  currentDate: string;
+  previousDate: string | null;
+  currentRevenue: number;
+  previousRevenue: number | null;
+};
+
 const meta = {
   timezone: "America/Asuncion",
   currency: "PYG",
@@ -72,6 +81,24 @@ function resource(index: number, resourceType: "PROFESSIONAL" | "ROOM", bookings
     completedCount,
     revenueCompleted,
     occupancyRate,
+  };
+}
+
+function comparisonPoint(
+  index: number,
+  label: string,
+  currentDate: string,
+  previousDate: string | null,
+  currentRevenue: number,
+  previousRevenue: number | null,
+): RevenueComparisonPoint {
+  return {
+    index,
+    label,
+    currentDate,
+    previousDate,
+    currentRevenue,
+    previousRevenue,
   };
 }
 
@@ -155,5 +182,115 @@ export const tenantMetricsWithUnknownOccupancyFixture = {
     topResources: [resource(1, "PROFESSIONAL", 26, 22, 110000, 0.79), resource(3, "ROOM", 16, 12, 60000, null)],
     topClients: [client(1, 7, 35000), client(2, 5, 25000)],
     meta: { ...meta, from: "2026-05-18", to: "2026-05-22", granularity: "day" },
+  },
+} as const;
+
+export const tenantRevenueComparisonFixture = {
+  data: {
+    period: "week",
+    mode: "period_to_date",
+    current: {
+      label: "Current week",
+      from: "2026-05-18",
+      to: "2026-05-24",
+      revenueCompleted: 780000,
+    },
+    previous: {
+      label: "Previous week",
+      from: "2026-05-11",
+      to: "2026-05-17",
+      revenueCompleted: 1220000,
+    },
+    delta: {
+      amount: -440000,
+      percentage: -0.360656,
+    },
+    points: [
+      comparisonPoint(1, "MONDAY", "2026-05-18", "2026-05-11", 170000, 120000),
+      comparisonPoint(2, "TUESDAY", "2026-05-19", "2026-05-12", 210000, 150000),
+      comparisonPoint(3, "WEDNESDAY", "2026-05-20", "2026-05-13", 140000, 90000),
+      comparisonPoint(4, "THURSDAY", "2026-05-21", "2026-05-14", 0, 140000),
+      comparisonPoint(5, "FRIDAY", "2026-05-22", "2026-05-15", 10000, 100000),
+      comparisonPoint(6, "SATURDAY", "2026-05-23", "2026-05-16", 80000, 185000),
+      comparisonPoint(7, "SUNDAY", "2026-05-24", "2026-05-17", 0, 35000),
+    ],
+    meta: {
+      anchor: "2026-05-24",
+      timezone: "America/Asuncion",
+      currency: "PYG",
+      revenueBasis: "COMPLETED_ONLY",
+      includesToday: true,
+      todayIsLive: true,
+    },
+  },
+} as const;
+
+export const tenantMonthlyRevenueComparisonFixture = {
+  data: {
+    period: "month",
+    mode: "period_to_date",
+    current: {
+      label: "Current month",
+      from: "2026-05-01",
+      to: "2026-05-24",
+      revenueCompleted: 1010000,
+    },
+    previous: {
+      label: "Previous month",
+      from: "2026-04-01",
+      to: "2026-04-24",
+      revenueCompleted: 940000,
+    },
+    delta: {
+      amount: 70000,
+      percentage: 0.074468,
+    },
+    points: Array.from({ length: 24 }, (_, index) => {
+      const day = index + 1;
+      const paddedDay = String(day).padStart(2, "0");
+      return comparisonPoint(
+        day,
+        String(day),
+        `2026-05-${paddedDay}`,
+        `2026-04-${paddedDay}`,
+        day % 3 === 0 ? 120000 : 0,
+        day % 4 === 0 ? 70000 : 0,
+      );
+    }),
+    meta: {
+      anchor: "2026-05-24",
+      timezone: "America/Asuncion",
+      currency: "PYG",
+      revenueBasis: "COMPLETED_ONLY",
+      includesToday: true,
+      todayIsLive: true,
+    },
+  },
+} as const;
+
+export const professionalRevenueComparisonFixture = {
+  data: {
+    ...tenantRevenueComparisonFixture.data,
+    current: {
+      ...tenantRevenueComparisonFixture.data.current,
+      revenueCompleted: 240000,
+    },
+    previous: {
+      ...tenantRevenueComparisonFixture.data.previous,
+      revenueCompleted: 190000,
+    },
+    delta: {
+      amount: 50000,
+      percentage: 0.263158,
+    },
+    points: [
+      comparisonPoint(1, "MONDAY", "2026-05-18", "2026-05-11", 50000, 30000),
+      comparisonPoint(2, "TUESDAY", "2026-05-19", "2026-05-12", 70000, 40000),
+      comparisonPoint(3, "WEDNESDAY", "2026-05-20", "2026-05-13", 30000, 25000),
+      comparisonPoint(4, "THURSDAY", "2026-05-21", "2026-05-14", 10000, 30000),
+      comparisonPoint(5, "FRIDAY", "2026-05-22", "2026-05-15", 20000, 35000),
+      comparisonPoint(6, "SATURDAY", "2026-05-23", "2026-05-16", 60000, 30000),
+      comparisonPoint(7, "SUNDAY", "2026-05-24", "2026-05-17", 0, 0),
+    ],
   },
 } as const;

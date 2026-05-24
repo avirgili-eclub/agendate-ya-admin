@@ -4,10 +4,18 @@ export type MetricsGranularity = "day" | "week" | "month";
 
 export type MetricsRoleScope = "tenant" | "professional";
 
+export type RevenueComparisonPeriod = "week" | "month";
+
 export type MetricsFilters = {
   from: string;
   to: string;
   granularity?: MetricsGranularity;
+  locationIds?: string[];
+};
+
+export type RevenueComparisonQuery = {
+  anchor: string;
+  period: RevenueComparisonPeriod;
   locationIds?: string[];
 };
 
@@ -97,6 +105,46 @@ export type ProfessionalMetricsApiData = BaseMetricsData & {
 
 export type ProfessionalMetricsData = BaseMetricsData & {
   topResources?: never;
+};
+
+export type RevenueComparisonWindow = {
+  label: string;
+  from: string;
+  to: string;
+  revenueCompleted: number;
+};
+
+export type RevenueComparisonDelta = {
+  amount: number;
+  percentage: number | null;
+};
+
+export type RevenueComparisonPoint = {
+  index: number;
+  label: string;
+  currentDate: string;
+  previousDate: string | null;
+  currentRevenue: number;
+  previousRevenue: number | null;
+};
+
+export type RevenueComparisonMeta = {
+  anchor: string;
+  timezone: string;
+  currency: string;
+  revenueBasis: "COMPLETED_ONLY" | (string & {});
+  includesToday: boolean;
+  todayIsLive: boolean;
+};
+
+export type RevenueComparisonResponse = {
+  period: RevenueComparisonPeriod;
+  mode: "period_to_date" | (string & {});
+  current: RevenueComparisonWindow;
+  previous: RevenueComparisonWindow;
+  delta: RevenueComparisonDelta;
+  points: RevenueComparisonPoint[];
+  meta: RevenueComparisonMeta;
 };
 
 export type MetricsDataByScope<TScope extends MetricsRoleScope> = TScope extends "professional"

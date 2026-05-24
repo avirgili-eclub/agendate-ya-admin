@@ -19,14 +19,12 @@ export function TopResourcesCard({ resources, currency }: TopResourcesCardProps)
           <div className="mt-3 space-y-2.5 sm:hidden">
             {resources.map((resource) => {
               const displayName = resource.name ?? "Sin nombre";
-              const displayType = resource.resourceType ?? "-";
 
               return (
                 <article key={resource.resourceId} className="rounded-md border border-neutral-dark bg-white p-2.5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="break-words text-xs font-semibold text-primary-dark">{displayName}</p>
-                      <p className="text-[11px] text-primary-light">{displayType}</p>
                     </div>
                     <p className="shrink-0 pl-2 text-right text-xs font-semibold text-primary">
                       {formatCurrency(resource.revenueCompleted, currency)}
@@ -46,7 +44,6 @@ export function TopResourcesCard({ resources, currency }: TopResourcesCardProps)
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-primary-light">
                   <th className="py-2 pr-4 font-semibold">Recurso</th>
-                  <th className="px-4 py-2 font-semibold">Tipo</th>
                   <th className="px-4 py-2 font-semibold">Reservas</th>
                   <th className="px-4 py-2 font-semibold">Ocupación</th>
                   <th className="py-2 pl-4 text-right font-semibold">Ingresos realizados</th>
@@ -55,12 +52,10 @@ export function TopResourcesCard({ resources, currency }: TopResourcesCardProps)
               <tbody className="divide-y divide-neutral-dark">
                 {resources.map((resource) => {
                   const displayName = resource.name ?? "Sin nombre";
-                  const displayType = resource.resourceType ?? "-";
 
                   return (
                     <tr key={resource.resourceId} className="text-primary-dark">
                       <td className="py-2.5 pr-4 font-medium">{displayName}</td>
-                      <td className="px-4 py-2.5 text-primary-light">{displayType}</td>
                       <td className="px-4 py-2.5">{formatInteger(resource.bookingsCount)}</td>
                       <td className="px-4 py-2.5">{formatPercentage(resource.occupancyRate)}</td>
                       <td className="py-2.5 pl-4 text-right font-semibold text-primary">
