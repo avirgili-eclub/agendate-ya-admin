@@ -4,9 +4,13 @@ dist/
 .DS_Store
 *.log
 coverage/
+test-results/
+playwright-report/
 docs/openapi.json
 .claude/settings.local.json
 docs/*
 !docs/sdd/
 docs/sdd/*
 .playwright-mcp/
+playwright/.auth/
+.env.e2e.local
