@@ -8,7 +8,7 @@ type TopClientsCardProps = {
 
 export function TopClientsCard({ clients, currency }: TopClientsCardProps) {
   return (
-    <section className="rounded-lg border border-neutral-dark bg-neutral-light p-3 shadow-sm">
+    <section className="min-w-0 rounded-lg border border-neutral-dark bg-neutral-light p-3 shadow-sm">
       <h2 className="text-base font-semibold text-primary-dark">Clientes principales</h2>
       <p className="text-xs text-primary-light">Clientes con mayor actividad realizada en el periodo.</p>
       <div className="mt-3 space-y-2.5">
@@ -19,11 +19,11 @@ export function TopClientsCard({ clients, currency }: TopClientsCardProps) {
           return (
             <div key={client.clientId} className="rounded-md border border-neutral-dark bg-white p-2.5">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-primary-dark">{displayName}</p>
+                <div className="min-w-0">
+                  <p className="break-words text-xs font-semibold text-primary-dark">{displayName}</p>
                   <p className="text-xs text-primary-light">{formatInteger(client.visitsCount)} visitas</p>
                 </div>
-                <p className="text-xs font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
+                <p className="shrink-0 pl-2 text-right text-xs font-semibold text-primary">{formatCurrency(client.revenue, currency)}</p>
               </div>
             </div>
           );
