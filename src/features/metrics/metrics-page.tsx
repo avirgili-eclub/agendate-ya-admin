@@ -4,6 +4,7 @@ import { getSessionState } from "@/core/auth/session-store";
 import { MetricsFilters } from "@/features/metrics/components/metrics-filters";
 import { MetricsKpiGrid } from "@/features/metrics/components/metrics-kpi-grid";
 import { OccupancyChart } from "@/features/metrics/components/occupancy-chart";
+import { RevenueComparisonChart } from "@/features/metrics/components/revenue-comparison-chart";
 import { RevenueBookingsChart } from "@/features/metrics/components/revenue-bookings-chart";
 import {
   LiveTodayBadge,
@@ -21,12 +22,21 @@ import { TopClientsCard } from "@/features/metrics/components/top-clients-card";
 import { TopResourcesCard } from "@/features/metrics/components/top-resources-card";
 import { TopServicesCard } from "@/features/metrics/components/top-services-card";
 import { getMetricsCurrency } from "@/features/metrics/metrics-formatters";
-import type { MetricsFilters as MetricsFiltersValue, ProfessionalMetricsData, TenantMetricsData } from "@/features/metrics/metrics-types";
+import type {
+  MetricsFilters as MetricsFiltersValue,
+  MetricsGranularity,
+  ProfessionalMetricsData,
+  RevenueComparisonPeriod,
+  RevenueComparisonResponse,
+  TenantMetricsData,
+} from "@/features/metrics/metrics-types";
 import {
   isMetricsFeatureNotAvailableError,
   isMetricsResourceNotAssignedError,
   useProfessionalMetricsQuery,
+  useProfessionalRevenueComparisonQuery,
   useTenantMetricsQuery,
+  useTenantRevenueComparisonQuery,
 } from "@/features/metrics/use-metrics-query";
 import { canUseMetricsDashboard } from "@/features/tenant/tenant-capabilities-types";
 import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
@@ -59,18 +69,40 @@ function isProfessionalRole(role?: string) {
   return role?.toUpperCase() === "PROFESSIONAL";
 }
 
-function hasMeaningfulMetrics(data: TenantMetricsData | ProfessionalMetricsData) {
+function getRevenueComparisonPeriod(granularity?: MetricsGranularity): RevenueComparisonPeriod {
+  return granularity === "week" ? "week" : "month";
+}
+
+function hasMeaningfulMetrics(
+  data: TenantMetricsData | ProfessionalMetricsData,
+  revenueComparison?: RevenueComparisonResponse,
+) {
   return (
     data.totals.bookingsCount > 0 ||
     data.totals.completedCount > 0 ||
     data.totals.revenueCompleted > 0 ||
     data.series.length > 0 ||
+    Boolean(revenueComparison?.points.length) ||
     data.topServices.length > 0 ||
     data.topClients.length > 0
   );
 }
 
-function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | ProfessionalMetricsData; showTopResources: boolean }) {
+function MetricsContent({
+  data,
+  showTopResources,
+  revenueComparison,
+  isRevenueComparisonLoading,
+  isRevenueComparisonError,
+  onRetryRevenueComparison,
+}: {
+  data: TenantMetricsData | ProfessionalMetricsData;
+  showTopResources: boolean;
+  revenueComparison?: RevenueComparisonResponse;
+  isRevenueComparisonLoading?: boolean;
+  isRevenueComparisonError?: boolean;
+  onRetryRevenueComparison?: () => void;
+}) {
   const currency = getMetricsCurrency(data.meta);
   const granularity = data.meta.granularity;
   const liveToday = data.meta.includesToday && data.meta.todayIsLive;
@@ -87,7 +119,7 @@ function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | 
     setIsOccupancyCalloutDismissed(false);
   }, [data.meta.from, data.meta.to, data.meta.granularity, unknownOccupancyDays, hasNullOccupancy]);
 
-  if (!hasMeaningfulMetrics(data)) {
+  if (!hasMeaningfulMetrics(data, revenueComparison)) {
     return <MetricsEmptyState />;
   }
 
@@ -103,6 +135,12 @@ function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | 
         />
       )}
       <MetricsKpiGrid totals={data.totals} currency={currency} />
+      <RevenueComparisonChart
+        comparison={revenueComparison}
+        isLoading={isRevenueComparisonLoading}
+        isError={isRevenueComparisonError}
+        onRetry={onRetryRevenueComparison}
+      />
       <div className="grid gap-3 xl:grid-cols-2">
         <RevenueBookingsChart series={data.series} granularity={granularity} currency={currency} />
         <OccupancyChart series={data.series} granularity={granularity} />
@@ -129,6 +167,21 @@ export function MetricsPage() {
     () => ({ from: filters.from, to: filters.to, granularity: filters.granularity }),
     [filters.from, filters.to, filters.granularity],
   );
+  const tenantRevenueComparisonQueryInput = useMemo(
+    () => ({
+      anchor: filters.to,
+      period: getRevenueComparisonPeriod(filters.granularity),
+      locationIds: filters.locationIds,
+    }),
+    [filters.to, filters.granularity, filters.locationIds],
+  );
+  const professionalRevenueComparisonQueryInput = useMemo(
+    () => ({
+      anchor: filters.to,
+      period: getRevenueComparisonPeriod(filters.granularity),
+    }),
+    [filters.to, filters.granularity],
+  );
 
   const capabilitiesQuery = useTenantCapabilitiesQuery();
   const canUseMetrics = canUseMetricsDashboard(capabilitiesQuery.data);
@@ -139,7 +192,19 @@ export function MetricsPage() {
   const professionalMetricsQuery = useProfessionalMetricsQuery(professionalFilters, {
     enabled: queryEnabled && isProfessional,
   });
+  const tenantRevenueComparisonQuery = useTenantRevenueComparisonQuery(tenantRevenueComparisonQueryInput, {
+    enabled: queryEnabled && showTenantMetrics,
+  });
+  const professionalRevenueComparisonQuery = useProfessionalRevenueComparisonQuery(
+    professionalRevenueComparisonQueryInput,
+    {
+      enabled: queryEnabled && isProfessional,
+    },
+  );
   const activeQuery = isProfessional ? professionalMetricsQuery : tenantMetricsQuery;
+  const activeRevenueComparisonQuery = isProfessional
+    ? professionalRevenueComparisonQuery
+    : tenantRevenueComparisonQuery;
 
   if (capabilitiesQuery.isLoading) {
     return <MetricsAccessLoadingState />;
@@ -183,7 +248,14 @@ export function MetricsPage() {
       )}
 
       {activeQuery.data && !activeQuery.isError && (
-        <MetricsContent data={activeQuery.data} showTopResources={showTenantMetrics} />
+        <MetricsContent
+          data={activeQuery.data}
+          showTopResources={showTenantMetrics}
+          revenueComparison={activeRevenueComparisonQuery.data}
+          isRevenueComparisonLoading={activeRevenueComparisonQuery.isLoading}
+          isRevenueComparisonError={activeRevenueComparisonQuery.isError}
+          onRetryRevenueComparison={() => void activeRevenueComparisonQuery.refetch()}
+        />
       )}
     </div>
   );

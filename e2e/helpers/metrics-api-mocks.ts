@@ -1,6 +1,10 @@
 import type { Page, Route } from "@playwright/test";
 
-import { tenantMetricsFixture } from "../fixtures/metrics-fixtures";
+import {
+  tenantMetricsFixture,
+  tenantMonthlyRevenueComparisonFixture,
+  tenantRevenueComparisonFixture,
+} from "../fixtures/metrics-fixtures";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
@@ -68,6 +72,11 @@ function buildCapabilities(enabled: boolean) {
           tierAllows: enabled,
           enabledByTenant: enabled,
         },
+        metricsDashboard: {
+          enabled,
+          tierAllows: enabled,
+          enabledByTenant: enabled,
+        },
       },
       recommended: {
         subscriptionsMode: null,
@@ -103,6 +112,8 @@ type MetricsApiMockOptions = {
   capabilitiesEnabled?: boolean;
   tenantMetrics?: unknown;
   professionalMetrics?: unknown;
+  tenantRevenueComparison?: unknown;
+  professionalRevenueComparison?: unknown;
   tenantMetricsStatus?: number;
   tenantMetricsError?: unknown;
   professionalMetricsStatus?: number;
@@ -115,6 +126,8 @@ export async function mockMetricsApi(page: Page, options: MetricsApiMockOptions 
     paths: [] as string[],
     tenantMetricUrls: [] as string[],
     professionalMetricUrls: [] as string[],
+    tenantRevenueComparisonUrls: [] as string[],
+    professionalRevenueComparisonUrls: [] as string[],
   };
 
   await page.route("**/api/v1/**", async (route) => {
@@ -130,6 +143,18 @@ export async function mockMetricsApi(page: Page, options: MetricsApiMockOptions 
 
     if (pathname.endsWith("/tenant/capabilities")) {
       await fulfillJson(route, buildCapabilities(options.capabilitiesEnabled ?? true));
+      return;
+    }
+
+    if (pathname.endsWith("/metrics/tenant/revenue-comparison")) {
+      calls.tenantRevenueComparisonUrls.push(url.toString());
+      await fulfillJson(
+        route,
+        options.tenantRevenueComparison ??
+          (url.searchParams.get("period") === "month"
+            ? tenantMonthlyRevenueComparisonFixture
+            : tenantRevenueComparisonFixture),
+      );
       return;
     }
 
@@ -150,6 +175,18 @@ export async function mockMetricsApi(page: Page, options: MetricsApiMockOptions 
         return;
       }
       await fulfillJson(route, options.tenantMetrics ?? tenantMetricsFixture);
+      return;
+    }
+
+    if (pathname.endsWith("/metrics/professional/me/revenue-comparison")) {
+      calls.professionalRevenueComparisonUrls.push(url.toString());
+      await fulfillJson(
+        route,
+        options.professionalRevenueComparison ??
+          (url.searchParams.get("period") === "month"
+            ? tenantMonthlyRevenueComparisonFixture
+            : tenantRevenueComparisonFixture),
+      );
       return;
     }
 
