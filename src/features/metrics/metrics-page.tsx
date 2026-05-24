@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { getSessionState } from "@/core/auth/session-store";
 import { MetricsFilters } from "@/features/metrics/components/metrics-filters";
@@ -81,6 +81,11 @@ function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | 
     data.totals.daysWithNullCapacity > 0
       ? data.totals.daysWithNullCapacity
       : data.series.filter((bucket) => bucket.occupancyRate === null || bucket.capacityMinutes === null).length;
+  const [isOccupancyCalloutDismissed, setIsOccupancyCalloutDismissed] = useState(false);
+
+  useEffect(() => {
+    setIsOccupancyCalloutDismissed(false);
+  }, [data.meta.from, data.meta.to, data.meta.granularity, unknownOccupancyDays, hasNullOccupancy]);
 
   if (!hasMeaningfulMetrics(data)) {
     return <MetricsEmptyState />;
@@ -91,7 +96,12 @@ function MetricsContent({ data, showTopResources }: { data: TenantMetricsData | 
       <div className="flex justify-end">
         {liveToday && <LiveTodayBadge />}
       </div>
-      {hasNullOccupancy && <OccupancyUnknownCallout unknownDays={unknownOccupancyDays} />}
+      {hasNullOccupancy && !isOccupancyCalloutDismissed && (
+        <OccupancyUnknownCallout
+          unknownDays={unknownOccupancyDays}
+          onClose={() => setIsOccupancyCalloutDismissed(true)}
+        />
+      )}
       <MetricsKpiGrid totals={data.totals} currency={currency} />
       <div className="grid gap-3 xl:grid-cols-2">
         <RevenueBookingsChart series={data.series} granularity={granularity} currency={currency} />

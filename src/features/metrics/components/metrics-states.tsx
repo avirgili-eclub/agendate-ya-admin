@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarX2, Lock, UserRoundCheck } from "lucide-react";
+import { AlertTriangle, CalendarX2, Lock, UserRoundCheck, X } from "lucide-react";
 
 import { MetricsKpiGrid } from "@/features/metrics/components/metrics-kpi-grid";
 import { OccupancyChart } from "@/features/metrics/components/occupancy-chart";
@@ -136,17 +136,27 @@ export function ResourceNotAssignedState() {
   );
 }
 
-export function OccupancyUnknownCallout({ unknownDays }: { unknownDays: number }) {
+export function OccupancyUnknownCallout({ unknownDays, onClose }: { unknownDays: number; onClose: () => void }) {
   return (
-    <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900" role="status">
-      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <div>
-        <p className="text-sm font-semibold">Ocupación parcialmente no disponible</p>
-        <p className="mt-1 text-xs">
-          Hay {unknownDays} {unknownDays === 1 ? "día" : "días"} sin disponibilidad configurada. Esos días quedan como
-          "Sin configurar", no se toman como 0% y quedan fuera del promedio de ocupación.
-        </p>
+    <div className="flex items-start justify-between gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-900" role="status">
+      <div className="flex min-w-0 gap-2.5">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Ocupación parcialmente no disponible</p>
+          <p className="mt-1 text-xs">
+            Hay {unknownDays} {unknownDays === 1 ? "día" : "días"} sin disponibilidad configurada. Esos días quedan como
+            "Sin configurar", no se toman como 0% y quedan fuera del promedio de ocupación.
+          </p>
+        </div>
       </div>
+      <button
+        type="button"
+        onClick={onClose}
+        className="shrink-0 rounded-md p-1 text-amber-700 transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+        aria-label="Cerrar aviso de ocupación parcialmente no disponible"
+      >
+        <X className="size-4" />
+      </button>
     </div>
   );
 }
