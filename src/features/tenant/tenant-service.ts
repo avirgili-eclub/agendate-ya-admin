@@ -45,6 +45,29 @@ export type TenantUpdateInput = {
   youtubeUrl?: string;
 };
 
+export type BookingDurationRoundingMode = "EXACT" | "ROUND_UP";
+
+export type TenantSchedulingSettings = {
+  useDefaultSchedulingPolicy: boolean;
+  publicSlotIntervalMinutes: number | null;
+  bookingDurationRoundingMode: BookingDurationRoundingMode | null;
+  bookingDurationRoundingMinutes: number | null;
+  effectivePublicSlotIntervalMinutes: number | null;
+  effectiveBookingDurationRoundingMode: BookingDurationRoundingMode | null;
+  effectiveBookingDurationRoundingMinutes: number | null;
+};
+
+export type TenantSchedulingSettingsUpdateInput =
+  | {
+      useDefaultSchedulingPolicy: true;
+    }
+  | {
+      useDefaultSchedulingPolicy?: false;
+      publicSlotIntervalMinutes: number;
+      bookingDurationRoundingMode: BookingDurationRoundingMode;
+      bookingDurationRoundingMinutes: number | null;
+    };
+
 export type PublishTenantSiteResult = {
   published: boolean;
   siteUrl?: string;
@@ -52,6 +75,16 @@ export type PublishTenantSiteResult = {
 };
 
 type DataEnvelope<T> = { data: T };
+
+type ApiTenantSchedulingSettings = {
+  useDefaultSchedulingPolicy?: boolean | null;
+  publicSlotIntervalMinutes?: number | null;
+  bookingDurationRoundingMode?: BookingDurationRoundingMode | null;
+  bookingDurationRoundingMinutes?: number | null;
+  effectivePublicSlotIntervalMinutes?: number | null;
+  effectiveBookingDurationRoundingMode?: BookingDurationRoundingMode | null;
+  effectiveBookingDurationRoundingMinutes?: number | null;
+};
 
 type ApiTenant = {
   id: string;
@@ -116,6 +149,36 @@ function mapApiTenantToInfo(api: ApiTenant): TenantInfo {
   };
 }
 
+function mapApiTenantSchedulingSettings(
+  api: ApiTenantSchedulingSettings,
+): TenantSchedulingSettings {
+  const usesDefault =
+    api.useDefaultSchedulingPolicy ??
+    (api.publicSlotIntervalMinutes == null &&
+      api.bookingDurationRoundingMode == null &&
+      api.bookingDurationRoundingMinutes == null);
+
+  return {
+    useDefaultSchedulingPolicy: usesDefault,
+    publicSlotIntervalMinutes: api.publicSlotIntervalMinutes ?? null,
+    bookingDurationRoundingMode: api.bookingDurationRoundingMode ?? null,
+    bookingDurationRoundingMinutes: api.bookingDurationRoundingMinutes ?? null,
+    effectivePublicSlotIntervalMinutes: api.effectivePublicSlotIntervalMinutes ?? null,
+    effectiveBookingDurationRoundingMode: api.effectiveBookingDurationRoundingMode ?? null,
+    effectiveBookingDurationRoundingMinutes: api.effectiveBookingDurationRoundingMinutes ?? null,
+  };
+}
+
+function unwrapTenantSchedulingSettings(
+  response: DataEnvelope<ApiTenantSchedulingSettings> | ApiTenantSchedulingSettings,
+): ApiTenantSchedulingSettings {
+  if (typeof response === "object" && response !== null && "data" in response) {
+    return unwrapData<ApiTenantSchedulingSettings>(response);
+  }
+
+  return response;
+}
+
 export async function fetchTenantInfo(): Promise<TenantInfo> {
   const response = await httpRequest<DataEnvelope<ApiTenant>>("/tenant");
   return mapApiTenantToInfo(unwrapData<ApiTenant>(response));
@@ -127,6 +190,25 @@ export async function updateTenantInfo(input: TenantUpdateInput): Promise<Tenant
     body: input,
   });
   return mapApiTenantToInfo(unwrapData<ApiTenant>(response));
+}
+
+export async function fetchTenantSchedulingSettings(): Promise<TenantSchedulingSettings> {
+  const response = await httpRequest<
+    DataEnvelope<ApiTenantSchedulingSettings> | ApiTenantSchedulingSettings
+  >("/tenant/settings");
+  return mapApiTenantSchedulingSettings(unwrapTenantSchedulingSettings(response));
+}
+
+export async function updateTenantSchedulingSettings(
+  input: TenantSchedulingSettingsUpdateInput,
+): Promise<TenantSchedulingSettings> {
+  const response = await httpRequest<
+    DataEnvelope<ApiTenantSchedulingSettings> | ApiTenantSchedulingSettings
+  >("/tenant/settings", {
+    method: "PUT",
+    body: input,
+  });
+  return mapApiTenantSchedulingSettings(unwrapTenantSchedulingSettings(response));
 }
 
 type PublishSiteApiResponse = {

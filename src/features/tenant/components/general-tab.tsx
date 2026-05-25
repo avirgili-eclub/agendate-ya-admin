@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Building2,
   Calendar,
+  Clock,
   Edit,
   ExternalLink,
   Facebook,
@@ -17,10 +18,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
 import {
+  fetchTenantSchedulingSettings,
   fetchTenantInfo,
   publishTenantSite,
   toTenantFriendlyMessage,
   unpublishTenantSite,
+  updateTenantSchedulingSettings,
+  type BookingDurationRoundingMode,
+  type TenantSchedulingSettings,
+  type TenantSchedulingSettingsUpdateInput,
   updateTenantInfo,
   type TenantUpdateInput,
 } from "@/features/tenant/tenant-service";
@@ -52,6 +58,85 @@ const REQUIREMENTS_LABELS: Record<string, string> = {
     "Al menos 1 recurso debe tener reglas de disponibilidad.",
 };
 
+const ROUNDING_MODE_OPTIONS: Array<{ value: BookingDurationRoundingMode; label: string }> = [
+  { value: "EXACT", label: "Exacto: ocupa lo que dura el servicio" },
+  { value: "ROUND_UP", label: "Redondear hacia arriba: ocupa bloques completos" },
+];
+
+function formatMinutes(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "No definido";
+  return `${value} minuto${value === 1 ? "" : "s"}`;
+}
+
+function getRoundingModeLabel(value: BookingDurationRoundingMode | null | undefined): string {
+  if (value === "EXACT") return "Exacto";
+  if (value === "ROUND_UP") return "Redondear hacia arriba";
+  return "No definido";
+}
+
+function formatDefaultValue(value: string): string {
+  return `${value} (predeterminado)`;
+}
+
+function hasCustomSchedulingPolicy(settings: TenantSchedulingSettings): boolean {
+  return !settings.useDefaultSchedulingPolicy;
+}
+
+function getInitialSchedulingDraft(settings: TenantSchedulingSettings) {
+  const mode =
+    settings.bookingDurationRoundingMode ??
+    settings.effectiveBookingDurationRoundingMode ??
+    "EXACT";
+
+  return {
+    publicSlotIntervalMinutes: String(
+      settings.publicSlotIntervalMinutes ?? settings.effectivePublicSlotIntervalMinutes ?? "",
+    ),
+    bookingDurationRoundingMode: mode,
+    bookingDurationRoundingMinutes: String(
+      settings.bookingDurationRoundingMinutes ??
+        settings.effectiveBookingDurationRoundingMinutes ??
+        "",
+    ),
+  };
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const parsed = Number(value.trim());
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function getConfiguredSlotIntervalLabel(settings: TenantSchedulingSettings): string {
+  if (settings.publicSlotIntervalMinutes !== null) {
+    return formatMinutes(settings.publicSlotIntervalMinutes);
+  }
+
+  return formatDefaultValue(formatMinutes(settings.effectivePublicSlotIntervalMinutes));
+}
+
+function getConfiguredRoundingModeLabel(settings: TenantSchedulingSettings): string {
+  if (settings.bookingDurationRoundingMode !== null) {
+    return getRoundingModeLabel(settings.bookingDurationRoundingMode);
+  }
+
+  return formatDefaultValue(getRoundingModeLabel(settings.effectiveBookingDurationRoundingMode));
+}
+
+function getConfiguredRoundingMinutesLabel(settings: TenantSchedulingSettings): string {
+  const mode = settings.bookingDurationRoundingMode ?? settings.effectiveBookingDurationRoundingMode;
+
+  if (mode === "EXACT") {
+    return "No aplica";
+  }
+
+  if (settings.bookingDurationRoundingMinutes !== null) {
+    return formatMinutes(settings.bookingDurationRoundingMinutes);
+  }
+
+  return formatDefaultValue(formatMinutes(settings.effectiveBookingDurationRoundingMinutes));
+}
+
 function mapPublishRequirementLabel(message: string): string {
   return REQUIREMENTS_LABELS[message] ?? message;
 }
@@ -72,10 +157,25 @@ export function GeneralTab() {
   const [timezone, setTimezone] = useState("");
   const [businessSubType, setBusinessSubType] = useState("");
   const [publishWarnings, setPublishWarnings] = useState<string[]>([]);
+  const [isSchedulingEditing, setIsSchedulingEditing] = useState(false);
+  const [publicSlotIntervalMinutes, setPublicSlotIntervalMinutes] = useState("");
+  const [bookingDurationRoundingMode, setBookingDurationRoundingMode] =
+    useState<BookingDurationRoundingMode>("EXACT");
+  const [bookingDurationRoundingMinutes, setBookingDurationRoundingMinutes] = useState("");
+  const [schedulingValidationError, setSchedulingValidationError] = useState<string | null>(null);
 
   const { data: tenantInfo, isLoading, error } = useQuery({
     queryKey: ["tenant-info"],
     queryFn: fetchTenantInfo,
+  });
+
+  const {
+    data: schedulingSettings,
+    isLoading: isLoadingSchedulingSettings,
+    error: schedulingSettingsError,
+  } = useQuery({
+    queryKey: ["tenant-scheduling-settings"],
+    queryFn: fetchTenantSchedulingSettings,
   });
 
   const { data: businessSubTypeOptions = [] } = useQuery({
@@ -99,6 +199,16 @@ export function GeneralTab() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tenant-info"] });
       setIsEditing(false);
+    },
+  });
+
+  const schedulingMutation = useMutation({
+    mutationFn: updateTenantSchedulingSettings,
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["tenant-scheduling-settings"], saved);
+      void queryClient.invalidateQueries({ queryKey: ["tenant-scheduling-settings"] });
+      setSchedulingValidationError(null);
+      setIsSchedulingEditing(false);
     },
   });
 
@@ -137,6 +247,76 @@ export function GeneralTab() {
   const handleCancelEdit = () => {
     setIsEditing(false);
     updateMutation.reset();
+  };
+
+  const handleStartSchedulingEdit = () => {
+    if (!schedulingSettings) return;
+    const draft = getInitialSchedulingDraft(schedulingSettings);
+    setPublicSlotIntervalMinutes(draft.publicSlotIntervalMinutes);
+    setBookingDurationRoundingMode(draft.bookingDurationRoundingMode);
+    setBookingDurationRoundingMinutes(draft.bookingDurationRoundingMinutes);
+    setSchedulingValidationError(null);
+    schedulingMutation.reset();
+    setIsSchedulingEditing(true);
+  };
+
+  const handleCancelSchedulingEdit = () => {
+    setIsSchedulingEditing(false);
+    setSchedulingValidationError(null);
+    schedulingMutation.reset();
+  };
+
+  const buildSchedulingPayload = (): TenantSchedulingSettingsUpdateInput | null => {
+    const parsedSlotInterval = parsePositiveInteger(publicSlotIntervalMinutes);
+    if (parsedSlotInterval === null) {
+      setSchedulingValidationError("El intervalo publico debe ser un numero positivo.");
+      return null;
+    }
+
+    if (!["EXACT", "ROUND_UP"].includes(bookingDurationRoundingMode)) {
+      setSchedulingValidationError("El modo de ocupacion debe ser Exacto o Redondear hacia arriba.");
+      return null;
+    }
+
+    if (bookingDurationRoundingMode === "EXACT") {
+      return {
+        useDefaultSchedulingPolicy: false,
+        publicSlotIntervalMinutes: parsedSlotInterval,
+        bookingDurationRoundingMode,
+        bookingDurationRoundingMinutes: null,
+      };
+    }
+
+    const parsedRoundingMinutes = parsePositiveInteger(bookingDurationRoundingMinutes);
+    if (parsedRoundingMinutes === null) {
+      setSchedulingValidationError(
+        "El bloque de redondeo es obligatorio y debe ser positivo cuando el modo redondea hacia arriba.",
+      );
+      return null;
+    }
+
+    return {
+      useDefaultSchedulingPolicy: false,
+      publicSlotIntervalMinutes: parsedSlotInterval,
+      bookingDurationRoundingMode,
+      bookingDurationRoundingMinutes: parsedRoundingMinutes,
+    };
+  };
+
+  const handleSchedulingSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const input = buildSchedulingPayload();
+    if (!input) return;
+    setSchedulingValidationError(null);
+    await schedulingMutation.mutateAsync(input);
+  };
+
+  const handleUseDefaultSchedulingPolicy = async () => {
+    setSchedulingValidationError(null);
+    schedulingMutation.reset();
+    await schedulingMutation.mutateAsync({
+      useDefaultSchedulingPolicy: true,
+    });
   };
 
   const handleSubmit = async (event: FormEvent) => {
@@ -213,6 +393,9 @@ export function GeneralTab() {
   if (!tenantInfo) return null;
 
   const updateError = updateMutation.error as AppError | null;
+  const schedulingError =
+    (schedulingMutation.error as AppError | null) ??
+    (schedulingSettingsError as unknown as AppError | null);
   const publishError = publishMutation.error as AppError | null;
   const unpublishError = unpublishMutation.error as AppError | null;
   const publishRequirementDetails = publishError?.details?.map((detail) => detail.message) ?? [];
@@ -220,6 +403,9 @@ export function GeneralTab() {
     (publishError?.code === "PUBLISH_REQUIREMENTS_NOT_MET" || publishError?.status === 422) &&
     publishRequirementDetails.length > 0;
   const bookingUrl = getBookingSiteUrl(tenantInfo.slug);
+  const hasCustomPolicy = schedulingSettings
+    ? hasCustomSchedulingPolicy(schedulingSettings)
+    : false;
 
   return (
     <div className="space-y-5">
@@ -707,6 +893,247 @@ export function GeneralTab() {
               </Button>
             </div>
           </form>
+        )}
+      </PageCard>
+
+      <PageCard>
+        <div className="flex items-center justify-between border-b border-neutral-dark pb-4">
+          <div className="flex items-center gap-3">
+            <Clock className="size-5 text-primary" />
+            <div>
+              <h2 className="text-base font-semibold text-primary">Politica de agenda</h2>
+              <p className="text-xs text-primary-light">
+                Controla cada cuanto se muestran horarios y cuanto tiempo queda ocupado el recurso.
+              </p>
+            </div>
+          </div>
+          {!isSchedulingEditing && schedulingSettings && (
+            <Button size="sm" variant="outline" onClick={handleStartSchedulingEdit}>
+              <Edit className="mr-2 size-4" />
+              Editar
+            </Button>
+          )}
+        </div>
+
+        {isLoadingSchedulingSettings && (
+          <div className="mt-4 text-sm text-primary-light">Cargando politica de agenda...</div>
+        )}
+
+        {!isLoadingSchedulingSettings && !schedulingSettings && schedulingError && (
+          <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-600">
+            {toTenantFriendlyMessage(schedulingError)}
+          </div>
+        )}
+
+        {schedulingSettings && (
+          <div className="mt-4 space-y-4">
+            <div
+              className={`rounded-md border p-3 text-sm ${
+                hasCustomPolicy
+                  ? "border-secondary/30 bg-secondary/5 text-secondary-dark"
+                  : "border-neutral-dark bg-neutral text-primary-light"
+              }`}
+            >
+              {hasCustomPolicy
+                ? "Politica de agenda personalizada habilitada."
+                : "Usando la configuracion predeterminada del tipo de negocio."}
+            </div>
+
+            {(schedulingValidationError || schedulingMutation.error) && (
+              <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
+                {schedulingValidationError ??
+                  toTenantFriendlyMessage(schedulingMutation.error as unknown as AppError)}
+              </div>
+            )}
+
+            {!isSchedulingEditing ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-md border border-neutral-dark p-3">
+                    <h3 className="text-sm font-semibold text-primary">Valores configurados</h3>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Intervalo publico</dt>
+                        <dd className="font-medium text-primary">
+                          {getConfiguredSlotIntervalLabel(schedulingSettings)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Modo de ocupacion</dt>
+                        <dd className="font-medium text-primary">
+                          {getConfiguredRoundingModeLabel(schedulingSettings)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Bloque de redondeo</dt>
+                        <dd className="font-medium text-primary">
+                          {getConfiguredRoundingMinutesLabel(schedulingSettings)}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  <div className="rounded-md border border-neutral-dark bg-neutral p-3">
+                    <h3 className="text-sm font-semibold text-primary">Valores efectivos</h3>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Intervalo publico</dt>
+                        <dd className="font-medium text-primary">
+                          {formatMinutes(schedulingSettings.effectivePublicSlotIntervalMinutes)}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Modo de ocupacion</dt>
+                        <dd className="font-medium text-primary">
+                          {getRoundingModeLabel(
+                            schedulingSettings.effectiveBookingDurationRoundingMode,
+                          )}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-primary-light">Bloque de redondeo</dt>
+                        <dd className="font-medium text-primary">
+                          {schedulingSettings.effectiveBookingDurationRoundingMode === "EXACT"
+                            ? "No aplica"
+                            : formatMinutes(
+                                schedulingSettings.effectiveBookingDurationRoundingMinutes,
+                              )}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+
+                <p className="text-xs text-primary-light">
+                  La duracion del servicio se configura en el catalogo de servicios. Esta politica
+                  solo define los horarios visibles y la ocupacion del recurso.
+                </p>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleUseDefaultSchedulingPolicy()}
+                  disabled={!hasCustomPolicy || schedulingMutation.isPending}
+                >
+                  {schedulingMutation.isPending ? "Reseteando..." : "Resetear a default"}
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleSchedulingSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="public-slot-interval"
+                      className="block text-sm font-medium text-primary"
+                    >
+                      Intervalo publico en minutos
+                    </label>
+                    <input
+                      id="public-slot-interval"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={publicSlotIntervalMinutes}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        setPublicSlotIntervalMinutes(event.target.value)
+                      }
+                      className="mt-1 w-full rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light"
+                      placeholder="Ej: 15, 30, 60"
+                    />
+                    <p className="mt-1 text-xs text-primary-light">
+                      Define cada cuanto aparecen horarios disponibles para clientes.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="rounding-mode"
+                      className="block text-sm font-medium text-primary"
+                    >
+                      Modo de ocupacion
+                    </label>
+                    <select
+                      id="rounding-mode"
+                      value={bookingDurationRoundingMode}
+                      onChange={(event: ChangeEvent<HTMLSelectElement>) =>
+                        setBookingDurationRoundingMode(
+                          event.target.value as BookingDurationRoundingMode,
+                        )
+                      }
+                      className="mt-1 w-full rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light"
+                    >
+                      {ROUNDING_MODE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {bookingDurationRoundingMode === "ROUND_UP" && (
+                  <div>
+                    <label
+                      htmlFor="rounding-minutes"
+                      className="block text-sm font-medium text-primary"
+                    >
+                      Bloque de redondeo en minutos
+                    </label>
+                    <input
+                      id="rounding-minutes"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={bookingDurationRoundingMinutes}
+                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                        setBookingDurationRoundingMinutes(event.target.value)
+                      }
+                      className="mt-1 w-full rounded-md border border-neutral-dark bg-white px-3 py-2 text-sm text-primary focus:border-primary-light focus:outline-none focus:ring-1 focus:ring-primary-light"
+                      placeholder="Ej: 60"
+                    />
+                    <p className="mt-1 text-xs text-primary-light">
+                      Ejemplo: un servicio de 50 minutos con bloque de 60 ocupa una hora completa.
+                    </p>
+                  </div>
+                )}
+
+                {bookingDurationRoundingMode === "EXACT" && (
+                  <div className="rounded-md border border-neutral-dark bg-neutral p-3 text-xs text-primary-light">
+                    En modo exacto, la ocupacion del recurso coincide con la duracion del servicio.
+                    No se envia bloque de redondeo.
+                  </div>
+                )}
+
+                <div className="flex flex-wrap justify-between gap-3 border-t border-neutral-dark pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleUseDefaultSchedulingPolicy()}
+                    disabled={!hasCustomPolicy || schedulingMutation.isPending}
+                  >
+                    Resetear a default
+                  </Button>
+
+                  <div className="flex gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCancelSchedulingEdit}
+                      disabled={schedulingMutation.isPending}
+                    >
+                      <X className="mr-2 size-4" />
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={schedulingMutation.isPending}>
+                      <Save className="mr-2 size-4" />
+                      {schedulingMutation.isPending ? "Guardando..." : "Guardar politica"}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </PageCard>
 
