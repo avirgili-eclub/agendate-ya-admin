@@ -114,6 +114,13 @@ function allowOnlyProfessional() {
   }
 }
 
+function validateSettingsSearch(search: Record<string, unknown>) {
+  return {
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+    whatsapp: typeof search.whatsapp === "string" ? search.whatsapp : undefined,
+  };
+}
+
 const loginRoute = createRoute({
   getParentRoute: () => publicRoute,
   path: "/login",
@@ -267,6 +274,7 @@ const teamRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/configuracion",
+  validateSearch: validateSettingsSearch,
   beforeLoad: blockProfessionalRestrictedRoutes,
   component: TenantSettingsPage,
 });
@@ -274,6 +282,7 @@ const settingsRoute = createRoute({
 const legacySettingsRoute = createRoute({
   getParentRoute: () => privateRoute,
   path: "/settings",
+  validateSearch: validateSettingsSearch,
   beforeLoad: blockProfessionalRestrictedRoutes,
   component: TenantSettingsPage,
 });

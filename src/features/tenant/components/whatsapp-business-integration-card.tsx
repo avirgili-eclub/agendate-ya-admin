@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, RefreshCw, Unlink } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -26,6 +26,9 @@ import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
 const WHATSAPP_GREEN = "bg-[#25D366] hover:bg-[#1ebe5d] focus-visible:ring-[#25D366]/30";
+const WHATSAPP_POPUP_NAME = "wa-onboarding";
+const WHATSAPP_POPUP_WIDTH = 600;
+const WHATSAPP_POPUP_HEIGHT = 750;
 
 type WhatsappActivationState = "idle" | "polling" | "connected" | "timeout" | "failed";
 
@@ -67,7 +70,7 @@ function getStateCopy(params: {
   }
 
   if (statusLabel === "Pendiente") {
-    return "Conexi?n en proceso. Podés reanudar la configuraci?n cuando quieras.";
+    return "Conexión en proceso. Podés reanudar la configuración cuando quieras.";
   }
 
   if (statusLabel === "Requiere atención") {
@@ -93,6 +96,61 @@ function getStatusPanelClass(tone: WhatsappBusinessStatusTone) {
   return "border-neutral-dark bg-neutral";
 }
 
+function getPopupFeatures() {
+  if (typeof window === "undefined") {
+    return "width=600,height=750";
+  }
+
+  const left = Math.max(0, Math.round((window.screen.width - WHATSAPP_POPUP_WIDTH) / 2));
+  const top = Math.max(0, Math.round((window.screen.height - WHATSAPP_POPUP_HEIGHT) / 2));
+  return `width=${WHATSAPP_POPUP_WIDTH},height=${WHATSAPP_POPUP_HEIGHT},left=${left},top=${top}`;
+}
+
+function writePopupLoadingState(popup: Window) {
+  try {
+    popup.document.open();
+    popup.document.write(`
+      <!doctype html>
+      <html lang="es">
+        <head>
+          <title>Conectando WhatsApp Business</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <style>
+            body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: Inter, system-ui, sans-serif; background: #f7fafc; color: #1a365d; }
+            main { width: min(420px, calc(100vw - 32px)); border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: 28px; text-align: center; box-shadow: 0 12px 32px rgba(16, 42, 76, 0.12); }
+            .icon { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 999px; background: rgba(37, 211, 102, 0.15); color: #128C7E; display: grid; place-items: center; font-size: 24px; }
+            h1 { margin: 0 0 8px; font-size: 18px; }
+            p { margin: 0; font-size: 14px; line-height: 1.5; color: #2c4f82; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <div class="icon" aria-hidden="true">●</div>
+            <h1>Preparando conexión</h1>
+            <p>Estamos abriendo la configuración segura de WhatsApp Business. No cierres esta ventana.</p>
+          </main>
+        </body>
+      </html>
+    `);
+    popup.document.close();
+  } catch {
+    // Some browsers can restrict about:blank document writes; the popup can still navigate later.
+  }
+}
+
+function openWhatsappOnboardingPopup() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const popup = window.open("about:blank", WHATSAPP_POPUP_NAME, getPopupFeatures());
+  if (popup) {
+    popup.focus();
+    writePopupLoadingState(popup);
+  }
+  return popup;
+}
+
 export function WhatsappBusinessIntegrationCard({
   whatsappAvailable = true,
   capabilitiesLoading = false,
@@ -104,6 +162,8 @@ export function WhatsappBusinessIntegrationCard({
   const canManage = canManageWhatsappBusinessConnection(session.user?.role);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [fallbackSetupLinkUrl, setFallbackSetupLinkUrl] = useState<string | null>(null);
+  const popupWatcherRef = useRef<number | undefined>(undefined);
 
   const statusQuery = useQuery({
     queryKey: whatsappBusinessKeys.status(),
@@ -118,12 +178,54 @@ export function WhatsappBusinessIntegrationCard({
   const stateCopy = getStateCopy({ activationState, statusLabel, isConnected });
   const capabilityLabels = useMemo(() => (status ? getWhatsappBusinessCapabilityLabels(status) : []), [status]);
 
+  function clearPopupWatcher() {
+    if (popupWatcherRef.current !== undefined) {
+      window.clearInterval(popupWatcherRef.current);
+      popupWatcherRef.current = undefined;
+    }
+  }
+
+  function closePopup(popup: Window | null) {
+    if (!popup || popup.closed) return;
+    popup.close();
+  }
+
+  function watchPopupClosure(popup: Window) {
+    clearPopupWatcher();
+    popupWatcherRef.current = window.setInterval(() => {
+      if (!popup.closed) return;
+      clearPopupWatcher();
+      void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+    }, 1000);
+  }
+
+  useEffect(() => {
+    return () => {
+      clearPopupWatcher();
+    };
+  }, []);
+
   const startOnboardingMutation = useMutation({
-    mutationFn: startWhatsappBusinessOnboarding,
-    onSuccess: ({ setupLinkUrl }) => {
-      window.location.href = setupLinkUrl;
+    mutationFn: async (popup: Window | null) => {
+      const response = await startWhatsappBusinessOnboarding();
+      return { popup, response };
     },
-    onError: async (error) => {
+    onSuccess: ({ popup, response }) => {
+      if (popup && !popup.closed) {
+        popup.location.href = response.setupLinkUrl;
+        watchPopupClosure(popup);
+        return;
+      }
+
+      setFallbackSetupLinkUrl(response.setupLinkUrl);
+      showFeedback(
+        "warning",
+        "Tu navegador bloqueó la ventana emergente. Podés continuar la conexión en esta pestaña.",
+      );
+    },
+    onError: async (error, popup) => {
+      closePopup(popup);
+      clearPopupWatcher();
       const appError = error as unknown as AppError;
       if (appError.code === "WHATSAPP_ALREADY_CONNECTED") {
         await queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
@@ -145,6 +247,20 @@ export function WhatsappBusinessIntegrationCard({
   });
 
   const canStartOnboarding = canManage && whatsappAvailable && !isConnected;
+
+  function handleStartOnboarding() {
+    setFallbackSetupLinkUrl(null);
+    const popup = openWhatsappOnboardingPopup();
+    if (!popup) {
+      showFeedback("warning", "Tu navegador bloqueó la ventana emergente. Estamos preparando una alternativa.");
+    }
+    startOnboardingMutation.mutate(popup);
+  }
+
+  function handleFallbackRedirect() {
+    if (!fallbackSetupLinkUrl) return;
+    window.location.href = fallbackSetupLinkUrl;
+  }
 
   return (
     <PageCard className="flex flex-col overflow-hidden">
@@ -243,12 +359,18 @@ export function WhatsappBusinessIntegrationCard({
                   <Button
                     type="button"
                     className={`${WHATSAPP_GREEN} w-full text-white sm:w-auto`}
-                    onClick={() => startOnboardingMutation.mutate()}
+                    onClick={handleStartOnboarding}
                     disabled={!canStartOnboarding || startOnboardingMutation.isPending || activationState === "polling"}
                     aria-label="Conectar WhatsApp Business"
                   >
                     <MessageCircle className="mr-2 size-4" aria-hidden="true" />
                     {startOnboardingMutation.isPending ? "Abriendo WhatsApp..." : "Conectar WhatsApp"}
+                  </Button>
+                ) : null}
+
+                {fallbackSetupLinkUrl && !isConnected ? (
+                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleFallbackRedirect}>
+                    Continuar en esta pestaña
                   </Button>
                 ) : null}
 

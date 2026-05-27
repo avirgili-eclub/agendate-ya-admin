@@ -72,7 +72,7 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
   let numberCalls = 0;
   let disconnectCalls = 0;
 
-  await page.route("**/api/v1/**", async (route) => {
+  await page.context().route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;
@@ -157,7 +157,7 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
       statusPollsAfterStart = 0;
       await fulfillJson(route, {
         data: {
-          setupLinkUrl: new URL("/configuracion?tab=integrations&whatsapp=connected", page.url()).toString(),
+          setupLinkUrl: new URL("/settings?whatsapp=connected", page.url()).toString(),
           expiresAt: "2026-05-28T10:00:00Z",
         },
       });
@@ -202,8 +202,13 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
   };
 }
 
-async function openIntegrations(page: Page) {
+async function openIntegrations(page: Page, options: { blockPopups?: boolean } = {}) {
   await seedAuthenticatedSession(page, "TENANT_ADMIN");
+  if (options.blockPopups) {
+    await page.addInitScript(() => {
+      window.open = () => null;
+    });
+  }
   await page.goto("/configuracion?tab=integrations");
   await expect(page.getByRole("heading", { name: "Google Calendar" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "WhatsApp Business" })).toBeVisible();
@@ -216,9 +221,11 @@ test.describe("WhatsApp Business integration card", () => {
 
     await expect(page.getByLabel(/Número de WhatsApp Business/i)).toHaveCount(0);
     await expect(page.locator("span").filter({ hasText: /^Sin conectar$/ })).toBeVisible();
+    const popupPromise = page.waitForEvent("popup");
     await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
+    const popup = await popupPromise;
 
-    await expect(page.getByText("Estamos terminando de activar tu WhatsApp Business").first()).toBeVisible();
+    await expect.poll(() => popup.isClosed()).toBe(true);
     await expect(page.locator("span").filter({ hasText: /^Activo$/ })).toBeVisible({ timeout: 5000 });
     await expect(page.getByText("Agenda Test")).toBeVisible();
     await expect(page).not.toHaveURL(/whatsapp=/);
@@ -259,6 +266,21 @@ test.describe("WhatsApp Business integration card", () => {
     await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
 
     await expect(page.getByText("WhatsApp Business no está disponible en este momento")).toBeVisible();
+    expect(api.startCalls).toBe(1);
+    expect(api.numberCalls).toBe(0);
+  });
+
+  test("offers a full-page fallback when the onboarding popup is blocked", async ({ page }) => {
+    const api = await mockIntegrationsApi(page);
+    await openIntegrations(page, { blockPopups: true });
+
+    await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
+
+    await expect(page.getByText("Tu navegador bloqueó la ventana emergente").first()).toBeVisible();
+    await page.getByRole("button", { name: "Continuar en esta pestaña" }).click();
+    await expect(page.locator("span").filter({ hasText: /^Activo$/ })).toBeVisible({ timeout: 5000 });
+    await expect(page).not.toHaveURL(/whatsapp=/);
+
     expect(api.startCalls).toBe(1);
     expect(api.numberCalls).toBe(0);
   });
