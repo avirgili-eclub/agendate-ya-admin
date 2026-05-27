@@ -379,8 +379,11 @@ export function MembershipCreatePanel({
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+  }
+
+  function handleConfirmCreate() {
     if (!validateClientPlanStep() || !validateScheduleStep()) {
       return;
     }
@@ -448,7 +451,7 @@ export function MembershipCreatePanel({
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <form className="space-y-5" onSubmit={handleFormSubmit}>
       <StepIndicator currentStep={step} />
 
       {serverError ? <FeedbackBanner tone="error" message={serverError} /> : null}
@@ -711,7 +714,7 @@ export function MembershipCreatePanel({
           {step === "client-plan" ? "Cancelar" : "Volver"}
         </Button>
         {step === "review" ? (
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="button" onClick={handleConfirmCreate} disabled={isSubmitting}>
             {isSubmitting ? "Creando..." : "Crear membresia"}
           </Button>
         ) : (

@@ -25,6 +25,8 @@ export type AppErrorCode =
   | "RESOURCE_CALENDAR_NOT_CREATED"
   | "GOOGLE_CALENDAR_NOT_CONNECTED"
   | "GOOGLE_CALENDAR_NEEDS_REAUTH"
+  | "WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED"
+  | "WHATSAPP_ALREADY_CONNECTED"
   | "CALENDAR_SYNC_RATE_LIMITED"
   | "INVALID_PARAMETER"
   | "REQUEST_TIMEOUT"
@@ -129,6 +131,12 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   if (normalized.includes("GOOGLE_CALENDAR_NEEDS_REAUTH")) {
     return "GOOGLE_CALENDAR_NEEDS_REAUTH";
   }
+  if (normalized.includes("WHATSAPP_ALREADY_CONNECTED")) {
+    return "WHATSAPP_ALREADY_CONNECTED";
+  }
+  if (normalized.includes("WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED")) {
+    return "WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED";
+  }
   if (normalized.includes("CALENDAR_SYNC_RATE_LIMITED")) {
     return "CALENDAR_SYNC_RATE_LIMITED";
   }
@@ -202,6 +210,7 @@ export function toAppError(input: {
     404: "NOT_FOUND",
     408: "REQUEST_TIMEOUT",
     409: "BOOKING_CONFLICT",
+    502: "SERVICE_UNAVAILABLE",
     422: "INVALID_STATE_TRANSITION",
     429: "RATE_LIMIT_EXCEEDED",
     503: "SERVICE_UNAVAILABLE",
@@ -217,3 +226,4 @@ export function toAppError(input: {
     retryAfterSeconds: input.retryAfterSeconds,
   };
 }
+

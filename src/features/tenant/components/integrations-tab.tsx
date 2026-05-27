@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, RefreshCw, Unlink, CalendarDays } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -19,6 +19,15 @@ import { PageCard } from "@/shared/ui/page-card";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useNotifications } from "@/shared/notifications/notification-store";
+import { WhatsappBusinessIntegrationCard } from "@/features/tenant/components/whatsapp-business-integration-card";
+import { canUseWhatsappBusiness } from "@/features/tenant/tenant-capabilities-types";
+import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
+import {
+  fetchWhatsappBusinessStatus,
+  WHATSAPP_ONBOARDING_POLL_INTERVAL_MS,
+  WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS,
+  whatsappBusinessKeys,
+} from "@/features/whatsapp-business/whatsapp-business-service";
 
 export function IntegrationsTab() {
   const queryClient = useQueryClient();
@@ -27,6 +36,10 @@ export function IntegrationsTab() {
   const canManage = canManageGoogleCalendarConnection(session.user?.role);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const { addNotification } = useNotifications();
+  const [whatsappActivationState, setWhatsappActivationState] = useState<"idle" | "polling" | "connected" | "timeout" | "failed">("idle");
+
+  const capabilitiesQuery = useTenantCapabilitiesQuery();
+  const whatsappAvailable = canUseWhatsappBusiness(capabilitiesQuery.data);
 
   const calendarStatusQuery = useQuery({
     queryKey: ["google-calendar", "auth-status"],
@@ -63,6 +76,100 @@ export function IntegrationsTab() {
     if (!status) return;
     setGoogleCalendarAlertStatus(status === "NEEDS_REAUTH" ? "NEEDS_REAUTH" : "NONE");
   }, [calendarStatusQuery.data?.status, canView]);
+
+  const handleWhatsappReturn = useCallback(
+    (whatsappStatus: string | null) => {
+      if (whatsappStatus === "connected") {
+        setWhatsappActivationState("polling");
+        showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activación.", { persist: false });
+        void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+        return;
+      }
+
+      if (whatsappStatus === "failed" || whatsappStatus === "error") {
+        setWhatsappActivationState("failed");
+        showFeedback("error", "No se pudo completar la conexión con WhatsApp Business. Podés intentarlo de nuevo.", {
+          persist: false,
+        });
+      }
+    },
+    [queryClient, showFeedback],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const whatsappStatus = url.searchParams.get("whatsapp");
+    if (!whatsappStatus) return;
+
+    handleWhatsappReturn(whatsappStatus);
+
+    url.searchParams.delete("whatsapp");
+    if (!url.searchParams.has("tab")) {
+      url.searchParams.set("tab", "integrations");
+    }
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [handleWhatsappReturn]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function onWhatsappOnboardingMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: unknown; result?: unknown } | null;
+      if (data?.type !== "wa-onboarding") return;
+      const result = typeof data.result === "string" ? data.result : null;
+      handleWhatsappReturn(result);
+    }
+
+    window.addEventListener("message", onWhatsappOnboardingMessage);
+    return () => window.removeEventListener("message", onWhatsappOnboardingMessage);
+  }, [handleWhatsappReturn]);
+
+  useEffect(() => {
+    if (whatsappActivationState !== "polling") return;
+
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const startedAt = Date.now();
+
+    async function pollStatus() {
+      if (cancelled) return;
+
+      try {
+        const status = await queryClient.fetchQuery({
+          queryKey: whatsappBusinessKeys.status(),
+          queryFn: fetchWhatsappBusinessStatus,
+        });
+
+        if (cancelled) return;
+
+        if (status.connected || status.status === "ACTIVE" || status.status === "CONNECTED") {
+          setWhatsappActivationState("connected");
+          showFeedback("success", "WhatsApp Business qued? activo correctamente.", { persist: false });
+          return;
+        }
+      } catch {
+        // Keep polling until the bounded timeout; activation lag is expected here.
+      }
+
+      if (Date.now() - startedAt >= WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS) {
+        setWhatsappActivationState("timeout");
+        return;
+      }
+
+      timeoutId = window.setTimeout(pollStatus, WHATSAPP_ONBOARDING_POLL_INTERVAL_MS);
+    }
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [addNotification, queryClient, showFeedback, whatsappActivationState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -139,7 +246,8 @@ export function IntegrationsTab() {
     <div className="space-y-5">
       {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
-      <PageCard>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PageCard>
         <div className="flex items-center gap-3 border-b border-neutral-dark pb-4">
           <CalendarDays className="size-5 text-primary" />
           <div>
@@ -152,7 +260,7 @@ export function IntegrationsTab() {
           {!canView && (
             <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
               <p className="text-sm text-primary-light">
-                Esta integración solo es visible para administradores del tenant.
+                Esta integración solo es visible para administradores.
               </p>
             </div>
           )}
@@ -193,7 +301,7 @@ export function IntegrationsTab() {
                       {disconnectMutation.isPending ? "Desconectando..." : "Desconectar"}
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede desconectar esta integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede desconectar esta integración.</p>
                   )}
                 </>
               )}
@@ -210,7 +318,7 @@ export function IntegrationsTab() {
                       Reconectar con Google
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede reconectar la integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede reconectar la integración.</p>
                   )}
                 </>
               )}
@@ -229,14 +337,21 @@ export function IntegrationsTab() {
                       Conectar con Google
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede conectar la integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede conectar la integración.</p>
                   )}
                 </>
               )}
             </>
           )}
         </div>
-      </PageCard>
+        </PageCard>
+
+        <WhatsappBusinessIntegrationCard
+          whatsappAvailable={whatsappAvailable}
+          capabilitiesLoading={capabilitiesQuery.isLoading}
+          activationState={whatsappActivationState}
+        />
+      </div>
     </div>
   );
 }
