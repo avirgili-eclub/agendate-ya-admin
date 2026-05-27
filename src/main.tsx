@@ -5,10 +5,14 @@ import { RouterProvider } from "@tanstack/react-router";
 import "react-international-phone/style.css";
 import "@/styles/globals.css";
 import { AppProviders } from "@/app/providers";
-import { configureAuthHandlers } from "@/core/auth/auth-service";
+import { configureAuthHandlers, isLogoutIntentActive } from "@/core/auth/auth-service";
 import { router } from "@/router";
 
 configureAuthHandlers(() => {
+  if (isLogoutIntentActive()) {
+    void router.navigate({ to: "/login" });
+    return;
+  }
   void router.navigate({ to: "/login", search: { reason: "session-expired" } });
 });
 
