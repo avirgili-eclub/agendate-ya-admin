@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link2, RefreshCw, Unlink, CalendarDays } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -77,28 +77,54 @@ export function IntegrationsTab() {
     setGoogleCalendarAlertStatus(status === "NEEDS_REAUTH" ? "NEEDS_REAUTH" : "NONE");
   }, [calendarStatusQuery.data?.status, canView]);
 
+  const handleWhatsappReturn = useCallback(
+    (whatsappStatus: string | null) => {
+      if (whatsappStatus === "connected") {
+        setWhatsappActivationState("polling");
+        showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activación.", { persist: false });
+        void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+        return;
+      }
+
+      if (whatsappStatus === "failed" || whatsappStatus === "error") {
+        setWhatsappActivationState("failed");
+        showFeedback("error", "No se pudo completar la conexión con WhatsApp Business. Podés intentarlo de nuevo.", {
+          persist: false,
+        });
+      }
+    },
+    [queryClient, showFeedback],
+  );
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const whatsappStatus = url.searchParams.get("whatsapp");
     if (!whatsappStatus) return;
 
-    if (whatsappStatus === "connected") {
-      setWhatsappActivationState("polling");
-      showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activación.", { persist: false });
-      void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
-    }
-
-    if (whatsappStatus === "failed" || whatsappStatus === "error") {
-      setWhatsappActivationState("failed");
-      showFeedback("error", "No se pudo completar la conexión con WhatsApp Business. Podés intentarlo de nuevo.", {
-        persist: false,
-      });
-    }
+    handleWhatsappReturn(whatsappStatus);
 
     url.searchParams.delete("whatsapp");
+    if (!url.searchParams.has("tab")) {
+      url.searchParams.set("tab", "integrations");
+    }
     window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [addNotification, queryClient, showFeedback]);
+  }, [handleWhatsappReturn]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function onWhatsappOnboardingMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: unknown; result?: unknown } | null;
+      if (data?.type !== "wa-onboarding") return;
+      const result = typeof data.result === "string" ? data.result : null;
+      handleWhatsappReturn(result);
+    }
+
+    window.addEventListener("message", onWhatsappOnboardingMessage);
+    return () => window.removeEventListener("message", onWhatsappOnboardingMessage);
+  }, [handleWhatsappReturn]);
 
   useEffect(() => {
     if (whatsappActivationState !== "polling") return;

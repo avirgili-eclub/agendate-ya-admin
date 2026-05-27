@@ -13,6 +13,10 @@ import { PreviewTab } from "./components/preview-tab";
 import { IntegrationsTab } from "./components/integrations-tab";
 
 type TabId = "general" | "branding" | "subscription" | "preview" | "integrations";
+type SettingsSearch = {
+  tab?: string;
+  whatsapp?: string;
+};
 
 const TABS = [
   { id: "general" as const, label: "General", icon: <Settings className="size-4" /> },
@@ -35,7 +39,16 @@ function normalizeTabId(value: string | null): TabId | null {
   return validTabs.includes(value as TabId) ? (value as TabId) : null;
 }
 
-function getTabFromSearch(searchStr: string): TabId {
+function getTabFromSearch(searchStr: string, routeSearch?: SettingsSearch): TabId | null {
+  if (routeSearch?.whatsapp) {
+    return "integrations";
+  }
+
+  const routeTab = normalizeTabId(routeSearch?.tab ?? null);
+  if (routeTab) {
+    return routeTab;
+  }
+
   const browserSearch = typeof window === "undefined" ? "" : window.location.search;
   const browserParams = new URLSearchParams(browserSearch.startsWith("?") ? browserSearch.slice(1) : browserSearch);
   if (browserParams.has("whatsapp")) {
@@ -48,17 +61,79 @@ function getTabFromSearch(searchStr: string): TabId {
     return "integrations";
   }
 
-  return normalizeTabId(params.get("tab")) ?? "general";
+  return normalizeTabId(params.get("tab"));
+}
+
+type WhatsappOnboardingResult = "connected" | "failed" | "error";
+
+function getWhatsappOnboardingResult(): WhatsappOnboardingResult | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const result = params.get("whatsapp");
+  return result === "connected" || result === "failed" || result === "error" ? result : null;
+}
+
+function notifyOpenerFromWhatsappPopup() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (!window.opener || window.opener.closed || window.name !== "wa-onboarding") {
+    return;
+  }
+
+  const result = getWhatsappOnboardingResult();
+  if (!result) {
+    return;
+  }
+
+  window.opener.postMessage({ type: "wa-onboarding", result }, window.location.origin);
+  window.close();
+}
+
+function isWhatsappOnboardingPopupReturn() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return Boolean(window.opener && !window.opener.closed && window.name === "wa-onboarding" && getWhatsappOnboardingResult());
 }
 
 export function TenantSettingsPage() {
+  const routeSearch = useRouterState({ select: (state) => state.location.search as SettingsSearch });
   const searchStr = useRouterState({ select: (state) => state.location.searchStr ?? "" });
-  const [activeTab, setActiveTab] = useState<TabId>(() => getTabFromSearch(searchStr));
+  const [activeTab, setActiveTab] = useState<TabId>(() => getTabFromSearch(searchStr, routeSearch) ?? "general");
   const { feedback, dismissFeedback } = useFeedback("system");
+  const isWhatsappPopupReturn = isWhatsappOnboardingPopupReturn();
 
   useEffect(() => {
-    setActiveTab(getTabFromSearch(searchStr));
-  }, [searchStr]);
+    if (isWhatsappPopupReturn) {
+      notifyOpenerFromWhatsappPopup();
+    }
+  }, [isWhatsappPopupReturn]);
+
+  useEffect(() => {
+    const nextTab = getTabFromSearch(searchStr, routeSearch);
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
+  }, [routeSearch.tab, routeSearch.whatsapp, searchStr]);
+
+  if (isWhatsappPopupReturn) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center rounded-xl border border-neutral-dark bg-neutral-light p-8 text-center">
+        <div className="max-w-sm space-y-2">
+          <h1 className="text-lg font-semibold text-primary">Finalizando conexión</h1>
+          <p className="text-sm text-primary-light">
+            Estamos volviendo a la pestaña principal para confirmar tu WhatsApp Business.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
