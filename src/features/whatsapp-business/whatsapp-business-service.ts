@@ -181,19 +181,19 @@ const baseWhatsappBusinessErrorMapper = createErrorMapper({
 
 export function toWhatsappBusinessFriendlyMessage(error: AppError): string {
   if (error.status === 402 || error.code === "PAYMENT_REQUIRED" || error.code === "SUBSCRIPTION_LIMIT") {
-    return "Tu plan actual no incluye WhatsApp Business. Actualiza tu suscripcion para activarlo.";
+    return "Tu plan actual no incluye WhatsApp Business. Actualizá tu suscripción para activarlo.";
   }
 
   if (error.code === WHATSAPP_ALREADY_CONNECTED) {
-    return "La cuenta de WhatsApp Business ya esta conectada. Estamos actualizando el estado.";
+    return "La cuenta de WhatsApp Business ya está conectada. Estamos actualizando el estado.";
   }
 
   if (error.status === 502 || error.code === "SERVICE_UNAVAILABLE") {
-    return "WhatsApp Business no esta disponible en este momento. Intenta de nuevo mas tarde.";
+    return "WhatsApp Business no está disponible en este momento. Intentá de nuevo más tarde.";
   }
 
   if (error.code === WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED) {
-    return "Este numero aun no esta habilitado para tu cuenta. Escribinos para activarlo.";
+    return "Este n?mero aún no está habilitado para tu cuenta. Escribinos para activarlo.";
   }
 
   return baseWhatsappBusinessErrorMapper(error);

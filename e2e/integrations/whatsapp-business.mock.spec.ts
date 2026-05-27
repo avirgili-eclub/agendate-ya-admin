@@ -4,7 +4,7 @@ import { seedAuthenticatedSession } from "../helpers/auth-session";
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET,PUT,DELETE,OPTIONS",
+  "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
   "access-control-allow-headers": "authorization,content-type",
   "content-type": "application/json; charset=utf-8",
 };
@@ -19,9 +19,16 @@ type WhatsappStatus = {
   displayName: string | null;
 };
 
+type StartError = {
+  status: 402 | 409 | 502;
+  code: "PAYMENT_REQUIRED" | "WHATSAPP_ALREADY_CONNECTED" | "SERVICE_UNAVAILABLE";
+};
+
 type WhatsappMockOptions = {
   initialStatus?: WhatsappStatus;
-  failConfigureWithNotProvisioned?: boolean;
+  capabilitiesAvailable?: boolean;
+  startError?: StartError;
+  activeAfterStartPolls?: number;
 };
 
 const disconnectedStatus: WhatsappStatus = {
@@ -32,6 +39,11 @@ const disconnectedStatus: WhatsappStatus = {
   phoneNumberId: null,
   displayPhoneNumber: null,
   displayName: null,
+};
+
+const pendingStatus: WhatsappStatus = {
+  ...disconnectedStatus,
+  status: "PENDING",
 };
 
 const activeStatus: WhatsappStatus = {
@@ -54,7 +66,10 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
 
 async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}) {
   let whatsappStatus = options.initialStatus ?? disconnectedStatus;
-  const configurePayloads: unknown[] = [];
+  let onboardingStarted = false;
+  let statusPollsAfterStart = 0;
+  let startCalls = 0;
+  let numberCalls = 0;
   let disconnectCalls = 0;
 
   await page.route("**/api/v1/**", async (route) => {
@@ -68,10 +83,11 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
     }
 
     if (pathname.endsWith("/tenant/capabilities")) {
+      const enabled = options.capabilitiesAvailable ?? true;
       await fulfillJson(route, {
         data: {
           tenantId: "tenant-test",
-          tier: "PRO",
+          tier: enabled ? "PRO" : "FREE",
           businessType: "BEAUTY",
           businessSubType: "BARBERSHOP",
           modes: {
@@ -85,11 +101,8 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
               scheduleModesAvailable: ["FIXED"],
             },
           },
-          features: {},
-          recommended: {
-            subscriptionsMode: null,
-            showSubscriptionsUI: false,
-          },
+          features: { WHATSAPP: { enabled, available: enabled, tierAllows: enabled } },
+          recommended: { subscriptionsMode: null, showSubscriptionsUI: false },
         },
       });
       return;
@@ -125,35 +138,44 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
       return;
     }
 
+    if (pathname.endsWith("/integrations/whatsapp-business/onboarding/start")) {
+      startCalls += 1;
+
+      if (options.startError) {
+        if (options.startError.code === "WHATSAPP_ALREADY_CONNECTED") {
+          whatsappStatus = activeStatus;
+        }
+        await fulfillJson(
+          route,
+          { error: { code: options.startError.code, message: "WhatsApp onboarding failed", details: null } },
+          options.startError.status,
+        );
+        return;
+      }
+
+      onboardingStarted = true;
+      statusPollsAfterStart = 0;
+      await fulfillJson(route, {
+        data: {
+          setupLinkUrl: new URL("/configuracion?tab=integrations&whatsapp=connected", page.url()).toString(),
+          expiresAt: "2026-05-28T10:00:00Z",
+        },
+      });
+      return;
+    }
+
     if (pathname.endsWith("/integrations/whatsapp-business/status")) {
+      if (onboardingStarted) {
+        statusPollsAfterStart += 1;
+        whatsappStatus = statusPollsAfterStart >= (options.activeAfterStartPolls ?? 2) ? activeStatus : pendingStatus;
+      }
       await fulfillJson(route, { data: whatsappStatus });
       return;
     }
 
     if (pathname.endsWith("/integrations/whatsapp-business/number")) {
-      if (options.failConfigureWithNotProvisioned) {
-        await fulfillJson(
-          route,
-          {
-            error: {
-              code: "WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED",
-              message: "Phone number is not provisioned.",
-              details: null,
-            },
-          },
-          403,
-        );
-        return;
-      }
-
-      const payload = request.postDataJSON();
-      configurePayloads.push(payload);
-      whatsappStatus = {
-        ...activeStatus,
-        displayPhoneNumber: payload.displayPhoneNumber ?? payload.phoneNumber,
-        displayName: payload.displayName ?? null,
-      };
-      await fulfillJson(route, { data: whatsappStatus });
+      numberCalls += 1;
+      await fulfillJson(route, { error: { code: "UNEXPECTED_NUMBER_CALL", message: "Unexpected", details: null } }, 500);
       return;
     }
 
@@ -168,8 +190,11 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
   });
 
   return {
-    get configurePayloads() {
-      return configurePayloads;
+    get startCalls() {
+      return startCalls;
+    },
+    get numberCalls() {
+      return numberCalls;
     },
     get disconnectCalls() {
       return disconnectCalls;
@@ -185,52 +210,71 @@ async function openIntegrations(page: Page) {
 }
 
 test.describe("WhatsApp Business integration card", () => {
-  test("shows disconnected state and configures a user-facing number", async ({ page }) => {
+  test("starts hosted onboarding, returns to settings, and polls until active", async ({ page }) => {
     const api = await mockIntegrationsApi(page);
     await openIntegrations(page);
 
-    await expect(page.locator("span", { hasText: "Sin conectar" })).toBeVisible();
-    await page.getByLabel("Número de WhatsApp Business").fill("+595981123456");
-    await page.getByLabel("Número visible").fill("+595 981 123456");
-    await page.getByLabel("Nombre para mostrar").fill("Agenda Test");
-    await page.getByRole("button", { name: "Conectar número" }).click();
+    await expect(page.getByLabel(/Número de WhatsApp Business/i)).toHaveCount(0);
+    await expect(page.locator("span").filter({ hasText: /^Sin conectar$/ })).toBeVisible();
+    await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
 
-    await expect(page.getByText("Número de WhatsApp Business guardado correctamente.")).toBeVisible();
-    await expect(page.locator("span").filter({ hasText: /^Activo$/ })).toBeVisible();
-    await expect(page.getByText("+595 981 123456")).toBeVisible();
+    await expect(page.getByText("Estamos terminando de activar tu WhatsApp Business").first()).toBeVisible();
+    await expect(page.locator("span").filter({ hasText: /^Activo$/ })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("Agenda Test")).toBeVisible();
+    await expect(page).not.toHaveURL(/whatsapp=/);
 
-    expect(api.configurePayloads).toEqual([
-      {
-        phoneNumber: "+595981123456",
-        displayPhoneNumber: "+595 981 123456",
-        displayName: "Agenda Test",
-      },
-    ]);
-    expect(JSON.stringify(api.configurePayloads)).not.toMatch(/providerPhoneNumberId|wabaId|WABA|Kapso|transport/);
+    expect(api.startCalls).toBe(1);
+    expect(api.numberCalls).toBe(0);
   });
 
-  test("shows the friendly activation error when the number is not enabled", async ({ page }) => {
-    await mockIntegrationsApi(page, { failConfigureWithNotProvisioned: true });
+  test("shows FREE upsell copy when onboarding is not included", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, { capabilitiesAvailable: false });
     await openIntegrations(page);
 
-    await page.getByLabel("Número de WhatsApp Business").fill("+595981000000");
-    await page.getByRole("button", { name: "Conectar número" }).click();
-
-    await expect(page.getByText("Este número aún no está habilitado para tu cuenta. Escribinos para activarlo.")).toBeVisible();
+    await expect(page.getByText("Tu plan actual no incluye WhatsApp Business")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Conectar WhatsApp Business" })).toHaveCount(0);
+    expect(api.startCalls).toBe(0);
   });
 
-  test("disconnects an active WhatsApp Business number after confirmation", async ({ page }) => {
+  test("refreshes status when onboarding reports an already connected account", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      startError: { status: 409, code: "WHATSAPP_ALREADY_CONNECTED" },
+    });
+    await openIntegrations(page);
+
+    await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
+
+    await expect(page.getByText("La cuenta de WhatsApp Business ya está conectada")).toBeVisible();
+    await expect(page.locator("span").filter({ hasText: /^Activo$/ })).toBeVisible();
+    expect(api.startCalls).toBe(1);
+    expect(api.numberCalls).toBe(0);
+  });
+
+  test("shows retry-later copy when onboarding is temporarily unavailable", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      startError: { status: 502, code: "SERVICE_UNAVAILABLE" },
+    });
+    await openIntegrations(page);
+
+    await page.getByRole("button", { name: "Conectar WhatsApp Business" }).click();
+
+    await expect(page.getByText("WhatsApp Business no está disponible en este momento")).toBeVisible();
+    expect(api.startCalls).toBe(1);
+    expect(api.numberCalls).toBe(0);
+  });
+
+  test("disconnects an active WhatsApp Business account after confirmation", async ({ page }) => {
     const api = await mockIntegrationsApi(page, { initialStatus: activeStatus });
     await openIntegrations(page);
 
     await expect(page.getByText("Recepción de mensajes activa")).toBeVisible();
     await expect(page.getByText("Envío de mensajes activo")).toBeVisible();
     await page.getByRole("button", { name: "Desconectar" }).click();
-    await expect(page.getByText("Desconectar WhatsApp Business")).toBeVisible();
+    await expect(page.getByText("¿Seguro? Dejarás de enviar y recibir mensajes por WhatsApp Business")).toBeVisible();
     await page.locator('[role="dialog"] button').filter({ hasText: "Desconectar" }).click();
 
     await expect(page.getByText("WhatsApp Business desconectado correctamente.")).toBeVisible();
-    await expect(page.getByText("Todavía no conectaste un número.")).toBeVisible();
+    await expect(page.getByText("Conectá WhatsApp Business sin cargar números manualmente.")).toBeVisible();
     expect(api.disconnectCalls).toBe(1);
   });
 
@@ -239,6 +283,7 @@ test.describe("WhatsApp Business integration card", () => {
     await mockIntegrationsApi(page);
     await openIntegrations(page);
 
+    await expect(page.getByRole("button", { name: "Conectar WhatsApp Business" })).toHaveClass(/w-full/);
     const googleBox = await page.getByRole("heading", { name: "Google Calendar" }).boundingBox();
     const whatsappBox = await page.getByRole("heading", { name: "WhatsApp Business" }).boundingBox();
 

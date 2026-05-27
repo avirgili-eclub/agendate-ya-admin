@@ -85,13 +85,13 @@ export function IntegrationsTab() {
 
     if (whatsappStatus === "connected") {
       setWhatsappActivationState("polling");
-      showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activacion.", { persist: false });
+      showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activación.", { persist: false });
       void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
     }
 
     if (whatsappStatus === "failed" || whatsappStatus === "error") {
       setWhatsappActivationState("failed");
-      showFeedback("error", "No se pudo completar la conexion con WhatsApp Business. Podes intentarlo de nuevo.", {
+      showFeedback("error", "No se pudo completar la conexión con WhatsApp Business. Podés intentarlo de nuevo.", {
         persist: false,
       });
     }
@@ -120,7 +120,7 @@ export function IntegrationsTab() {
 
         if (status.connected || status.status === "ACTIVE" || status.status === "CONNECTED") {
           setWhatsappActivationState("connected");
-          showFeedback("success", "WhatsApp Business quedo activo correctamente.", { persist: false });
+          showFeedback("success", "WhatsApp Business qued? activo correctamente.", { persist: false });
           return;
         }
       } catch {
