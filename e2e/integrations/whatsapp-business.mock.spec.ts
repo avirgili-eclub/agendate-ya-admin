@@ -243,6 +243,25 @@ test.describe("WhatsApp Business integration card", () => {
     expect(api.startCalls).toBe(0);
   });
 
+  test("prevents duplicate onboarding starts with a visible countdown", async ({ page }) => {
+    const api = await mockIntegrationsApi(page);
+    await openIntegrations(page, { blockPopups: true });
+
+    const connectButton = page.getByRole("button", { name: /Conectar WhatsApp Business/ });
+    await connectButton.click();
+
+    await expect(connectButton).toBeDisabled();
+    await expect(connectButton).toContainText(/Preparando conexión \([1-5]s\)/);
+    await expect.poll(() => api.startCalls).toBe(1);
+
+    await connectButton.click({ force: true });
+    await page.waitForTimeout(200);
+    expect(api.startCalls).toBe(1);
+
+    await expect(connectButton).toBeEnabled({ timeout: 6000 });
+    await expect(connectButton).toContainText("Conectar WhatsApp");
+  });
+
   test("refreshes status when onboarding reports an already connected account", async ({ page }) => {
     const api = await mockIntegrationsApi(page, {
       startError: { status: 409, code: "WHATSAPP_ALREADY_CONNECTED" },

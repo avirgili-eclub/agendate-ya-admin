@@ -29,6 +29,7 @@ const WHATSAPP_GREEN = "bg-[#25D366] hover:bg-[#1ebe5d] focus-visible:ring-[#25D
 const WHATSAPP_POPUP_NAME = "wa-onboarding";
 const WHATSAPP_POPUP_WIDTH = 600;
 const WHATSAPP_POPUP_HEIGHT = 750;
+const WHATSAPP_CONNECT_COOLDOWN_SECONDS = 5;
 
 type WhatsappActivationState = "idle" | "polling" | "connected" | "timeout" | "failed";
 
@@ -163,7 +164,10 @@ export function WhatsappBusinessIntegrationCard({
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [fallbackSetupLinkUrl, setFallbackSetupLinkUrl] = useState<string | null>(null);
+  const [connectCooldownSeconds, setConnectCooldownSeconds] = useState(0);
   const popupWatcherRef = useRef<number | undefined>(undefined);
+  const connectCooldownTimerRef = useRef<number | undefined>(undefined);
+  const connectClickLockedRef = useRef(false);
 
   const statusQuery = useQuery({
     queryKey: whatsappBusinessKeys.status(),
@@ -185,6 +189,31 @@ export function WhatsappBusinessIntegrationCard({
     }
   }
 
+  function clearConnectCooldown() {
+    if (connectCooldownTimerRef.current !== undefined) {
+      window.clearInterval(connectCooldownTimerRef.current);
+      connectCooldownTimerRef.current = undefined;
+    }
+    connectClickLockedRef.current = false;
+  }
+
+  function startConnectCooldown() {
+    clearConnectCooldown();
+    connectClickLockedRef.current = true;
+    setConnectCooldownSeconds(WHATSAPP_CONNECT_COOLDOWN_SECONDS);
+
+    connectCooldownTimerRef.current = window.setInterval(() => {
+      setConnectCooldownSeconds((currentSeconds) => {
+        if (currentSeconds <= 1) {
+          clearConnectCooldown();
+          return 0;
+        }
+
+        return currentSeconds - 1;
+      });
+    }, 1000);
+  }
+
   function closePopup(popup: Window | null) {
     if (!popup || popup.closed) return;
     popup.close();
@@ -202,6 +231,7 @@ export function WhatsappBusinessIntegrationCard({
   useEffect(() => {
     return () => {
       clearPopupWatcher();
+      clearConnectCooldown();
     };
   }, []);
 
@@ -247,9 +277,28 @@ export function WhatsappBusinessIntegrationCard({
   });
 
   const canStartOnboarding = canManage && whatsappAvailable && !isConnected;
+  const isConnectCooldownActive = connectCooldownSeconds > 0;
+  const isConnectButtonBusy = startOnboardingMutation.isPending || isConnectCooldownActive;
+  const isConnectButtonDisabled = !canStartOnboarding || isConnectButtonBusy || activationState === "polling";
+  const connectButtonClass = isConnectButtonBusy
+    ? "w-full bg-slate-200 text-slate-700 hover:bg-slate-200 focus-visible:ring-slate-300 disabled:opacity-100 sm:w-auto"
+    : `${WHATSAPP_GREEN} w-full text-white sm:w-auto`;
+  const connectButtonLabel = isConnectCooldownActive
+    ? `Preparando conexión (${connectCooldownSeconds}s)`
+    : startOnboardingMutation.isPending
+      ? "Abriendo WhatsApp..."
+      : "Conectar WhatsApp";
+  const connectButtonAriaLabel = isConnectCooldownActive
+    ? `Conectar WhatsApp Business. Esperá ${connectCooldownSeconds} segundos.`
+    : "Conectar WhatsApp Business";
 
   function handleStartOnboarding() {
+    if (!canStartOnboarding || connectClickLockedRef.current || startOnboardingMutation.isPending || activationState === "polling") {
+      return;
+    }
+
     setFallbackSetupLinkUrl(null);
+    startConnectCooldown();
     const popup = openWhatsappOnboardingPopup();
     if (!popup) {
       showFeedback("warning", "Tu navegador bloqueó la ventana emergente. Estamos preparando una alternativa.");
@@ -358,13 +407,17 @@ export function WhatsappBusinessIntegrationCard({
                 {!isConnected ? (
                   <Button
                     type="button"
-                    className={`${WHATSAPP_GREEN} w-full text-white sm:w-auto`}
+                    className={connectButtonClass}
                     onClick={handleStartOnboarding}
-                    disabled={!canStartOnboarding || startOnboardingMutation.isPending || activationState === "polling"}
-                    aria-label="Conectar WhatsApp Business"
+                    disabled={isConnectButtonDisabled}
+                    aria-label={connectButtonAriaLabel}
                   >
-                    <MessageCircle className="mr-2 size-4" aria-hidden="true" />
-                    {startOnboardingMutation.isPending ? "Abriendo WhatsApp..." : "Conectar WhatsApp"}
+                    {isConnectButtonBusy ? (
+                      <RefreshCw className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <MessageCircle className="mr-2 size-4" aria-hidden="true" />
+                    )}
+                    <span aria-live="polite">{connectButtonLabel}</span>
                   </Button>
                 ) : null}
 
