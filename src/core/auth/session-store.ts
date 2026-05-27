@@ -137,6 +137,29 @@ export function isAuthenticated() {
   return Boolean(state.accessToken);
 }
 
+const LOGOUT_INTENT_KEY = "agendateya_admin_logout_intent";
+
+export function markLogoutIntent() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.setItem(LOGOUT_INTENT_KEY, "1");
+}
+
+export function isLogoutIntentActive() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.sessionStorage.getItem(LOGOUT_INTENT_KEY) === "1";
+}
+
+export function clearLogoutIntent() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.sessionStorage.removeItem(LOGOUT_INTENT_KEY);
+}
+
 // Onboarding token storage (temporary, sessionStorage only)
 const ONBOARDING_TOKEN_KEY = "agendateya_onboarding_token";
 const ONBOARDING_REFRESH_KEY = "agendateya_onboarding_refresh";

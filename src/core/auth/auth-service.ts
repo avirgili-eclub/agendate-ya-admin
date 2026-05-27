@@ -2,6 +2,7 @@ import { unwrapData } from "@/core/api/envelope";
 import { httpRequest, setAuthSessionHandlers } from "@/core/api/http-client";
 import { clearAppQueryCache } from "@/app/query-client";
 import {
+  clearLogoutIntent,
   clearSessionState,
   getSessionState,
   setSessionState,
@@ -9,6 +10,8 @@ import {
   getOnboardingTokens,
   clearOnboardingTokens,
   decodeJwt,
+  isLogoutIntentActive as isLogoutIntentActiveFromStore,
+  markLogoutIntent,
 } from "./session-store";
 import type { PlanId, SignupPlansData } from "@/features/auth/types/signup-plans";
 
@@ -144,6 +147,7 @@ export async function login(payload: LoginRequest) {
       refreshToken: "dev-refresh-token",
       user: devUser,
     });
+    clearLogoutIntent();
 
     return {
       accessToken: "dev-access-token",
@@ -166,11 +170,13 @@ export async function login(payload: LoginRequest) {
     refreshToken: data.refreshToken,
     user: withResourceIdFromToken(data.user, data.accessToken),
   });
+  clearLogoutIntent();
 
   return data;
 }
 
 export async function logout() {
+  markLogoutIntent();
   clearSessionState();
   clearAppQueryCache();
 }
@@ -190,6 +196,7 @@ export async function register(payload: RegisterRequest) {
     refreshToken: data.refreshToken,
     user: withResourceIdFromToken(data.user, data.accessToken),
   });
+  clearLogoutIntent();
 
   return data;
 }
@@ -223,6 +230,10 @@ export function configureAuthHandlers(onSessionExpired: () => void) {
     refreshSession: refreshAccessToken,
     onSessionExpired,
   });
+}
+
+export function isLogoutIntentActive() {
+  return isLogoutIntentActiveFromStore();
 }
 
 // Google OAuth
