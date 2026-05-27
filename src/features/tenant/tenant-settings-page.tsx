@@ -36,6 +36,12 @@ function normalizeTabId(value: string | null): TabId | null {
 }
 
 function getTabFromSearch(searchStr: string): TabId {
+  const browserSearch = typeof window === "undefined" ? "" : window.location.search;
+  const browserParams = new URLSearchParams(browserSearch.startsWith("?") ? browserSearch.slice(1) : browserSearch);
+  if (browserParams.has("whatsapp")) {
+    return "integrations";
+  }
+
   const search = searchStr.startsWith("?") ? searchStr.slice(1) : searchStr;
   const params = new URLSearchParams(search);
   if (params.has("whatsapp")) {
