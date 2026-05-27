@@ -30,10 +30,18 @@ export type TenantCapabilities = {
   features?: {
     METRICS_DASHBOARD?: TenantFeatureCapability;
     metricsDashboard?: TenantFeatureCapability;
+    WHATSAPP?: TenantFeatureCapability;
+    whatsapp?: TenantFeatureCapability;
+    WHATSAPP_BUSINESS?: TenantFeatureCapability;
+    whatsappBusiness?: TenantFeatureCapability;
   } | null;
   modules?: {
     METRICS_DASHBOARD?: TenantFeatureCapability;
     metricsDashboard?: TenantFeatureCapability;
+    WHATSAPP?: TenantFeatureCapability;
+    whatsapp?: TenantFeatureCapability;
+    WHATSAPP_BUSINESS?: TenantFeatureCapability;
+    whatsappBusiness?: TenantFeatureCapability;
   } | null;
   recommended?: {
     subscriptionsMode: MembershipScheduleMode | null;
@@ -43,4 +51,43 @@ export type TenantCapabilities = {
 
 export function canUseMetricsDashboard(capabilities?: TenantCapabilities | null): boolean {
   return capabilities?.features?.metricsDashboard?.enabled === true;
+}
+
+const WHATSAPP_CAPABILITY_KEYS = ["WHATSAPP", "whatsapp", "WHATSAPP_BUSINESS", "whatsappBusiness"] as const;
+
+function isCapabilityEnabled(capability?: TenantFeatureCapability): boolean {
+  if (!capability) {
+    return false;
+  }
+
+  if (capability.enabled === false || capability.available === false) {
+    return false;
+  }
+
+  if (capability.tierAllows === false || capability.enabledByTenant === false) {
+    return false;
+  }
+
+  return capability.enabled === true || capability.available === true || capability.tierAllows === true;
+}
+
+function findWhatsappCapability(
+  source?: Record<string, TenantFeatureCapability | undefined> | null,
+): TenantFeatureCapability | undefined {
+  return WHATSAPP_CAPABILITY_KEYS.map((key) => source?.[key]).find(Boolean);
+}
+
+export function canUseWhatsappBusiness(capabilities?: TenantCapabilities | null): boolean {
+  if (!capabilities) {
+    return false;
+  }
+
+  const featureCapability = findWhatsappCapability(capabilities?.features);
+  const moduleCapability = findWhatsappCapability(capabilities?.modules);
+
+  if (featureCapability || moduleCapability) {
+    return isCapabilityEnabled(featureCapability) || isCapabilityEnabled(moduleCapability);
+  }
+
+  return (capabilities?.tier ?? "").toUpperCase() !== "FREE";
 }

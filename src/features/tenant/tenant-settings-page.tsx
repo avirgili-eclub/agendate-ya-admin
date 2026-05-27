@@ -38,6 +38,10 @@ function normalizeTabId(value: string | null): TabId | null {
 function getTabFromSearch(searchStr: string): TabId {
   const search = searchStr.startsWith("?") ? searchStr.slice(1) : searchStr;
   const params = new URLSearchParams(search);
+  if (params.has("whatsapp")) {
+    return "integrations";
+  }
+
   return normalizeTabId(params.get("tab")) ?? "general";
 }
 

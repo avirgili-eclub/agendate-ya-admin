@@ -1,4 +1,4 @@
-﻿import { unwrapData, type DataEnvelope } from "@/core/api/envelope";
+import { unwrapData, type DataEnvelope } from "@/core/api/envelope";
 import { httpRequest } from "@/core/api/http-client";
 import type { AppError } from "@/core/errors/app-error";
 import { createErrorMapper } from "@/shared/utils/api-error-mapper";
@@ -7,6 +7,10 @@ const WHATSAPP_BUSINESS_BASE_PATH = "/integrations/whatsapp-business";
 
 export const WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED =
   "WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED" as const;
+export const WHATSAPP_ALREADY_CONNECTED = "WHATSAPP_ALREADY_CONNECTED" as const;
+
+export const WHATSAPP_ONBOARDING_POLL_INTERVAL_MS = 2_000;
+export const WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS = 30_000;
 
 export type WhatsappBusinessStatus =
   | "NOT_CONNECTED"
@@ -31,6 +35,11 @@ export type WhatsappBusinessConfigInput = {
   phoneNumber: string;
   displayPhoneNumber?: string;
   displayName?: string;
+};
+
+export type StartWhatsappBusinessOnboardingResponse = {
+  setupLinkUrl: string;
+  expiresAt: string;
 };
 
 export type WhatsappBusinessStatusLabel =
@@ -131,6 +140,18 @@ export async function fetchWhatsappBusinessStatus(): Promise<WhatsappBusinessSta
   return unwrapData<WhatsappBusinessStatusData>(response);
 }
 
+export async function startWhatsappBusinessOnboarding(): Promise<StartWhatsappBusinessOnboardingResponse> {
+  const response = await httpRequest<DataEnvelope<StartWhatsappBusinessOnboardingResponse>>(
+    `${WHATSAPP_BUSINESS_BASE_PATH}/onboarding/start`,
+    {
+      method: "POST",
+      timeoutMs: 8000,
+    },
+  );
+
+  return unwrapData<StartWhatsappBusinessOnboardingResponse>(response);
+}
+
 export async function configureWhatsappBusinessNumber(
   input: WhatsappBusinessConfigInput,
 ): Promise<WhatsappBusinessStatusData> {
@@ -159,8 +180,20 @@ const baseWhatsappBusinessErrorMapper = createErrorMapper({
 });
 
 export function toWhatsappBusinessFriendlyMessage(error: AppError): string {
+  if (error.status === 402 || error.code === "PAYMENT_REQUIRED" || error.code === "SUBSCRIPTION_LIMIT") {
+    return "Tu plan actual no incluye WhatsApp Business. Actualiza tu suscripcion para activarlo.";
+  }
+
+  if (error.code === WHATSAPP_ALREADY_CONNECTED) {
+    return "La cuenta de WhatsApp Business ya esta conectada. Estamos actualizando el estado.";
+  }
+
+  if (error.status === 502 || error.code === "SERVICE_UNAVAILABLE") {
+    return "WhatsApp Business no esta disponible en este momento. Intenta de nuevo mas tarde.";
+  }
+
   if (error.code === WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED) {
-    return "Este número aún no está habilitado para tu cuenta. Escribinos para activarlo.";
+    return "Este numero aun no esta habilitado para tu cuenta. Escribinos para activarlo.";
   }
 
   return baseWhatsappBusinessErrorMapper(error);

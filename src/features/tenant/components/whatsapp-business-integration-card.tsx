@@ -1,5 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
-import { MessageCircle, RefreshCw, Save, Unlink } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link2, MessageCircle, RefreshCw, Unlink } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -7,15 +7,14 @@ import { getSessionState } from "@/core/auth/session-store";
 import {
   canManageWhatsappBusinessConnection,
   canViewWhatsappBusinessStatus,
-  configureWhatsappBusinessNumber,
   disconnectWhatsappBusiness,
   fetchWhatsappBusinessStatus,
   getWhatsappBusinessCapabilityLabels,
   getWhatsappBusinessStatusLabel,
   getWhatsappBusinessStatusTone,
+  startWhatsappBusinessOnboarding,
   toWhatsappBusinessFriendlyMessage,
   whatsappBusinessKeys,
-  type WhatsappBusinessConfigInput,
   type WhatsappBusinessStatusTone,
 } from "@/features/whatsapp-business/whatsapp-business-service";
 import { Button } from "@/shared/ui/button";
@@ -26,6 +25,14 @@ import { StatusChip } from "@/shared/ui/status-chip";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 
+type WhatsappActivationState = "idle" | "polling" | "connected" | "timeout" | "failed";
+
+type WhatsappBusinessIntegrationCardProps = {
+  whatsappAvailable?: boolean;
+  capabilitiesLoading?: boolean;
+  activationState?: WhatsappActivationState;
+};
+
 function toChipTone(tone: WhatsappBusinessStatusTone) {
   if (tone === "muted") {
     return "neutral";
@@ -34,42 +41,40 @@ function toChipTone(tone: WhatsappBusinessStatusTone) {
   return tone;
 }
 
-function normalizeOptional(value: string) {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-export function WhatsappBusinessIntegrationCard() {
+export function WhatsappBusinessIntegrationCard({
+  whatsappAvailable = true,
+  capabilitiesLoading = false,
+  activationState = "idle",
+}: WhatsappBusinessIntegrationCardProps) {
   const queryClient = useQueryClient();
   const session = getSessionState();
   const canView = canViewWhatsappBusinessStatus(session.user?.role);
   const canManage = canManageWhatsappBusinessConnection(session.user?.role);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [displayPhoneNumber, setDisplayPhoneNumber] = useState("");
-  const [displayName, setDisplayName] = useState("");
 
   const statusQuery = useQuery({
     queryKey: whatsappBusinessKeys.status(),
     queryFn: fetchWhatsappBusinessStatus,
-    enabled: canView,
+    enabled: canView && whatsappAvailable,
   });
 
   const status = statusQuery.data;
-
   const isConnected = status?.connected || status?.status === "ACTIVE" || status?.status === "CONNECTED";
   const statusLabel = status ? getWhatsappBusinessStatusLabel(status.status) : "Sin conectar";
   const capabilityLabels = useMemo(() => (status ? getWhatsappBusinessCapabilityLabels(status) : []), [status]);
 
-  const configureMutation = useMutation({
-    mutationFn: configureWhatsappBusinessNumber,
-    onSuccess: async () => {
-      showFeedback("success", "Número de WhatsApp Business guardado correctamente.");
-      await queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+  const startOnboardingMutation = useMutation({
+    mutationFn: startWhatsappBusinessOnboarding,
+    onSuccess: ({ setupLinkUrl }) => {
+      window.location.href = setupLinkUrl;
     },
-    onError: (error) => {
-      showFeedback("error", toWhatsappBusinessFriendlyMessage(error as unknown as AppError));
+    onError: async (error) => {
+      const appError = error as unknown as AppError;
+      if (appError.code === "WHATSAPP_ALREADY_CONNECTED") {
+        await queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+      }
+      showFeedback("error", toWhatsappBusinessFriendlyMessage(appError));
     },
   });
 
@@ -85,23 +90,7 @@ export function WhatsappBusinessIntegrationCard() {
     },
   });
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const trimmedPhoneNumber = phoneNumber.trim();
-    if (!trimmedPhoneNumber) {
-      showFeedback("error", "Ingresá el número de WhatsApp Business.");
-      return;
-    }
-
-    const payload: WhatsappBusinessConfigInput = {
-      phoneNumber: trimmedPhoneNumber,
-      displayPhoneNumber: normalizeOptional(displayPhoneNumber),
-      displayName: normalizeOptional(displayName),
-    };
-
-    configureMutation.mutate(payload);
-  }
+  const canStartOnboarding = canManage && whatsappAvailable && !isConnected;
 
   return (
     <PageCard className="flex flex-col">
@@ -109,28 +98,39 @@ export function WhatsappBusinessIntegrationCard() {
         <MessageCircle className="size-5 text-primary" />
         <div>
           <h2 className="text-base font-semibold text-primary">WhatsApp Business</h2>
-          <p className="text-xs text-primary-light">Conectá el número que usás para hablar con tus clientes.</p>
+          <p className="text-xs text-primary-light">Conecta la cuenta que usas para hablar con tus clientes.</p>
         </div>
       </div>
 
       <div className="mt-4 flex flex-1 flex-col gap-4">
         {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
-        {!canView && (
-          <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
-            <p className="text-sm text-primary-light">
-              Esta integración solo es visible para administradores.
-            </p>
+        {capabilitiesLoading && (
+          <div className="rounded-lg border border-neutral-dark bg-neutral p-4" role="status" aria-live="polite">
+            <p className="text-sm text-primary-light">Verificando disponibilidad...</p>
           </div>
         )}
 
-        {canView && statusQuery.isLoading && (
+        {!capabilitiesLoading && !whatsappAvailable && (
+          <FeedbackBanner
+            tone="warning"
+            message="Tu plan actual no incluye WhatsApp Business. Actualiza tu suscripcion para activarlo."
+          />
+        )}
+
+        {!canView && (
+          <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
+            <p className="text-sm text-primary-light">Esta integracion solo es visible para administradores.</p>
+          </div>
+        )}
+
+        {canView && whatsappAvailable && statusQuery.isLoading && (
           <div className="rounded-lg border border-neutral-dark bg-neutral p-4" role="status" aria-live="polite">
             <p className="text-sm text-primary-light">Cargando estado...</p>
           </div>
         )}
 
-        {canView && statusQuery.isError && (
+        {canView && whatsappAvailable && statusQuery.isError && (
           <div className="space-y-3">
             <FeedbackBanner
               tone="error"
@@ -143,8 +143,24 @@ export function WhatsappBusinessIntegrationCard() {
           </div>
         )}
 
-        {canView && !statusQuery.isLoading && !statusQuery.isError && (
+        {canView && whatsappAvailable && !statusQuery.isLoading && !statusQuery.isError && (
           <>
+            {activationState === "polling" && (
+              <FeedbackBanner
+                tone="warning"
+                message="Estamos confirmando la activacion. Esto puede tardar unos segundos."
+              />
+            )}
+            {activationState === "timeout" && (
+              <FeedbackBanner
+                tone="warning"
+                message="La conexion esta en proceso. Si no aparece activa en unos minutos, volve a revisar el estado."
+              />
+            )}
+            {activationState === "failed" && (
+              <FeedbackBanner tone="error" message="No se pudo completar la conexion. Podes intentarlo de nuevo." />
+            )}
+
             <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-primary">Estado</p>
@@ -154,7 +170,7 @@ export function WhatsappBusinessIntegrationCard() {
               <div className="mt-3 space-y-1 text-sm text-primary-light">
                 {status?.displayPhoneNumber ? (
                   <p>
-                    <span className="font-medium text-primary">Número visible:</span> {status.displayPhoneNumber}
+                    <span className="font-medium text-primary">Numero visible:</span> {status.displayPhoneNumber}
                   </p>
                 ) : null}
                 {status?.displayName ? (
@@ -170,89 +186,48 @@ export function WhatsappBusinessIntegrationCard() {
                   </ul>
                 ) : (
                   <p>
-                    {statusLabel === "Pendiente"
-                      ? "Estamos revisando la activación del número."
-                      : statusLabel === "Requiere atención"
-                        ? "Revisá los datos del número o intentá guardarlo nuevamente."
-                        : statusLabel === "Activo"
-                          ? "El número está listo para usarse."
-                          : "Todavía no conectaste un número."}
+                    {activationState === "polling"
+                      ? "Estamos esperando la confirmacion final de WhatsApp Business."
+                      : statusLabel === "Pendiente"
+                        ? "Estamos revisando la activacion."
+                        : statusLabel === "Requiere atención"
+                          ? "La conexion necesita atencion. Intenta iniciar la conexion nuevamente."
+                          : statusLabel === "Activo"
+                            ? "La cuenta esta lista para usarse."
+                            : "Todavia no conectaste WhatsApp Business."}
                   </p>
                 )}
               </div>
             </div>
 
             {canManage ? (
-              <form className="space-y-3" onSubmit={handleSubmit}>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-primary" htmlFor="whatsapp-phone-number">
-                    Número de WhatsApp Business
-                  </label>
-                  <input
-                    id="whatsapp-phone-number"
-                    value={phoneNumber}
-                    onChange={(event) => setPhoneNumber(event.target.value)}
-                    className="h-10 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm text-primary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="+595981123456"
-                    disabled={configureMutation.isPending}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-primary" htmlFor="whatsapp-display-phone-number">
-                    Número visible
-                  </label>
-                  <input
-                    id="whatsapp-display-phone-number"
-                    value={displayPhoneNumber}
-                    onChange={(event) => setDisplayPhoneNumber(event.target.value)}
-                    className="h-10 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm text-primary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="0981 123 456"
-                    disabled={configureMutation.isPending}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-primary" htmlFor="whatsapp-display-name">
-                    Nombre para mostrar
-                  </label>
-                  <input
-                    id="whatsapp-display-name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className="h-10 w-full rounded-md border border-neutral-dark bg-white px-3 text-sm text-primary outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-                    placeholder="Mi negocio"
-                    disabled={configureMutation.isPending}
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <Button type="submit" disabled={configureMutation.isPending}>
-                    <Save className="mr-2 size-4" />
-                    {configureMutation.isPending
-                      ? "Guardando..."
-                      : isConnected
-                        ? "Actualizar número"
-                        : "Conectar número"}
+              <div className="flex flex-wrap gap-2 pt-1">
+                {!isConnected ? (
+                  <Button
+                    type="button"
+                    onClick={() => startOnboardingMutation.mutate()}
+                    disabled={!canStartOnboarding || startOnboardingMutation.isPending || activationState === "polling"}
+                  >
+                    <Link2 className="mr-2 size-4" />
+                    {startOnboardingMutation.isPending ? "Abriendo conexion..." : "Conectar WhatsApp"}
                   </Button>
+                ) : null}
 
-                  {isConnected ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
-                      onClick={() => setIsConfirmOpen(true)}
-                      disabled={disconnectMutation.isPending}
-                    >
-                      <Unlink className="mr-2 size-4" />
-                      Desconectar
-                    </Button>
-                  ) : null}
-                </div>
-              </form>
+                {isConnected ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-red-300 text-red-700 hover:border-red-400 hover:bg-red-50"
+                    onClick={() => setIsConfirmOpen(true)}
+                    disabled={disconnectMutation.isPending}
+                  >
+                    <Unlink className="mr-2 size-4" />
+                    Desconectar
+                  </Button>
+                ) : null}
+              </div>
             ) : (
-              <p className="text-xs text-primary-light">Solo un administrador puede modificar esta integración.</p>
+              <p className="text-xs text-primary-light">Solo un administrador puede modificar esta integracion.</p>
             )}
           </>
         )}
@@ -261,7 +236,7 @@ export function WhatsappBusinessIntegrationCard() {
       <ConfirmDialog
         isOpen={isConfirmOpen}
         title="Desconectar WhatsApp Business"
-        message="AgendateYA dejará de usar este número, pero tu cuenta de WhatsApp Business no se elimina."
+        message="AgendateYA dejara de usar esta conexion, pero tu cuenta de WhatsApp Business no se elimina."
         confirmLabel="Desconectar"
         pendingLabel="Desconectando..."
         isPending={disconnectMutation.isPending}
