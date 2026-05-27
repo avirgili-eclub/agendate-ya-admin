@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link2, RefreshCw, Unlink, CalendarDays } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -20,6 +20,14 @@ import { useFeedback } from "@/shared/notifications/use-feedback";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useNotifications } from "@/shared/notifications/notification-store";
 import { WhatsappBusinessIntegrationCard } from "@/features/tenant/components/whatsapp-business-integration-card";
+import { canUseWhatsappBusiness } from "@/features/tenant/tenant-capabilities-types";
+import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
+import {
+  fetchWhatsappBusinessStatus,
+  WHATSAPP_ONBOARDING_POLL_INTERVAL_MS,
+  WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS,
+  whatsappBusinessKeys,
+} from "@/features/whatsapp-business/whatsapp-business-service";
 
 export function IntegrationsTab() {
   const queryClient = useQueryClient();
@@ -28,6 +36,10 @@ export function IntegrationsTab() {
   const canManage = canManageGoogleCalendarConnection(session.user?.role);
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const { addNotification } = useNotifications();
+  const [whatsappActivationState, setWhatsappActivationState] = useState<"idle" | "polling" | "connected" | "timeout" | "failed">("idle");
+
+  const capabilitiesQuery = useTenantCapabilitiesQuery();
+  const whatsappAvailable = canUseWhatsappBusiness(capabilitiesQuery.data);
 
   const calendarStatusQuery = useQuery({
     queryKey: ["google-calendar", "auth-status"],
@@ -64,6 +76,74 @@ export function IntegrationsTab() {
     if (!status) return;
     setGoogleCalendarAlertStatus(status === "NEEDS_REAUTH" ? "NEEDS_REAUTH" : "NONE");
   }, [calendarStatusQuery.data?.status, canView]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const whatsappStatus = url.searchParams.get("whatsapp");
+    if (!whatsappStatus) return;
+
+    if (whatsappStatus === "connected") {
+      setWhatsappActivationState("polling");
+      showFeedback("success", "WhatsApp Business conectado. Estamos confirmando la activacion.", { persist: false });
+      void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+    }
+
+    if (whatsappStatus === "failed" || whatsappStatus === "error") {
+      setWhatsappActivationState("failed");
+      showFeedback("error", "No se pudo completar la conexion con WhatsApp Business. Podes intentarlo de nuevo.", {
+        persist: false,
+      });
+    }
+
+    url.searchParams.delete("whatsapp");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [addNotification, queryClient, showFeedback]);
+
+  useEffect(() => {
+    if (whatsappActivationState !== "polling") return;
+
+    let cancelled = false;
+    let timeoutId: number | undefined;
+    const startedAt = Date.now();
+
+    async function pollStatus() {
+      if (cancelled) return;
+
+      try {
+        const status = await queryClient.fetchQuery({
+          queryKey: whatsappBusinessKeys.status(),
+          queryFn: fetchWhatsappBusinessStatus,
+        });
+
+        if (cancelled) return;
+
+        if (status.connected || status.status === "ACTIVE" || status.status === "CONNECTED") {
+          setWhatsappActivationState("connected");
+          showFeedback("success", "WhatsApp Business quedo activo correctamente.", { persist: false });
+          return;
+        }
+      } catch {
+        // Keep polling until the bounded timeout; activation lag is expected here.
+      }
+
+      if (Date.now() - startedAt >= WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS) {
+        setWhatsappActivationState("timeout");
+        return;
+      }
+
+      timeoutId = window.setTimeout(pollStatus, WHATSAPP_ONBOARDING_POLL_INTERVAL_MS);
+    }
+
+    void pollStatus();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [addNotification, queryClient, showFeedback, whatsappActivationState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -240,7 +320,11 @@ export function IntegrationsTab() {
         </div>
         </PageCard>
 
-        <WhatsappBusinessIntegrationCard />
+        <WhatsappBusinessIntegrationCard
+          whatsappAvailable={whatsappAvailable}
+          capabilitiesLoading={capabilitiesQuery.isLoading}
+          activationState={whatsappActivationState}
+        />
       </div>
     </div>
   );
