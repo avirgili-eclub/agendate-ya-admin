@@ -19,6 +19,7 @@ import { PageCard } from "@/shared/ui/page-card";
 import { useFeedback } from "@/shared/notifications/use-feedback";
 import { TransientFeedback } from "@/shared/ui/transient-feedback";
 import { useNotifications } from "@/shared/notifications/notification-store";
+import { WhatsappBusinessIntegrationCard } from "@/features/tenant/components/whatsapp-business-integration-card";
 
 export function IntegrationsTab() {
   const queryClient = useQueryClient();
@@ -139,7 +140,8 @@ export function IntegrationsTab() {
     <div className="space-y-5">
       {feedback && <TransientFeedback feedback={feedback} onDismiss={dismissFeedback} />}
 
-      <PageCard>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <PageCard>
         <div className="flex items-center gap-3 border-b border-neutral-dark pb-4">
           <CalendarDays className="size-5 text-primary" />
           <div>
@@ -152,7 +154,7 @@ export function IntegrationsTab() {
           {!canView && (
             <div className="rounded-lg border border-neutral-dark bg-neutral p-4">
               <p className="text-sm text-primary-light">
-                Esta integración solo es visible para administradores del tenant.
+                Esta integración solo es visible para administradores.
               </p>
             </div>
           )}
@@ -193,7 +195,7 @@ export function IntegrationsTab() {
                       {disconnectMutation.isPending ? "Desconectando..." : "Desconectar"}
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede desconectar esta integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede desconectar esta integración.</p>
                   )}
                 </>
               )}
@@ -210,7 +212,7 @@ export function IntegrationsTab() {
                       Reconectar con Google
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede reconectar la integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede reconectar la integración.</p>
                   )}
                 </>
               )}
@@ -229,14 +231,17 @@ export function IntegrationsTab() {
                       Conectar con Google
                     </Button>
                   ) : (
-                    <p className="text-xs text-primary-light">Solo un TENANT_ADMIN puede conectar la integración.</p>
+                    <p className="text-xs text-primary-light">Solo un administrador puede conectar la integración.</p>
                   )}
                 </>
               )}
             </>
           )}
         </div>
-      </PageCard>
+        </PageCard>
+
+        <WhatsappBusinessIntegrationCard />
+      </div>
     </div>
   );
 }
