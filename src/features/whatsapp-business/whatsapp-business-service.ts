@@ -8,9 +8,14 @@ const WHATSAPP_BUSINESS_BASE_PATH = "/integrations/whatsapp-business";
 export const WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED =
   "WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED" as const;
 export const WHATSAPP_ALREADY_CONNECTED = "WHATSAPP_ALREADY_CONNECTED" as const;
+export const WHATSAPP_NOT_CONFIGURED = "WHATSAPP_NOT_CONFIGURED" as const;
+export const INBOUND_WEBHOOK_REGISTRATION_FAILED = "INBOUND_WEBHOOK_REGISTRATION_FAILED" as const;
 
 export const WHATSAPP_ONBOARDING_POLL_INTERVAL_MS = 2_000;
 export const WHATSAPP_ONBOARDING_POLL_TIMEOUT_MS = 30_000;
+
+export const WHATSAPP_INBOUND_WEBHOOK_POLL_INTERVAL_MS = 3_000;
+export const WHATSAPP_INBOUND_WEBHOOK_POLL_TIMEOUT_MS = 30_000;
 
 export type WhatsappBusinessStatus =
   | "NOT_CONNECTED"
@@ -21,6 +26,12 @@ export type WhatsappBusinessStatus =
   | "ERROR"
   | "NEEDS_ATTENTION";
 
+export type InboundWebhookStatus =
+  | "REGISTERED"
+  | "PENDING"
+  | "FAILED"
+  | "NOT_REGISTERED";
+
 export type WhatsappBusinessStatusData = {
   connected: boolean;
   status: WhatsappBusinessStatus;
@@ -29,6 +40,7 @@ export type WhatsappBusinessStatusData = {
   phoneNumberId?: string;
   displayPhoneNumber?: string;
   displayName?: string;
+  inboundWebhookStatus?: InboundWebhookStatus | null;
 };
 
 export type WhatsappBusinessConfigInput = {
@@ -63,6 +75,13 @@ export function canViewWhatsappBusinessStatus(role: string | null | undefined) {
 
 export function canManageWhatsappBusinessConnection(role: string | null | undefined) {
   return (role ?? "").toUpperCase() === "TENANT_ADMIN";
+}
+
+export function needsInboundRetry(status: WhatsappBusinessStatusData | undefined): boolean {
+  if (!status) return false;
+  if (!status.connected) return false;
+  const webhookStatus = status.inboundWebhookStatus;
+  return webhookStatus === "FAILED" || webhookStatus === "NOT_REGISTERED";
 }
 
 export function getWhatsappBusinessStatusLabel(
@@ -174,6 +193,18 @@ export async function disconnectWhatsappBusiness(): Promise<void> {
   });
 }
 
+export async function retryInboundWebhook(): Promise<WhatsappBusinessStatusData> {
+  const response = await httpRequest<DataEnvelope<WhatsappBusinessStatusData>>(
+    `${WHATSAPP_BUSINESS_BASE_PATH}/inbound-webhook/retry`,
+    {
+      method: "POST",
+      timeoutMs: 8000,
+    },
+  );
+
+  return unwrapData<WhatsappBusinessStatusData>(response);
+}
+
 const baseWhatsappBusinessErrorMapper = createErrorMapper({
   validationError: "Revisá los datos del número de WhatsApp Business.",
   fallback: "No pudimos procesar la integración de WhatsApp Business.",
@@ -188,12 +219,22 @@ export function toWhatsappBusinessFriendlyMessage(error: AppError): string {
     return "La cuenta de WhatsApp Business ya está conectada. Estamos actualizando el estado.";
   }
 
+  if (error.code === WHATSAPP_NOT_CONFIGURED) {
+    return "No hay número activo para reintentar";
+  }
+
+  if (error.code === INBOUND_WEBHOOK_REGISTRATION_FAILED) {
+    const detail = error.message || "Error desconocido";
+    const truncated = detail.length > 200 ? detail.substring(0, 200) + "..." : detail;
+    return `No se pudo configurar la recepción de mensajes. Detalle: ${truncated}. Si persiste, contactanos.`;
+  }
+
   if (error.status === 502 || error.code === "SERVICE_UNAVAILABLE") {
     return "WhatsApp Business no está disponible en este momento. Intentá de nuevo más tarde.";
   }
 
   if (error.code === WHATSAPP_PROVIDER_PHONE_NUMBER_NOT_PROVISIONED) {
-    return "Este n?mero aún no está habilitado para tu cuenta. Escribinos para activarlo.";
+    return "Este número aún no está habilitado para tu cuenta. Escribinos para activarlo.";
   }
 
   return baseWhatsappBusinessErrorMapper(error);

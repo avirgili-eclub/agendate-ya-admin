@@ -37,9 +37,24 @@ export function IntegrationsTab() {
   const { feedback, showFeedback, dismissFeedback } = useFeedback("system");
   const { addNotification } = useNotifications();
   const [whatsappActivationState, setWhatsappActivationState] = useState<"idle" | "polling" | "connected" | "timeout" | "failed">("idle");
+  const [inboundPollState, setInboundPollState] = useState<"idle" | "polling" | "registered" | "timeout">("idle");
 
   const capabilitiesQuery = useTenantCapabilitiesQuery();
   const whatsappAvailable = canUseWhatsappBusiness(capabilitiesQuery.data);
+
+  const whatsappStatusQuery = useQuery({
+    queryKey: whatsappBusinessKeys.status(),
+    queryFn: fetchWhatsappBusinessStatus,
+    enabled: whatsappAvailable,
+  });
+
+  useEffect(() => {
+    if (!whatsappStatusQuery.data) return;
+    const webhookStatus = whatsappStatusQuery.data.inboundWebhookStatus;
+    if (webhookStatus === "PENDING" && inboundPollState === "idle") {
+      setInboundPollState("polling");
+    }
+  }, [whatsappStatusQuery.data, inboundPollState]);
 
   const calendarStatusQuery = useQuery({
     queryKey: ["google-calendar", "auth-status"],
@@ -147,6 +162,11 @@ export function IntegrationsTab() {
         if (status.connected || status.status === "ACTIVE" || status.status === "CONNECTED") {
           setWhatsappActivationState("connected");
           showFeedback("success", "WhatsApp Business qued? activo correctamente.", { persist: false });
+
+          // Check inbound webhook status and start polling if PENDING
+          if (status.inboundWebhookStatus === "PENDING") {
+            setInboundPollState("polling");
+          }
           return;
         }
       } catch {
@@ -350,6 +370,8 @@ export function IntegrationsTab() {
           whatsappAvailable={whatsappAvailable}
           capabilitiesLoading={capabilitiesQuery.isLoading}
           activationState={whatsappActivationState}
+          inboundPollState={inboundPollState}
+          onInboundPollStateChange={setInboundPollState}
         />
       </div>
     </div>
