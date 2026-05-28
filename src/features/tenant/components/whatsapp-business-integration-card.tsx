@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, RefreshCw, Unlink } from "lucide-react";
+import { MessageCircle, RefreshCw, Unlink, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
@@ -12,10 +12,17 @@ import {
   getWhatsappBusinessCapabilityLabels,
   getWhatsappBusinessStatusLabel,
   getWhatsappBusinessStatusTone,
+  needsInboundRetry,
+  retryInboundWebhook,
   startWhatsappBusinessOnboarding,
   toWhatsappBusinessFriendlyMessage,
   whatsappBusinessKeys,
+  WHATSAPP_INBOUND_WEBHOOK_POLL_INTERVAL_MS,
+  WHATSAPP_INBOUND_WEBHOOK_POLL_TIMEOUT_MS,
+  WHATSAPP_NOT_CONFIGURED,
+  INBOUND_WEBHOOK_REGISTRATION_FAILED,
   type WhatsappBusinessStatusTone,
+  type WhatsappBusinessStatusData,
 } from "@/features/whatsapp-business/whatsapp-business-service";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
@@ -33,10 +40,14 @@ const WHATSAPP_CONNECT_COOLDOWN_SECONDS = 5;
 
 type WhatsappActivationState = "idle" | "polling" | "connected" | "timeout" | "failed";
 
+type InboundWebhookPollState = "idle" | "polling" | "registered" | "timeout";
+
 type WhatsappBusinessIntegrationCardProps = {
   whatsappAvailable?: boolean;
   capabilitiesLoading?: boolean;
   activationState?: WhatsappActivationState;
+  inboundPollState?: InboundWebhookPollState;
+  onInboundPollStateChange?: (state: InboundWebhookPollState) => void;
 };
 
 function toChipTone(tone: WhatsappBusinessStatusTone) {
@@ -156,6 +167,8 @@ export function WhatsappBusinessIntegrationCard({
   whatsappAvailable = true,
   capabilitiesLoading = false,
   activationState = "idle",
+  inboundPollState = "idle",
+  onInboundPollStateChange,
 }: WhatsappBusinessIntegrationCardProps) {
   const queryClient = useQueryClient();
   const session = getSessionState();
@@ -165,9 +178,11 @@ export function WhatsappBusinessIntegrationCard({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [fallbackSetupLinkUrl, setFallbackSetupLinkUrl] = useState<string | null>(null);
   const [connectCooldownSeconds, setConnectCooldownSeconds] = useState(0);
+  const [inboundRetryDetail, setInboundRetryDetail] = useState<string | null>(null);
   const popupWatcherRef = useRef<number | undefined>(undefined);
   const connectCooldownTimerRef = useRef<number | undefined>(undefined);
   const connectClickLockedRef = useRef(false);
+  const inboundPollTimeoutRef = useRef<number | undefined>(undefined);
 
   const statusQuery = useQuery({
     queryKey: whatsappBusinessKeys.status(),
@@ -235,6 +250,69 @@ export function WhatsappBusinessIntegrationCard({
     };
   }, []);
 
+  function clearInboundPollTimeout() {
+    if (inboundPollTimeoutRef.current !== undefined) {
+      window.clearTimeout(inboundPollTimeoutRef.current);
+      inboundPollTimeoutRef.current = undefined;
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      clearInboundPollTimeout();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (inboundPollState !== "polling" || !canView || !whatsappAvailable) {
+      return;
+    }
+
+    let cancelled = false;
+    const startedAt = Date.now();
+
+    async function pollInbound() {
+      if (cancelled) return;
+
+      try {
+        const latestStatus = await queryClient.fetchQuery({
+          queryKey: whatsappBusinessKeys.status(),
+          queryFn: fetchWhatsappBusinessStatus,
+        });
+
+        if (cancelled) return;
+
+        const webhookStatus = latestStatus.inboundWebhookStatus;
+        if (webhookStatus === "REGISTERED") {
+          onInboundPollStateChange?.("registered");
+          showFeedback("success", "Listo, tu bot ya puede recibir mensajes.", { persist: false });
+          return;
+        }
+
+        if (webhookStatus === "FAILED" || webhookStatus === "NOT_REGISTERED" || webhookStatus === null) {
+          onInboundPollStateChange?.("idle");
+          return;
+        }
+      } catch {
+        // Keep polling until bounded timeout
+      }
+
+      if (Date.now() - startedAt >= WHATSAPP_INBOUND_WEBHOOK_POLL_TIMEOUT_MS) {
+        onInboundPollStateChange?.("timeout");
+        return;
+      }
+
+      inboundPollTimeoutRef.current = window.setTimeout(pollInbound, WHATSAPP_INBOUND_WEBHOOK_POLL_INTERVAL_MS);
+    }
+
+    void pollInbound();
+
+    return () => {
+      cancelled = true;
+      clearInboundPollTimeout();
+    };
+  }, [inboundPollState, canView, whatsappAvailable, queryClient, showFeedback, onInboundPollStateChange]);
+
   const startOnboardingMutation = useMutation({
     mutationFn: async (popup: Window | null) => {
       const response = await startWhatsappBusinessOnboarding();
@@ -276,6 +354,60 @@ export function WhatsappBusinessIntegrationCard({
     },
   });
 
+  const retryInboundMutation = useMutation({
+    mutationFn: retryInboundWebhook,
+    onSuccess: async (updatedStatus) => {
+      setInboundRetryDetail(null);
+      queryClient.setQueryData(whatsappBusinessKeys.status(), updatedStatus);
+      const webhookStatus = updatedStatus.inboundWebhookStatus;
+      if (webhookStatus === "REGISTERED") {
+        onInboundPollStateChange?.("registered");
+        showFeedback("success", "Listo, tu bot ya puede recibir mensajes.", { persist: false });
+      } else if (webhookStatus === "PENDING") {
+        onInboundPollStateChange?.("polling");
+      }
+      await queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+    },
+    onError: (error) => {
+      const appError = error as unknown as AppError;
+      if (appError.code === WHATSAPP_NOT_CONFIGURED) {
+        setInboundRetryDetail(null);
+        queryClient.setQueryData(whatsappBusinessKeys.status(), (currentStatus: WhatsappBusinessStatusData | undefined) => {
+          const current = currentStatus;
+
+          if (!current) return currentStatus;
+
+          return {
+            ...current,
+            connected: false,
+            status: "DISCONNECTED",
+            inboundEnabled: false,
+            outboundEnabled: false,
+            phoneNumberId: null,
+            displayPhoneNumber: null,
+            displayName: null,
+            inboundWebhookStatus: null,
+          };
+        });
+        showFeedback("error", "No hay número activo para reintentar");
+        void queryClient.invalidateQueries({ queryKey: whatsappBusinessKeys.status() });
+        return;
+      }
+      if (appError.code === INBOUND_WEBHOOK_REGISTRATION_FAILED || appError.status === 502) {
+        const detail = appError.message?.trim() || "Error desconocido";
+        const truncated = detail.length > 200 ? `${detail.slice(0, 200)}...` : detail;
+        setInboundRetryDetail(truncated);
+        return;
+      }
+      setInboundRetryDetail(null);
+      if (appError.status >= 500) {
+        showFeedback("error", "No pudimos contactar al servidor, probá de nuevo en unos segundos.");
+        return;
+      }
+      showFeedback("error", toWhatsappBusinessFriendlyMessage(appError));
+    },
+  });
+
   const canStartOnboarding = canManage && whatsappAvailable && !isConnected;
   const isConnectCooldownActive = connectCooldownSeconds > 0;
   const isConnectButtonBusy = startOnboardingMutation.isPending || isConnectCooldownActive;
@@ -291,6 +423,18 @@ export function WhatsappBusinessIntegrationCard({
   const connectButtonAriaLabel = isConnectCooldownActive
     ? `Conectar WhatsApp Business. Esperá ${connectCooldownSeconds} segundos.`
     : "Conectar WhatsApp Business";
+
+  const webhookStatus = status?.inboundWebhookStatus;
+  const showInboundRetryBanner =
+    needsInboundRetry(status) || (status?.connected && webhookStatus === "PENDING" && inboundPollState === "timeout");
+  const isInboundPending = (webhookStatus === "PENDING" && inboundPollState !== "timeout") || inboundPollState === "polling";
+  const isInboundRegistered = status?.connected && webhookStatus === "REGISTERED";
+
+  useEffect(() => {
+    if (!showInboundRetryBanner) {
+      setInboundRetryDetail(null);
+    }
+  }, [showInboundRetryBanner]);
 
   function handleStartOnboarding() {
     if (!canStartOnboarding || connectClickLockedRef.current || startOnboardingMutation.isPending || activationState === "polling") {
@@ -309,6 +453,12 @@ export function WhatsappBusinessIntegrationCard({
   function handleFallbackRedirect() {
     if (!fallbackSetupLinkUrl) return;
     window.location.href = fallbackSetupLinkUrl;
+  }
+
+  function handleRetryInbound() {
+    if (retryInboundMutation.isPending) return;
+    setInboundRetryDetail(null);
+    retryInboundMutation.mutate();
   }
 
   return (
@@ -372,6 +522,76 @@ export function WhatsappBusinessIntegrationCard({
             {activationState === "timeout" && <FeedbackBanner tone="warning" message={stateCopy} />}
             {activationState === "failed" && <FeedbackBanner tone="error" message={stateCopy} />}
 
+            {isInboundPending && (
+              <div
+                data-testid="inbound-webhook-pending-indicator"
+                className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4"
+                role="status"
+                aria-live="polite"
+              >
+                <RefreshCw
+                  className="mt-0.5 size-5 shrink-0 animate-spin text-amber-700"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900" aria-label="Configurando recepción de mensajes">
+                    Configurando recepción de mensajes…
+                  </p>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Esto puede tardar unos segundos. No cierres esta página.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {showInboundRetryBanner && !isInboundPending && canManage && (
+              <div
+                data-testid="inbound-webhook-error-banner"
+                className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4"
+                role="alert"
+                aria-live="polite"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 size-5 shrink-0 text-amber-700" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-900">No estamos recibiendo mensajes todavía</p>
+                    <p className="mt-1 text-sm text-amber-800">
+                      Conectaste tu WhatsApp pero la configuración para recibir mensajes falló. Sin esto, el bot no va a
+                      responder a tus clientes. Reintentá la configuración.
+                    </p>
+                    {inboundRetryDetail ? (
+                      <>
+                        <p className="mt-2 text-sm font-medium text-amber-900">Detalle: {inboundRetryDetail}</p>
+                        <p className="mt-1 text-sm text-amber-800">Si el problema persiste, contactanos.</p>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <Button
+                  data-testid="retry-inbound-webhook-button"
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="self-start border-amber-300 bg-white text-amber-900 hover:border-amber-400 hover:bg-amber-100"
+                  onClick={handleRetryInbound}
+                  disabled={retryInboundMutation.isPending}
+                  aria-label={retryInboundMutation.isPending ? "Reintentando configuración de webhook" : "Reintentar configuración de webhook"}
+                >
+                  {retryInboundMutation.isPending ? (
+                    <>
+                      <RefreshCw className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                      Reintentando…
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 size-4" aria-hidden="true" />
+                      Reintentar configuración
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
             <div className={`rounded-xl border p-4 ${getStatusPanelClass(statusTone)}`} aria-live="polite">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-primary">Estado</p>
@@ -379,6 +599,15 @@ export function WhatsappBusinessIntegrationCard({
               </div>
 
               <div className="mt-3 space-y-2 text-sm text-primary-light">
+                {isInboundRegistered ? (
+                  <p
+                    data-testid="inbound-webhook-active-indicator"
+                    className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+                  >
+                    <CheckCircle2 className="size-3.5" aria-hidden="true" />
+                    Mensajes activos
+                  </p>
+                ) : null}
                 {status?.displayName ? (
                   <p>
                     <span className="font-medium text-primary">Nombre:</span> {status.displayName}
