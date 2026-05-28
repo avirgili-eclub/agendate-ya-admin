@@ -17,11 +17,18 @@ type WhatsappStatus = {
   phoneNumberId: string | null;
   displayPhoneNumber: string | null;
   displayName: string | null;
+  inboundWebhookStatus?: "REGISTERED" | "PENDING" | "FAILED" | "NOT_REGISTERED" | null;
 };
 
 type StartError = {
-  status: 402 | 409 | 502;
-  code: "PAYMENT_REQUIRED" | "WHATSAPP_ALREADY_CONNECTED" | "SERVICE_UNAVAILABLE";
+  status: 402 | 409 | 422 | 502;
+  code: "PAYMENT_REQUIRED" | "WHATSAPP_ALREADY_CONNECTED" | "WHATSAPP_NOT_CONFIGURED" | "SERVICE_UNAVAILABLE" | "INBOUND_WEBHOOK_REGISTRATION_FAILED";
+};
+
+type RetryError = {
+  status: 422 | 502;
+  code: "WHATSAPP_NOT_CONFIGURED" | "INBOUND_WEBHOOK_REGISTRATION_FAILED";
+  message?: string;
 };
 
 type WhatsappMockOptions = {
@@ -29,6 +36,9 @@ type WhatsappMockOptions = {
   capabilitiesAvailable?: boolean;
   startError?: StartError;
   activeAfterStartPolls?: number;
+  retryError?: RetryError;
+  registeredAfterRetryPolls?: number;
+  retryDelayMs?: number;
 };
 
 const disconnectedStatus: WhatsappStatus = {
@@ -54,6 +64,22 @@ const activeStatus: WhatsappStatus = {
   phoneNumberId: "internal-phone-id-hidden",
   displayPhoneNumber: "+595 981 123456",
   displayName: "Agenda Test",
+  inboundWebhookStatus: "REGISTERED",
+};
+
+const activeWithFailedInbound: WhatsappStatus = {
+  ...activeStatus,
+  inboundWebhookStatus: "FAILED",
+};
+
+const activeWithNotRegisteredInbound: WhatsappStatus = {
+  ...activeStatus,
+  inboundWebhookStatus: "NOT_REGISTERED",
+};
+
+const activeWithPendingInbound: WhatsappStatus = {
+  ...activeStatus,
+  inboundWebhookStatus: "PENDING",
 };
 
 async function fulfillJson(route: Route, body: unknown, status = 200) {
@@ -68,9 +94,11 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
   let whatsappStatus = options.initialStatus ?? disconnectedStatus;
   let onboardingStarted = false;
   let statusPollsAfterStart = 0;
+  let retryPollsAfterRetry = 0;
   let startCalls = 0;
   let numberCalls = 0;
   let disconnectCalls = 0;
+  let retryCalls = 0;
 
   await page.context().route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -169,6 +197,42 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
         statusPollsAfterStart += 1;
         whatsappStatus = statusPollsAfterStart >= (options.activeAfterStartPolls ?? 2) ? activeStatus : pendingStatus;
       }
+      if (retryCalls > 0 && whatsappStatus.inboundWebhookStatus === "PENDING") {
+        retryPollsAfterRetry += 1;
+        if (retryPollsAfterRetry >= (options.registeredAfterRetryPolls ?? 2)) {
+          whatsappStatus = { ...whatsappStatus, inboundWebhookStatus: "REGISTERED" };
+        }
+      }
+      await fulfillJson(route, { data: whatsappStatus });
+      return;
+    }
+
+    if (pathname.endsWith("/integrations/whatsapp-business/inbound-webhook/retry")) {
+      retryCalls += 1;
+      if (options.retryDelayMs) {
+        await new Promise((resolve) => setTimeout(resolve, options.retryDelayMs));
+      }
+
+      if (options.retryError) {
+        if (options.retryError.code === "WHATSAPP_NOT_CONFIGURED") {
+          whatsappStatus = disconnectedStatus;
+        }
+        await fulfillJson(
+          route,
+          {
+            error: {
+              code: options.retryError.code,
+              message: options.retryError.message ?? "Inbound webhook retry failed",
+              details: null,
+            },
+          },
+          options.retryError.status,
+        );
+        return;
+      }
+
+      retryPollsAfterRetry = 0;
+      whatsappStatus = { ...whatsappStatus, inboundWebhookStatus: "PENDING" };
       await fulfillJson(route, { data: whatsappStatus });
       return;
     }
@@ -198,6 +262,9 @@ async function mockIntegrationsApi(page: Page, options: WhatsappMockOptions = {}
     },
     get disconnectCalls() {
       return disconnectCalls;
+    },
+    get retryCalls() {
+      return retryCalls;
     },
   };
 }
@@ -331,5 +398,118 @@ test.describe("WhatsApp Business integration card", () => {
     expect(googleBox).not.toBeNull();
     expect(whatsappBox).not.toBeNull();
     expect(whatsappBox!.y).toBeGreaterThan(googleBox!.y + 40);
+  });
+
+  test("shows retry banner when inboundWebhookStatus is FAILED", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, { initialStatus: activeWithFailedInbound });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    await expect(page.getByTestId("retry-inbound-webhook-button")).toBeVisible();
+    expect(api.retryCalls).toBe(0);
+  });
+
+  test("shows retry banner when inboundWebhookStatus is NOT_REGISTERED", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, { initialStatus: activeWithNotRegisteredInbound });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    await expect(page.getByTestId("retry-inbound-webhook-button")).toBeVisible();
+    expect(api.retryCalls).toBe(0);
+  });
+
+  test("does not show retry banner when inboundWebhookStatus is REGISTERED", async ({ page }) => {
+    await mockIntegrationsApi(page, { initialStatus: activeStatus });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-active-indicator")).toBeVisible();
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toHaveCount(0);
+    await expect(page.getByTestId("retry-inbound-webhook-button")).toHaveCount(0);
+  });
+
+  test("does not show retry banner when connected is false", async ({ page }) => {
+    await mockIntegrationsApi(page, { initialStatus: disconnectedStatus });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toHaveCount(0);
+  });
+
+  test("retries inbound webhook and polls to REGISTERED", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      initialStatus: activeWithFailedInbound,
+      registeredAfterRetryPolls: 2,
+    });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    await page.getByTestId("retry-inbound-webhook-button").click();
+
+    await expect(page.getByTestId("inbound-webhook-pending-indicator")).toBeVisible({ timeout: 2000 });
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toHaveCount(0);
+    await expect(page.getByTestId("inbound-webhook-active-indicator")).toBeVisible({ timeout: 9000 });
+    expect(api.retryCalls).toBe(1);
+  });
+
+  test("shows pending spinner when inboundWebhookStatus is PENDING", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      initialStatus: activeWithPendingInbound,
+      registeredAfterRetryPolls: 2,
+    });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-pending-indicator")).toBeVisible();
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toHaveCount(0);
+    expect(api.retryCalls).toBe(0);
+  });
+
+  test("handles retry error 422 WHATSAPP_NOT_CONFIGURED and hides banner", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      initialStatus: activeWithFailedInbound,
+      retryError: { status: 422, code: "WHATSAPP_NOT_CONFIGURED" },
+    });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    await page.getByTestId("retry-inbound-webhook-button").click();
+
+    await expect(page.getByText("No hay número activo para reintentar")).toBeVisible();
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toHaveCount(0);
+    await expect(page.getByTestId("retry-inbound-webhook-button")).toHaveCount(0);
+    expect(api.retryCalls).toBe(1);
+  });
+
+  test("handles retry error 502 INBOUND_WEBHOOK_REGISTRATION_FAILED and keeps banner", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      initialStatus: activeWithFailedInbound,
+      retryError: { status: 502, code: "INBOUND_WEBHOOK_REGISTRATION_FAILED", message: "Meta API timeout" },
+    });
+    await openIntegrations(page);
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    await page.getByTestId("retry-inbound-webhook-button").click();
+
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toContainText("Detalle: Meta API timeout");
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toContainText("Si el problema persiste, contactanos");
+    await expect(page.getByTestId("inbound-webhook-error-banner")).toBeVisible();
+    expect(api.retryCalls).toBe(1);
+  });
+
+  test("prevents multiple retry clicks with disabled state", async ({ page }) => {
+    const api = await mockIntegrationsApi(page, {
+      initialStatus: activeWithFailedInbound,
+      registeredAfterRetryPolls: 5,
+      retryDelayMs: 1200,
+    });
+    await openIntegrations(page);
+
+    const retryButton = page.getByTestId("retry-inbound-webhook-button");
+    await retryButton.click();
+
+    await expect(retryButton).toBeDisabled();
+    await expect(retryButton).toContainText("Reintentando");
+    await retryButton.click({ force: true });
+    await page.waitForTimeout(200);
+
+    expect(api.retryCalls).toBe(1);
   });
 });
