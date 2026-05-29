@@ -2,9 +2,11 @@ export type AppErrorCode =
   | "VALIDATION_ERROR"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
+  | "EMAIL_NOT_VERIFIED"
   | "NOT_FOUND"
   | "PUBLISH_REQUIREMENTS_NOT_MET"
   | "RATE_LIMIT_EXCEEDED"
+  | "RESEND_RATE_LIMITED"
   | "BOOKING_CONFLICT"
   | "INVALID_STATE_TRANSITION"
   | "SUBSCRIPTION_LIMIT"
@@ -100,6 +102,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   if (normalized.includes("UNAUTHORIZED")) {
     return "UNAUTHORIZED";
   }
+  if (normalized.includes("EMAIL_NOT_VERIFIED")) {
+    return "EMAIL_NOT_VERIFIED";
+  }
   if (normalized.includes("FORBIDDEN")) {
     return "FORBIDDEN";
   }
@@ -111,6 +116,9 @@ function normalizeErrorCode(rawCode: string | undefined): AppErrorCode | undefin
   }
   if (normalized.includes("RATE_LIMIT_EXCEEDED") || normalized.includes("TOO_MANY_REQUESTS")) {
     return "RATE_LIMIT_EXCEEDED";
+  }
+  if (normalized.includes("RESEND_RATE_LIMITED")) {
+    return "RESEND_RATE_LIMITED";
   }
   if (normalized.includes("SUBSCRIPTION_LIMIT")) {
     return "SUBSCRIPTION_LIMIT";

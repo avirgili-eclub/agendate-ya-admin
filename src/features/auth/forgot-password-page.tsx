@@ -47,8 +47,8 @@ export function ForgotPasswordPage() {
             </div>
             <h1 className="text-2xl font-bold text-primary">Revisa tu correo</h1>
             <p className="mt-2 text-sm text-primary-light">
-              Si ese email está registrado, recibirás las instrucciones en breve para restablecer tu
-              contraseña.
+              Si ese email esta registrado y confirmado, recibiras las instrucciones en breve para
+              restablecer tu contraseña.
             </p>
             <Link to="/login" className="mt-6 inline-block">
               <Button variant="outline" size="lg">

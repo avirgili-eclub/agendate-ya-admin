@@ -10,11 +10,14 @@ import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { AuthLayout } from "./components/auth-layout";
 import { GoogleButton } from "./components/google-button";
-import { EmailVerificationBanner } from "./components/email-verification-banner";
+import { EmailVerificationCard } from "./components/email-verification-card";
 import { getRateLimitMessage, isRateLimitError, useRateLimitCooldown } from "./rate-limit";
 import { useGoogleOAuthCallback } from "./use-google-oauth-callback";
 
 function toFriendlyLoginMessage(appError: AppError) {
+  if (appError.code === "EMAIL_NOT_VERIFIED") {
+    return "Confirma tu email antes de iniciar sesion.";
+  }
   if (appError.code === "RATE_LIMIT_EXCEEDED" || appError.status === 429) {
     return getRateLimitMessage(appError);
   }
@@ -46,6 +49,28 @@ function toFriendlyLoginMessage(appError: AppError) {
   return "No pudimos iniciar sesión en este momento. Vuelve a intentarlo.";
 }
 
+function isEmailNotVerifiedError(appError: AppError) {
+  if (appError.code === "EMAIL_NOT_VERIFIED") {
+    return true;
+  }
+
+  if (appError.status !== 403) {
+    return false;
+  }
+
+  return appError.message.toLowerCase().includes("confirma tu email");
+}
+
+function canResendFromErrorDetails(appError: AppError) {
+  const details = Array.isArray(appError.details) ? appError.details : [];
+  const canResendDetail = details.find((detail) => detail.field === "canResend");
+  if (!canResendDetail) {
+    return true;
+  }
+
+  return canResendDetail.message.toLowerCase() !== "false";
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useRouterState({ select: (state) => state.location });
@@ -56,8 +81,9 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showEmailVerificationBanner, setShowEmailVerificationBanner] = useState(false);
-  const [userEmail, setUserEmail] = useState<string>("");
+  const [showEmailVerificationPrompt, setShowEmailVerificationPrompt] = useState(false);
+  const [emailVerificationCanResend, setEmailVerificationCanResend] = useState(true);
+  const [userEmail, setUserEmail] = useState("");
   const { isCoolingDown, remainingSeconds, startCooldown } = useRateLimitCooldown();
 
   const sessionExpired = useMemo(() => {
@@ -74,19 +100,13 @@ export function LoginPage() {
     event.preventDefault();
     setError(null);
     setIsLoading(true);
-    setShowEmailVerificationBanner(false);
+    setShowEmailVerificationPrompt(false);
 
     try {
       const authData = await login({ email, password });
       setGoogleCalendarAlertStatus("NONE");
       // Silent background check: must never block or break login.
       void runSilentGoogleCalendarStatusCheck(authData.user.role);
-
-      // Check if email is verified
-      if (authData.user.emailVerified === false) {
-        setShowEmailVerificationBanner(true);
-        setUserEmail(authData.user.email);
-      }
 
       if (loginReturnUrl && loginReturnUrl.startsWith("/")) {
         window.location.assign(loginReturnUrl);
@@ -96,6 +116,12 @@ export function LoginPage() {
       await navigate({ to: "/" });
     } catch (e) {
       const appError = e as AppError;
+      if (isEmailNotVerifiedError(appError)) {
+        setUserEmail(email.trim());
+        setEmailVerificationCanResend(canResendFromErrorDetails(appError));
+        setShowEmailVerificationPrompt(true);
+        return;
+      }
       if (isRateLimitError(appError)) {
         startCooldown();
       }
@@ -114,6 +140,27 @@ export function LoginPage() {
     startGoogleLogin(returnUrl);
   }
 
+  if (showEmailVerificationPrompt) {
+    return (
+      <AuthLayout>
+        <div className="space-y-4">
+          <EmailVerificationCard
+            title="Confirma tu email"
+            description="Tu cuenta aun no confirmo el correo. Revisa tu bandeja de entrada para continuar."
+            email={userEmail}
+            resendDisabled={!emailVerificationCanResend}
+            resendDisabledMessage="Por ahora no podemos reenviar desde esta cuenta."
+            onBack={() => {
+              setShowEmailVerificationPrompt(false);
+              setError(null);
+            }}
+            backLabel="Volver al login"
+          />
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout>
       <div className="space-y-6">
@@ -126,13 +173,6 @@ export function LoginPage() {
           <div role="alert" className="mt-4 rounded-md border border-secondary-light bg-secondary/10 px-3 py-2 text-sm text-secondary-dark">
             Tu sesión expiró. Inicia sesión nuevamente.
           </div>
-        ) : null}
-
-        {showEmailVerificationBanner ? (
-          <EmailVerificationBanner
-            email={userEmail}
-            onDismiss={() => setShowEmailVerificationBanner(false)}
-          />
         ) : null}
 
         {error ? (
