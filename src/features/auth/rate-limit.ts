@@ -5,7 +5,11 @@ import type { AppError } from "@/core/errors/app-error";
 export const AUTH_RATE_LIMIT_SECONDS = 60;
 
 export function isRateLimitError(error: Partial<AppError> | null | undefined) {
-  return error?.status === 429 || error?.code === "RATE_LIMIT_EXCEEDED";
+  return (
+    error?.status === 429 ||
+    error?.code === "RATE_LIMIT_EXCEEDED" ||
+    error?.code === "RESEND_RATE_LIMITED"
+  );
 }
 
 export function getRateLimitMessage(error: Partial<AppError> | null | undefined) {
