@@ -32,6 +32,18 @@ export type InboundWebhookStatus =
   | "FAILED"
   | "NOT_REGISTERED";
 
+export type WhatsappTemplateKey = "APPOINTMENT_REMINDER" | "SUBSCRIPTION_EXPIRING" | (string & {});
+
+export type WhatsappTemplateStatus = "NOT_INITIATED" | "PENDING" | "APPROVED" | "REJECTED" | (string & {});
+
+export type WhatsappTemplateStatusData = {
+  templateKey: WhatsappTemplateKey;
+  status: WhatsappTemplateStatus;
+  rejectionReason: string | null;
+  submittedAt: string | null;
+  approvedAt: string | null;
+};
+
 export type WhatsappBusinessStatusData = {
   connected: boolean;
   status: WhatsappBusinessStatus;
@@ -41,6 +53,7 @@ export type WhatsappBusinessStatusData = {
   displayPhoneNumber?: string;
   displayName?: string;
   inboundWebhookStatus?: InboundWebhookStatus | null;
+  templates?: WhatsappTemplateStatusData[];
 };
 
 export type WhatsappBusinessConfigInput = {

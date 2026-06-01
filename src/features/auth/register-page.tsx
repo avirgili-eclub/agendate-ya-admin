@@ -1,11 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "react-international-phone";
 
 import type { AppError } from "@/core/errors/app-error";
-import { fetchSignupPlans, register, startGoogleLogin } from "@/core/auth/auth-service";
+import { fetchSignupPlans, logout, register, startGoogleLogin } from "@/core/auth/auth-service";
 import { Button } from "@/shared/ui/button";
 import { PasswordInput } from "@/shared/ui/password-input";
 import { fetchBusinessSubTypes } from "@/shared/lib/business-subtypes";
@@ -17,8 +17,8 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { AuthLayout } from "./components/auth-layout";
+import { EmailVerificationCard } from "./components/email-verification-card";
 import { GoogleButton } from "./components/google-button";
-import { EmailVerificationBanner } from "./components/email-verification-banner";
 import { PlanSelectorCard } from "./components/plan-selector-card";
 import { getRateLimitMessage, isRateLimitError, useRateLimitCooldown } from "./rate-limit";
 import { useGoogleOAuthCallback } from "./use-google-oauth-callback";
@@ -107,8 +107,6 @@ function toFriendlyRegisterMessage(appError: AppError) {
 }
 
 export function RegisterPage() {
-  const navigate = useNavigate();
-
   useGoogleOAuthCallback();
 
   // Read URL plan param via useRouterState (design constraint: NOT useSearch)
@@ -120,8 +118,8 @@ export function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [showEmailVerificationBanner, setShowEmailVerificationBanner] = useState(false);
-  const [userEmail, setUserEmail] = useState<string>("");
+  const [showCheckEmailScreen, setShowCheckEmailScreen] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const { isCoolingDown, remainingSeconds, startCooldown } = useRateLimitCooldown();
 
   const [businessName, setBusinessName] = useState("");
@@ -324,11 +322,9 @@ export function RegisterPage() {
         selectedPlan: selectedPlan ?? undefined,
       });
 
-      // Show email verification banner
-      setShowEmailVerificationBanner(true);
-      setUserEmail(email);
-
-      await navigate({ to: "/" });
+      setUserEmail(email.trim());
+      setShowCheckEmailScreen(true);
+      await logout();
     } catch (e) {
       const appError = e as Partial<AppError>;
       const normalizedError: AppError = {
@@ -366,6 +362,43 @@ export function RegisterPage() {
     startGoogleLogin("/dashboard");
   }
 
+  async function handleChangeEmail() {
+    await logout();
+    setShowCheckEmailScreen(false);
+    setError(null);
+    setFieldErrors({});
+    setPasswordTouched(false);
+    setPassword("");
+    setConfirmPassword("");
+    setEmail("");
+    setStep(2);
+  }
+
+  if (showCheckEmailScreen) {
+    return (
+      <AuthLayout showTestimonial={false}>
+        <div className="space-y-4">
+          <EmailVerificationCard
+            title="Revisa tu correo"
+            description="Te enviamos un enlace para confirmar tu email y activar tu cuenta."
+            email={userEmail}
+            backLabel="Cambiar email"
+            onBack={() => {
+              void handleChangeEmail();
+            }}
+            footer={
+              <Link to="/login" className="block">
+                <Button variant="outline" className="w-full" size="lg">
+                  Ya confirme, ir al login
+                </Button>
+              </Link>
+            }
+          />
+        </div>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout showTestimonial={false}>
       <div>
@@ -396,13 +429,6 @@ export function RegisterPage() {
             </span>
           </div>
         </div>
-
-        {showEmailVerificationBanner ? (
-          <EmailVerificationBanner
-            email={userEmail}
-            onDismiss={() => setShowEmailVerificationBanner(false)}
-          />
-        ) : null}
 
         {error ? (
           <div role="alert" className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
