@@ -23,6 +23,7 @@ import {
   INBOUND_WEBHOOK_REGISTRATION_FAILED,
   type WhatsappBusinessStatusTone,
   type WhatsappBusinessStatusData,
+  type WhatsappTemplateStatusData,
 } from "@/features/whatsapp-business/whatsapp-business-service";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
@@ -45,10 +46,46 @@ type InboundWebhookPollState = "idle" | "polling" | "registered" | "timeout";
 type WhatsappBusinessIntegrationCardProps = {
   whatsappAvailable?: boolean;
   capabilitiesLoading?: boolean;
+  subscriptionsEnabled?: boolean;
   activationState?: WhatsappActivationState;
   inboundPollState?: InboundWebhookPollState;
   onInboundPollStateChange?: (state: InboundWebhookPollState) => void;
 };
+
+type TemplateStatusTone = "success" | "warning" | "neutral" | "danger";
+
+const WHATSAPP_TEMPLATE_LABELS: Record<string, string> = {
+  APPOINTMENT_REMINDER: "Recordatorio de turno",
+  SUBSCRIPTION_EXPIRING: "Aviso de vencimiento de membresía",
+};
+
+const WHATSAPP_TEMPLATE_STATUS_META: Record<
+  string,
+  { label: string; tone: TemplateStatusTone; description?: string }
+> = {
+  APPROVED: {
+    label: "Activa",
+    tone: "success",
+    description: "Este mensaje automático ya se puede enviar por WhatsApp.",
+  },
+  PENDING: {
+    label: "Pendiente de aprobación por Meta",
+    tone: "warning",
+    description:
+      "Tus clientes todavía no reciben este recordatorio. La aprobación de Meta puede tardar desde minutos hasta 24-48 hs.",
+  },
+  REJECTED: {
+    label: "Rechazada por Meta",
+    tone: "danger",
+    description: "Contactá a soporte para corregir la plantilla.",
+  },
+  NOT_INITIATED: {
+    label: "Sin inicializar",
+    tone: "neutral",
+  },
+};
+
+const EMPTY_TEMPLATE_STATUSES: WhatsappTemplateStatusData[] = [];
 
 function toChipTone(tone: WhatsappBusinessStatusTone) {
   if (tone === "muted") {
@@ -56,6 +93,130 @@ function toChipTone(tone: WhatsappBusinessStatusTone) {
   }
 
   return tone;
+}
+
+function getTemplateLabel(templateKey: string): string {
+  return WHATSAPP_TEMPLATE_LABELS[templateKey] ?? templateKey;
+}
+
+function getTemplateStatusMeta(status: string) {
+  return (
+    WHATSAPP_TEMPLATE_STATUS_META[status] ?? {
+      label: status || "Estado desconocido",
+      tone: "neutral" as const,
+    }
+  );
+}
+
+function formatTemplateDate(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("es-PY", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function hasBlockingTemplateStatus(template: WhatsappTemplateStatusData): boolean {
+  return template.status === "PENDING" || template.status === "REJECTED";
+}
+
+function shouldShowTemplate(template: WhatsappTemplateStatusData, subscriptionsEnabled: boolean): boolean {
+  return template.templateKey !== "SUBSCRIPTION_EXPIRING" || subscriptionsEnabled;
+}
+
+function WhatsappTemplatesStatusBlock({
+  templates,
+  hasTemplatesFromApi,
+  isRefreshing,
+  onRefresh,
+}: {
+  templates: WhatsappTemplateStatusData[];
+  hasTemplatesFromApi: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
+}) {
+  if (hasTemplatesFromApi && templates.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-xl border border-neutral-dark bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-primary">Plantillas de mensajes</h3>
+          <p className="mt-0.5 text-xs text-primary-light">
+            Meta debe aprobar cada plantilla antes de que se envíe automáticamente.
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={onRefresh} disabled={isRefreshing}>
+          <RefreshCw className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+          Actualizar estado
+        </Button>
+      </div>
+
+      {!hasTemplatesFromApi ? (
+        <div className="mt-3 rounded-lg border border-neutral-dark bg-neutral p-3">
+          <p className="text-sm font-medium text-primary">Las plantillas se están inicializando</p>
+          <p className="mt-1 text-sm text-primary-light">
+            Si conectaste el número recién, el backend puede tardar unos minutos en crearlas y sincronizarlas.
+          </p>
+        </div>
+      ) : (
+        <ul className="mt-3 space-y-3">
+          {templates.map((template) => {
+            const meta = getTemplateStatusMeta(template.status);
+            const submittedAt = formatTemplateDate(template.submittedAt);
+            const approvedAt = formatTemplateDate(template.approvedAt);
+
+            return (
+              <li key={template.templateKey} className="rounded-lg border border-neutral-dark bg-neutral/40 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-primary">{getTemplateLabel(template.templateKey)}</p>
+                    {meta.description ? (
+                      <p className="mt-1 text-xs leading-5 text-primary-light">{meta.description}</p>
+                    ) : null}
+                  </div>
+                  <StatusChip label={meta.label} tone={meta.tone} />
+                </div>
+
+                {template.status === "REJECTED" && template.rejectionReason ? (
+                  <p className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    Motivo de rechazo: {template.rejectionReason}
+                  </p>
+                ) : null}
+
+                {submittedAt || approvedAt ? (
+                  <dl className="mt-2 grid gap-1 text-xs text-primary-light sm:grid-cols-2">
+                    {submittedAt ? (
+                      <div>
+                        <dt className="font-medium text-primary">Enviada a Meta</dt>
+                        <dd>{submittedAt}</dd>
+                      </div>
+                    ) : null}
+                    {approvedAt ? (
+                      <div>
+                        <dt className="font-medium text-primary">Aprobada</dt>
+                        <dd>{approvedAt}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function getStateCopy(params: {
@@ -166,6 +327,7 @@ function openWhatsappOnboardingPopup() {
 export function WhatsappBusinessIntegrationCard({
   whatsappAvailable = true,
   capabilitiesLoading = false,
+  subscriptionsEnabled = false,
   activationState = "idle",
   inboundPollState = "idle",
   onInboundPollStateChange,
@@ -196,6 +358,12 @@ export function WhatsappBusinessIntegrationCard({
   const statusTone = getWhatsappBusinessStatusTone(status?.status ?? "NOT_CONNECTED");
   const stateCopy = getStateCopy({ activationState, statusLabel, isConnected });
   const capabilityLabels = useMemo(() => (status ? getWhatsappBusinessCapabilityLabels(status) : []), [status]);
+  const templateStatuses = status?.templates ?? EMPTY_TEMPLATE_STATUSES;
+  const visibleTemplateStatuses = useMemo(
+    () => templateStatuses.filter((template) => shouldShowTemplate(template, subscriptionsEnabled)),
+    [templateStatuses, subscriptionsEnabled],
+  );
+  const hasTemplateApprovalWarning = isConnected && visibleTemplateStatuses.some(hasBlockingTemplateStatus);
 
   function clearPopupWatcher() {
     if (popupWatcherRef.current !== undefined) {
@@ -521,6 +689,12 @@ export function WhatsappBusinessIntegrationCard({
             {activationState === "polling" && <FeedbackBanner tone="warning" message={stateCopy} />}
             {activationState === "timeout" && <FeedbackBanner tone="warning" message={stateCopy} />}
             {activationState === "failed" && <FeedbackBanner tone="error" message={stateCopy} />}
+            {hasTemplateApprovalWarning ? (
+              <FeedbackBanner
+                tone="warning"
+                message="Tu WhatsApp está conectado, pero algunos mensajes automáticos todavía no están activos porque esperan aprobación de Meta."
+              />
+            ) : null}
 
             {isInboundPending && (
               <div
@@ -630,6 +804,15 @@ export function WhatsappBusinessIntegrationCard({
                 ) : null}
               </div>
             </div>
+
+            {status ? (
+              <WhatsappTemplatesStatusBlock
+                templates={visibleTemplateStatuses}
+                hasTemplatesFromApi={templateStatuses.length > 0}
+                isRefreshing={statusQuery.isFetching}
+                onRefresh={() => void statusQuery.refetch()}
+              />
+            ) : null}
 
             {canManage ? (
               <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:flex-wrap">

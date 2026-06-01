@@ -41,6 +41,7 @@ export function IntegrationsTab() {
 
   const capabilitiesQuery = useTenantCapabilitiesQuery();
   const whatsappAvailable = canUseWhatsappBusiness(capabilitiesQuery.data);
+  const subscriptionsEnabled = capabilitiesQuery.data?.modes?.subscriptions?.enabled ?? false;
 
   const whatsappStatusQuery = useQuery({
     queryKey: whatsappBusinessKeys.status(),
@@ -369,6 +370,7 @@ export function IntegrationsTab() {
         <WhatsappBusinessIntegrationCard
           whatsappAvailable={whatsappAvailable}
           capabilitiesLoading={capabilitiesQuery.isLoading}
+          subscriptionsEnabled={subscriptionsEnabled}
           activationState={whatsappActivationState}
           inboundPollState={inboundPollState}
           onInboundPollStateChange={setInboundPollState}
