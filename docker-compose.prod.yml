@@ -1,0 +1,40 @@
+services:
+  agendateya-admin:
+    image: ghcr.io/avirgili-eclub/agendate-ya-admin:prod-current
+    container_name: agendateya-admin-prod
+    labels:
+      - traefik.enable=true
+      # HTTPS router — catch-all for the host. The backend API router on the same host
+      # uses Host(...) && PathPrefix(`/api`); the explicit low priority below guarantees
+      # the API router always wins for /api/* even if rule-length scoring changes.
+      - traefik.http.routers.agendateya-admin-prod.rule=Host(`${ADMIN_HOST}`)
+      - traefik.http.routers.agendateya-admin-prod.priority=1
+      - traefik.http.routers.agendateya-admin-prod.entrypoints=websecure
+      - traefik.http.routers.agendateya-admin-prod.tls=true
+      - traefik.http.routers.agendateya-admin-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.agendateya-admin-prod.loadbalancer.server.port=80
+      # HTTP → HTTPS redirect (own middleware to avoid colliding with dev's)
+      - traefik.http.routers.agendateya-admin-prod-http.rule=Host(`${ADMIN_HOST}`)
+      - traefik.http.routers.agendateya-admin-prod-http.priority=1
+      - traefik.http.routers.agendateya-admin-prod-http.entrypoints=web
+      - traefik.http.routers.agendateya-admin-prod-http.middlewares=redirect-to-https-admin-prod
+      - traefik.http.middlewares.redirect-to-https-admin-prod.redirectscheme.scheme=https
+      - traefik.http.middlewares.redirect-to-https-admin-prod.redirectscheme.permanent=true
+      - traefik.docker.network=alva-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
+    networks:
+      - alva-network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+networks:
+  alva-network:
+    external: true
