@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import { SearchableSelect } from "@/shared/ui/searchable-select";
 import { AuthLayout } from "./components/auth-layout";
 import { EmailVerificationCard } from "./components/email-verification-card";
 import { GoogleButton } from "./components/google-button";
@@ -474,18 +475,15 @@ export function RegisterPage() {
 
               <label className="block">
                 <span className="mb-1 block text-sm font-medium text-primary-dark">Especialidad del negocio</span>
-                <Select value={businessSubType} onValueChange={setBusinessSubType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona especialidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {businessSubTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={businessSubType}
+                  options={businessSubTypeOptions}
+                  onValueChange={setBusinessSubType}
+                  placeholder="Selecciona especialidad"
+                  searchPlaceholder="Buscar especialidad..."
+                  emptyMessage="No encontramos especialidades."
+                  ariaLabel="Especialidad del negocio"
+                />
                 {fieldErrors.businessSubType ? (
                   <span role="alert" className="mt-1 block text-xs text-red-700">
                     {fieldErrors.businessSubType}
