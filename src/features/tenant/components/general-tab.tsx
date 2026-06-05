@@ -36,6 +36,7 @@ import {
   formatBusinessSubTypeLabel,
 } from "@/shared/lib/business-subtypes";
 import { getBookingSiteUrl } from "@/shared/lib/booking-site-url";
+import { MembershipModuleCard } from "@/features/tenant/components/membership-module-card";
 import { Button } from "@/shared/ui/button";
 import { ConfirmDialog } from "@/shared/ui/confirm-dialog";
 import { PageCard } from "@/shared/ui/page-card";
@@ -1136,6 +1137,8 @@ export function GeneralTab() {
           </div>
         )}
       </PageCard>
+
+      <MembershipModuleCard />
 
       <ConfirmDialog
         isOpen={isUnpublishConfirmOpen}
