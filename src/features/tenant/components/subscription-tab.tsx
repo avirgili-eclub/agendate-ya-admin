@@ -1,8 +1,20 @@
-import { CreditCard, Zap, AlertTriangle, CheckCircle, Clock, ArrowUpRight, Users, MapPin, Wrench, CalendarCheck } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CreditCard,
+  Zap,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  ArrowUpRight,
+  Users,
+  MapPin,
+  Wrench,
+  CalendarCheck,
+  MessageCircle,
+  Phone,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 
 import type { AppError } from "@/core/errors/app-error";
-import { getSessionState } from "@/core/auth/session-store";
 import {
   fetchTenantInfo,
   toTenantFriendlyMessage,
@@ -10,8 +22,11 @@ import {
   getSubscriptionStatusLabel,
   normalizeTier,
 } from "@/features/tenant/tenant-service";
-import { updateTenantSubscriptionsModule } from "@/features/tenant/tenant-capabilities-service";
-import { useTenantCapabilitiesQuery } from "@/features/tenant/use-tenant-capabilities-query";
+import {
+  fetchSubscriptionStatus,
+  type BillingInterval,
+  type UsageMetric,
+} from "@/features/tenant/subscription-service";
 import { PageCard } from "@/shared/ui/page-card";
 import { StatusChip } from "@/shared/ui/status-chip";
 
@@ -67,64 +82,353 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 const USAGE_METRICS = [
+  { key: "clients" as const, label: "Clientes", icon: Users },
+  { key: "professionals" as const, label: "Profesionales / recursos", icon: Wrench },
   { key: "locations" as const, label: "Locales", icon: MapPin },
-  { key: "resources" as const, label: "Recursos", icon: Wrench },
-  { key: "users" as const, label: "Usuarios", icon: Users },
-  { key: "bookings" as const, label: "Turnos este mes", icon: CalendarCheck },
+  { key: "bookingsCreated" as const, label: "Turnos este mes", icon: CalendarCheck },
+  { key: "whatsAppMessagesSent" as const, label: "Recordatorios WhatsApp", icon: MessageCircle },
+  { key: "whatsAppActiveOutboundNumbers" as const, label: "Numeros WhatsApp activos", icon: MessageCircle },
+  { key: "voiceCalls" as const, label: "Llamadas de voz", icon: Phone, unavailable: true },
+  { key: "voiceMinutes" as const, label: "Minutos de voz", icon: Clock, unavailable: true },
+  { key: "users" as const, label: "Usuarios staff", icon: Users },
+  { key: "services" as const, label: "Servicios", icon: Wrench },
 ];
+
+const USAGE_LABELS = Object.fromEntries(
+  USAGE_METRICS.map((metric) => [metric.key, metric.label]),
+) as Record<string, string>;
+
+const WARNING_KEY_LABELS: Record<string, string> = {
+  locations_at_limit: "Locales",
+  locations_near_limit: "Locales",
+  users_at_limit: "Usuarios staff",
+  users_near_limit: "Usuarios staff",
+  professionals_at_limit: "Profesionales / recursos",
+  professionals_near_limit: "Profesionales / recursos",
+  whatsAppMessagesSent_at_limit: "Recordatorios WhatsApp",
+  whatsAppMessagesSent_near_limit: "Recordatorios WhatsApp",
+  whatsAppActiveOutboundNumbers_at_limit: "Numeros WhatsApp activos",
+  whatsAppActiveOutboundNumbers_near_limit: "Numeros WhatsApp activos",
+};
+
+const pygFormatter = new Intl.NumberFormat("es-PY", {
+  style: "currency",
+  currency: "PYG",
+  maximumFractionDigits: 0,
+});
+
+function formatUsage(metric: UsageMetric) {
+  if (metric.limit.unlimited) {
+    return `${metric.used} / Ilimitado`;
+  }
+
+  return `${metric.used} / ${metric.limit.value ?? 0}`;
+}
+
+function usagePercent(metric: UsageMetric) {
+  if (metric.limit.unlimited || !metric.limit.value) return null;
+  return Math.min(100, (metric.used / metric.limit.value) * 100);
+}
+
+function getUsageTone(metric: UsageMetric, pct: number | null): "success" | "warning" | "danger" {
+  if (metric.overLimit) return "danger";
+  if (pct !== null && pct >= 90) return "danger";
+  if (pct !== null && pct >= 75) return "warning";
+  return "success";
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "Sin fecha";
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric" }).format(
+      new Date(Number(year), Number(month) - 1, Number(day)),
+    );
+  }
+
+  return new Intl.DateTimeFormat("es-PY", { day: "2-digit", month: "short", year: "numeric" }).format(
+    new Date(value),
+  );
+}
+
+function getBillingIntervalLabel(interval: BillingInterval | null | undefined) {
+  if (interval === "MONTHLY") return "Mensual";
+  if (interval === "ANNUAL") return "Anual";
+  return "Sin suscripcion";
+}
+
+function getCurrentPriceLabel(interval: BillingInterval | null | undefined) {
+  if (interval === "MONTHLY") return "Precio mensual";
+  if (interval === "ANNUAL") return "Precio anual";
+  return "Precio actual";
+}
+
+function formatPrice(value: number, interval: BillingInterval | null | undefined) {
+  if (interval === "NONE" || value === 0) return "Sin costo";
+  return pygFormatter.format(value);
+}
+
+function formatWarningMessage({
+  key,
+  used,
+  limit,
+  severity,
+}: {
+  key: string;
+  used: number;
+  limit: UsageMetric["limit"];
+  severity: string;
+}) {
+  const label = USAGE_LABELS[key] ?? WARNING_KEY_LABELS[key] ?? key;
+  const usageLabel = limit.unlimited ? `${used} / Ilimitado` : `${used} / ${limit.value ?? 0}`;
+  if (severity === "CRITICAL") return `${label} alcanzo el limite (${usageLabel}).`;
+  return `${label} esta cerca del limite (${usageLabel}).`;
+}
 
 function UsageBar({
   label,
-  current,
-  max,
+  metric,
   icon: Icon,
+  unavailable = false,
 }: {
   label: string;
-  current: number;
-  max: number;
+  metric: UsageMetric;
   icon: typeof MapPin;
+  unavailable?: boolean;
 }) {
-  const pct = max === 0 ? 0 : Math.min(100, (current / max) * 100);
-  const isWarning = pct >= 80;
-  const isCritical = pct >= 95;
+  if (unavailable) {
+    return (
+      <div className="rounded-lg border border-neutral-dark bg-neutral/70 p-3 opacity-70">
+        <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+          <span className="flex items-center gap-1.5 text-primary-light">
+            <Icon className="size-3.5" />
+            {label}
+          </span>
+          <StatusChip label="Proximamente" tone="neutral" />
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-dark">
+          <div className="h-full w-0 rounded-full bg-neutral-dark" />
+        </div>
+        <p className="mt-2 text-xs text-primary-light">
+          Funcionalidad en preparacion.
+        </p>
+      </div>
+    );
+  }
+
+  const pct = usagePercent(metric);
+  const tone = getUsageTone(metric, pct);
+  const progressColor =
+    tone === "danger" ? "bg-red-500" : tone === "warning" ? "bg-secondary" : "bg-primary";
+  const valueColor =
+    tone === "danger" ? "text-red-600" : tone === "warning" ? "text-secondary" : "text-primary";
 
   return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between text-xs">
+    <div className="rounded-lg border border-neutral-dark bg-white/70 p-3">
+      <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 text-primary-light">
           <Icon className="size-3.5" />
           {label}
         </span>
-        <span
-          className={`font-semibold tabular-nums ${
-            isCritical ? "text-red-600" : isWarning ? "text-secondary" : "text-primary"
-          }`}
-        >
-          {current} / {max}
-        </span>
+        <span className={`font-semibold tabular-nums ${valueColor}`}>{formatUsage(metric)}</span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-dark">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${
-            isCritical ? "bg-red-500" : isWarning ? "bg-secondary" : "bg-primary"
-          }`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      {isCritical && (
-        <p className="mt-1 text-[10px] font-medium text-red-600">
-          Límite casi alcanzado. Considerá actualizar tu plan.
-        </p>
+      {pct === null ? (
+        <p className="mt-2 text-xs text-primary-light">Sin limite del plan para este recurso.</p>
+      ) : (
+        <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-dark">
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${progressColor}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
       )}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-primary-light">
+        {metric.remaining !== null && !metric.limit.unlimited ? <span>Disponibles: {metric.remaining}</span> : null}
+        {!metric.reliable ? <StatusChip label="Estimado" tone="neutral" /> : null}
+        {metric.overLimit ? <StatusChip label="Excedido" tone="danger" /> : null}
+        {pct !== null && !metric.overLimit && pct >= 75 ? (
+          <StatusChip label={pct >= 90 ? "Limite cercano" : "Uso alto"} tone="warning" />
+        ) : null}
+      </div>
+      {metric.overLimit ? (
+        <p className="mt-2 text-[11px] font-medium text-red-600">
+          Este recurso supero el limite efectivo del plan.
+        </p>
+      ) : null}
     </div>
   );
 }
 
+function BillingInfoGrid({
+  status,
+  billingInterval,
+  nextPaymentAt,
+  currentPeriodEnd,
+  usagePeriodStart,
+  usagePeriodEnd,
+  currentPricePYG,
+}: {
+  status: string;
+  billingInterval: BillingInterval | null;
+  nextPaymentAt: string | null;
+  currentPeriodEnd: string | null;
+  usagePeriodStart: string;
+  usagePeriodEnd: string;
+  currentPricePYG: number;
+}) {
+  const effectiveInterval = billingInterval;
+  const items = [
+    { label: "Facturacion", value: getSubscriptionStatusLabel(status) },
+    { label: "Ciclo", value: getBillingIntervalLabel(effectiveInterval) },
+    { label: getCurrentPriceLabel(effectiveInterval), value: formatPrice(currentPricePYG, effectiveInterval) },
+    { label: "Proximo pago", value: formatDate(nextPaymentAt) },
+    { label: "Fin del periodo", value: formatDate(currentPeriodEnd) },
+    {
+      label: "Periodo de uso",
+      value: `${formatDate(usagePeriodStart)} - ${formatDate(usagePeriodEnd)}`,
+      className: "col-span-2 lg:col-span-1",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+      {items.map((item) => (
+        <div
+          key={item.label}
+          className={`rounded-lg border border-neutral-dark bg-white/70 px-3 py-2 ${item.className ?? ""}`}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-primary-light">{item.label}</p>
+          <p className="mt-0.5 text-sm font-semibold text-primary">{item.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function UsageUnavailableCard({
+  isLoading,
+  error,
+  onRetry,
+}: {
+  isLoading: boolean;
+  error: unknown;
+  onRetry: () => void;
+}) {
+  return (
+    <PageCard>
+      <div className="flex flex-col items-center gap-2 py-4 text-center">
+        <CreditCard className="size-8 text-primary-light opacity-40" />
+        <p className="text-sm text-primary-light">
+          {isLoading ? "Cargando informacion de uso del plan..." : "La informacion de uso del plan no esta disponible todavia."}
+        </p>
+        {error ? (
+          <>
+            <p className="max-w-lg text-xs text-red-600">{toTenantFriendlyMessage(error as AppError)}</p>
+            <button
+              type="button"
+              className="mt-1 text-xs font-semibold text-primary underline-offset-4 hover:underline"
+              onClick={onRetry}
+            >
+              Reintentar
+            </button>
+          </>
+        ) : null}
+      </div>
+    </PageCard>
+  );
+}
+
+function UsageSection({ status }: { status: Awaited<ReturnType<typeof fetchSubscriptionStatus>> }) {
+  const usageItems = USAGE_METRICS.map(({ key, label, icon, unavailable }) => ({
+    key,
+    label,
+    icon,
+    unavailable: unavailable ?? false,
+    metric: status.usage[key],
+  })).filter((item) => item.metric);
+
+  const warnings = status.warnings ?? [];
+  const hasCriticalWarning = warnings.some((warning) => warning.severity === "CRITICAL");
+
+  return (
+    <PageCard>
+      <div className="border-b border-neutral-dark pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-primary">Uso del Plan</h3>
+            <p className="mt-0.5 text-xs text-primary-light">
+              Recursos consumidos contra los limites efectivos que devuelve el backend.
+            </p>
+          </div>
+          <StatusChip label={getTierLabel(status.plan.tier)} tone="neutral" className="self-start" />
+        </div>
+        <div className="mt-4">
+          <BillingInfoGrid
+            status={status.billing.status}
+            billingInterval={status.billing.billingInterval ?? status.plan.billingInterval}
+            nextPaymentAt={status.billing.nextPaymentAt}
+            currentPeriodEnd={status.billing.currentPeriodEnd}
+            usagePeriodStart={status.usagePeriod.start}
+            usagePeriodEnd={status.usagePeriod.end}
+            currentPricePYG={status.plan.currentPricePYG}
+          />
+        </div>
+      </div>
+
+      {status.overages.length > 0 ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-semibold">Hay limites sobrepasados.</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {status.overages.map((overage) => (
+                  <li key={overage.key}>{overage.message}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {status.overages.length === 0 && warnings.length > 0 ? (
+        <div
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            hasCriticalWarning
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-secondary/30 bg-secondary/10 text-secondary-dark"
+          }`}
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-semibold">Algunos recursos necesitan atencion.</p>
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
+                {warnings.map((warning) => (
+                  <li key={`${warning.key}-${warning.severity}`}>{formatWarningMessage(warning)}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {usageItems.map(({ key, label, icon, metric, unavailable }) => (
+          <UsageBar key={key} label={label} metric={metric} icon={icon} unavailable={unavailable} />
+        ))}
+      </div>
+    </PageCard>
+  );
+}
+
 function getStatusIcon(status: string) {
-  const s = status.toLowerCase();
+  const s = status.trim().toLowerCase();
   if (s === "active") return <CheckCircle className="size-4 text-success" />;
   if (s === "trialing") return <Clock className="size-4 text-secondary" />;
-  if (s === "past_due") return <AlertTriangle className="size-4 text-red-500" />;
+  if (s === "past_due" || s === "canceled" || s === "expired") {
+    return <AlertTriangle className="size-4 text-red-500" />;
+  }
   return <AlertTriangle className="size-4 text-primary-light" />;
 }
 
@@ -136,21 +440,13 @@ function getTrialDaysLeft(trialEndsAt?: string): number | null {
 }
 
 export function SubscriptionTab() {
-  const queryClient = useQueryClient();
-  const session = getSessionState();
-  const userRole = (session.user?.role ?? "").toUpperCase();
-  const canManageModule = userRole === "TENANT_ADMIN";
   const { data: tenantInfo, isLoading, error } = useQuery({
     queryKey: ["tenant-info"],
     queryFn: fetchTenantInfo,
   });
-  const capabilitiesQuery = useTenantCapabilitiesQuery();
-
-  const toggleModuleMutation = useMutation({
-    mutationFn: (enabled: boolean) => updateTenantSubscriptionsModule(enabled),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["tenant-capabilities"] });
-    },
+  const subscriptionStatusQuery = useQuery({
+    queryKey: ["subscription-status"],
+    queryFn: fetchSubscriptionStatus,
   });
 
   if (isLoading) {
@@ -180,26 +476,13 @@ export function SubscriptionTab() {
   const features = PLAN_FEATURES[tier] ?? PLAN_FEATURES.free;
   const planGradient = PLAN_COLORS[tier] ?? PLAN_COLORS.free;
   const trialDaysLeft = getTrialDaysLeft(tenantInfo.subscriptionTrialEndsAt);
-  const subscriptionsCapabilities = capabilitiesQuery.data?.modes.subscriptions;
-  const tierAllowsMemberships = subscriptionsCapabilities?.tierAllows ?? false;
-  const enabledByTenant = subscriptionsCapabilities?.enabledByTenant ?? false;
-  const membershipsEnabled =
-    subscriptionsCapabilities?.enabled ?? (tierAllowsMemberships && enabledByTenant);
-  const moduleToggleDisabled =
-    !canManageModule || !tierAllowsMemberships || toggleModuleMutation.isPending || capabilitiesQuery.isLoading;
 
   const getStatusTone = (): "success" | "warning" | "neutral" | "danger" => {
     if (status === "active") return "success";
     if (status === "trialing") return "warning";
-    if (status === "past_due" || status === "canceled") return "danger";
+    if (status === "past_due" || status === "canceled" || status === "expired") return "danger";
     return "neutral";
   };
-
-  const hasUsageData = tenantInfo.maxLocations != null;
-
-  async function handleToggleMembershipModule() {
-    await toggleModuleMutation.mutateAsync(!membershipsEnabled);
-  }
 
   return (
     <div className="space-y-5">
@@ -276,118 +559,17 @@ export function SubscriptionTab() {
         )}
       </div>
 
-      <PageCard>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary-light">
-              Modulo de Membresias
-            </p>
-            <p className="mt-1 text-base font-semibold text-primary">
-              {membershipsEnabled ? "Activado" : "Desactivado"}
-            </p>
-            <p className="mt-1 text-sm text-primary-light">
-              {tierAllowsMemberships
-                ? "Tu plan permite membresias. Activa el modulo para mostrarlo en el menu y configurar suscripciones."
-                : "Tu plan actual no incluye membresias. Actualiza a PRO o ENTERPRISE para poder activarlo."}
-            </p>
-            {!canManageModule && (
-              <p className="mt-1 text-xs text-primary-light">
-                Solo un TENANT_ADMIN puede activar o desactivar este modulo.
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <button
-              type="button"
-              onClick={() => {
-                void handleToggleMembershipModule();
-              }}
-              disabled={moduleToggleDisabled}
-              className={`inline-flex h-10 items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-light disabled:cursor-not-allowed disabled:opacity-50 ${
-                membershipsEnabled
-                  ? "bg-red-100 text-red-700 hover:bg-red-200"
-                  : "bg-primary text-white hover:bg-primary-dark"
-              }`}
-            >
-              {toggleModuleMutation.isPending
-                ? "Guardando..."
-                : membershipsEnabled
-                  ? "Desactivar modulo"
-                  : "Activar modulo"}
-            </button>
-
-            {!tierAllowsMemberships && (
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-4 hover:underline"
-                onClick={() =>
-                  window.open(
-                    "mailto:hola@agendateya.app?subject=Quiero actualizar mi plan para habilitar membresias",
-                    "_blank",
-                  )
-                }
-              >
-                Upgrade de plan
-                <ArrowUpRight className="size-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {(capabilitiesQuery.isError || toggleModuleMutation.isError) && (
-          <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {toTenantFriendlyMessage(
-              ((toggleModuleMutation.error ?? capabilitiesQuery.error) as unknown as AppError),
-            )}
-          </p>
-        )}
-      </PageCard>
-
       {/* Usage metrics */}
-      {hasUsageData && (
-        <PageCard>
-          <div className="border-b border-neutral-dark pb-4">
-            <h3 className="text-base font-semibold text-primary">Uso del Plan</h3>
-            <p className="mt-0.5 text-xs text-primary-light">Recursos consumidos en tu plan actual.</p>
-          </div>
-          <div className="mt-4 space-y-4">
-            {USAGE_METRICS.map(({ key, label, icon }) => {
-              const currentMap = {
-                locations: tenantInfo.currentLocations ?? 0,
-                resources: tenantInfo.currentResources ?? 0,
-                users: tenantInfo.currentUsers ?? 0,
-                bookings: tenantInfo.currentBookingsThisMonth ?? 0,
-              };
-              const maxMap = {
-                locations: tenantInfo.maxLocations ?? 0,
-                resources: tenantInfo.maxResources ?? 0,
-                users: tenantInfo.maxUsers ?? 0,
-                bookings: tenantInfo.maxBookingsPerMonth ?? 0,
-              };
-              return (
-                <UsageBar
-                  key={key}
-                  label={label}
-                  current={currentMap[key]}
-                  max={maxMap[key]}
-                  icon={icon}
-                />
-              );
-            })}
-          </div>
-        </PageCard>
-      )}
-
-      {!hasUsageData && (
-        <PageCard>
-          <div className="flex flex-col items-center gap-2 py-4 text-center">
-            <CreditCard className="size-8 text-primary-light opacity-40" />
-            <p className="text-sm text-primary-light">
-              La información de uso del plan no está disponible todavía.
-            </p>
-          </div>
-        </PageCard>
+      {subscriptionStatusQuery.data ? (
+        <UsageSection status={subscriptionStatusQuery.data} />
+      ) : (
+        <UsageUnavailableCard
+          isLoading={subscriptionStatusQuery.isLoading}
+          error={subscriptionStatusQuery.error}
+          onRetry={() => {
+            void subscriptionStatusQuery.refetch();
+          }}
+        />
       )}
     </div>
   );
