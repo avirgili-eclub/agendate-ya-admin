@@ -423,10 +423,12 @@ function UsageSection({ status }: { status: Awaited<ReturnType<typeof fetchSubsc
 }
 
 function getStatusIcon(status: string) {
-  const s = status.toLowerCase();
+  const s = status.trim().toLowerCase();
   if (s === "active") return <CheckCircle className="size-4 text-success" />;
   if (s === "trialing") return <Clock className="size-4 text-secondary" />;
-  if (s === "past_due") return <AlertTriangle className="size-4 text-red-500" />;
+  if (s === "past_due" || s === "canceled" || s === "expired") {
+    return <AlertTriangle className="size-4 text-red-500" />;
+  }
   return <AlertTriangle className="size-4 text-primary-light" />;
 }
 
@@ -478,7 +480,7 @@ export function SubscriptionTab() {
   const getStatusTone = (): "success" | "warning" | "neutral" | "danger" => {
     if (status === "active") return "success";
     if (status === "trialing") return "warning";
-    if (status === "past_due" || status === "canceled") return "danger";
+    if (status === "past_due" || status === "canceled" || status === "expired") return "danger";
     return "neutral";
   };
 

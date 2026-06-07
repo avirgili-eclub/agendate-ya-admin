@@ -292,13 +292,14 @@ export function getTierLabel(tier: string): string {
 
 export function getSubscriptionStatusLabel(status: string): string {
   const statusLabels: Record<string, string> = {
-    active: "Activa",
-    trialing: "Período de prueba",
-    past_due: "Pago pendiente",
-    canceled: "Cancelada",
-    incomplete: "Incompleta",
+    ACTIVE: "Activo",
+    TRIALING: "Prueba",
+    PAST_DUE: "Pago pendiente",
+    CANCELED: "Cancelado",
+    EXPIRED: "Vencido",
+    FREE: "Sin suscripcion",
   };
-  return statusLabels[status.toLowerCase()] ?? status;
+  return statusLabels[status.trim().toUpperCase()] ?? "Consultar";
 }
 
 
