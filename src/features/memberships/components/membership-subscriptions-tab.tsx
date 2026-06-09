@@ -26,6 +26,7 @@ import { PageCard } from "@/shared/ui/page-card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { SidePanel } from "@/shared/ui/side-panel";
 import { StatusChip } from "@/shared/ui/status-chip";
+import { BookingDetailPanel } from "@/features/bookings/components/booking-detail-panel";
 
 import { MembershipCreatePanel } from "./membership-create-panel";
 import {
@@ -183,6 +184,7 @@ export function MembershipSubscriptionsTab() {
   const [planFilter, setPlanFilter] = useState<PlanFilter>("ALL");
   const [clientSearch, setClientSearch] = useState("");
   const [selectedSubscription, setSelectedSubscription] = useState<ClientSubscription | null>(null);
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [isCreatePanelOpen, setIsCreatePanelOpen] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -383,6 +385,24 @@ export function MembershipSubscriptionsTab() {
             onClose={() => setSelectedSubscription(null)}
             onRefresh={() => {
               queryClient.invalidateQueries({ queryKey: ["client-subscriptions"] });
+            }}
+            onBookingSelect={(bookingId) => setSelectedBookingId(bookingId)}
+          />
+        ) : null}
+      </SidePanel>
+
+      <SidePanel
+        isOpen={Boolean(selectedBookingId)}
+        onClose={() => setSelectedBookingId(null)}
+        title="Detalle del Turno"
+      >
+        {selectedBookingId ? (
+          <BookingDetailPanel
+            bookingId={selectedBookingId}
+            onClose={() => setSelectedBookingId(null)}
+            onRefresh={() => {
+              queryClient.invalidateQueries({ queryKey: ["client-subscriptions"] });
+              queryClient.invalidateQueries({ queryKey: ["client-subscription"] });
             }}
           />
         ) : null}

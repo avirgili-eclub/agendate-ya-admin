@@ -58,6 +58,7 @@ type MembershipDetailPanelProps = {
   subscriptionSummary?: ClientSubscription;
   onClose: () => void;
   onRefresh: () => void;
+  onBookingSelect?: (bookingId: string) => void;
 };
 
 function formatDateTime(value?: string) {
@@ -117,6 +118,7 @@ export function MembershipDetailPanel({
   subscriptionSummary,
   onClose,
   onRefresh,
+  onBookingSelect,
 }: MembershipDetailPanelProps) {
   const queryClient = useQueryClient();
   const { showFeedback } = useFeedback("system");
@@ -312,17 +314,39 @@ export function MembershipDetailPanel({
         <div className="rounded-lg border border-neutral-dark bg-white p-4">
           {upcomingClasses.length > 0 ? (
             <div className="space-y-2">
-              {upcomingClasses.map((item) => (
-                <div key={item.bookingId} className="rounded-md bg-neutral px-3 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
-                    <BookingKindBadge kind={item.bookingKind} />
-                  </div>
-                  <p className="mt-1 text-xs text-primary-light">
-                    {[item.serviceName, item.resourceName, item.status].filter(Boolean).join(" - ")}
-                  </p>
-                </div>
-              ))}
+              {upcomingClasses.map((item) => {
+                const detailLine = [item.serviceName, item.resourceName, item.status]
+                  .filter(Boolean)
+                  .join(" - ");
+
+                if (!onBookingSelect) {
+                  return (
+                    <div key={item.bookingId} className="rounded-md bg-neutral px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                        <BookingKindBadge kind={item.bookingKind} />
+                      </div>
+                      <p className="mt-1 text-xs text-primary-light">{detailLine}</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={item.bookingId}
+                    type="button"
+                    onClick={() => onBookingSelect(item.bookingId)}
+                    className="w-full rounded-md bg-neutral px-3 py-2 text-left transition-colors hover:bg-neutral-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-light"
+                    aria-label={`Ver detalle del turno del ${formatDateTime(item.startTime)}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-primary">{formatDateTime(item.startTime)}</p>
+                      <BookingKindBadge kind={item.bookingKind} />
+                    </div>
+                    <p className="mt-1 text-xs text-primary-light">{detailLine}</p>
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <p className="text-sm text-primary-light">No hay proximas clases materializadas.</p>
